@@ -1,4 +1,5 @@
 AVB_FEATURE_ENDPOINT ?= 1
+AVB_FEATURE_GSTREAMER ?= 0
 
 .PHONY: all clean
 
@@ -18,4 +19,14 @@ build/Makefile:
 	cd build && \
 	cmake -DCMAKE_TOOLCHAIN_FILE=../platform/Linux/x86_i210_linux.cmake \
 	      -DAVB_FEATURE_ENDPOINT=$(AVB_FEATURE_ENDPOINT) \
+	      -DAVB_FEATURE_GSTREAMER=$(AVB_FEATURE_GSTREAMER) \
+	      -DCMAKE_FRAMEWORK_PATH=$(PKG_CONFIG_SYSROOT_DIR)/usr/include \
+	      -DCMAKE_LIBRARY_PATH=$(PKG_CONFIG_SYSROOT_DIR)/usr/lib \
+	      -DLINUX_KERNEL_DIR=$(PKG_CONFIG_SYSROOT_DIR)/usr/src/kernel \
+	      -DCROSS_PREFIX=arm-oe-linux-gnueabi- \
+	      -DARCH=arm \
+	      -DGLIB_PKG_INCLUDE_DIRS="$(PKG_CONFIG_SYSROOT_DIR)/usr/include/glib-2.0;$(PKG_CONFIG_SYSROOT_DIR)/usr/lib/glib-2.0/include" \
+	      -DGLIB_PKG_LIBRARIES=glib-2.0 \
+	      -DALSA_INCLUDE_DIRS=$(PKG_CONFIG_SYSROOT_DIR)/usr/include/alsa \
+	      -DALSA_LIBRARIES=asound \
               ..

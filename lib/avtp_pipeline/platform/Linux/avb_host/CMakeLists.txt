@@ -7,6 +7,10 @@ include_directories(
 		)
 
 # Rules to build the AVB host
+if (AVB_FEATURE_GSTREAMER)
+	set(GST_INTF intf_mpeg2ts_gst intf_mjpeg_gst intf_h264_gst)
+endif()
+
 add_executable ( openavb_host openavb_host.c )
 target_link_libraries( openavb_host
 	map_ctrl
@@ -24,14 +28,13 @@ target_link_libraries( openavb_host
 	intf_tonegen
 	intf_viewer
 	intf_alsa
-	intf_mpeg2ts_gst
-	intf_mjpeg_gst
 	intf_mpeg2ts_file
 	intf_wav_file
-	intf_h264_gst
+	${GST_INTF}
 	avbTl
 	${PLATFORM_LINK_LIBRARIES}
 	${ALSA_LIBRARIES}
+	alsa_intf
 	${GSTRTP_PKG_LIBRARIES}
 	${GLIB_PKG_LIBRARIES}
 	${GST_PKG_LIBRARIES}
@@ -59,14 +62,13 @@ target_link_libraries( openavb_harness
 	intf_tonegen
 	intf_viewer
 	intf_alsa
-	intf_mpeg2ts_gst
-	intf_mjpeg_gst
 	intf_mpeg2ts_file
 	intf_wav_file
-	intf_h264_gst
+	${GST_INTF}
 	avbTl
 	${PLATFORM_LINK_LIBRARIES}
 	${ALSA_LIBRARIES}
+	alsa_intf
 	${GSTRTP_PKG_LIBRARIES}
 	${GLIB_PKG_LIBRARIES}
 	${GST_PKG_LIBRARIES}

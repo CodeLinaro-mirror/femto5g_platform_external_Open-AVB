@@ -68,6 +68,8 @@ extern bool openavbIntfViewerInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *p
 
 // Linux interface modules
 extern bool openavbIntfAlsaInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
+extern bool openavbIntfAlsa2Initialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
+extern bool openavbIntfAlsa2DualInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 extern bool openavbIntfMjpegGstInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 extern bool openavbIntfMpeg2tsFileInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 extern bool openavbIntfMpeg2tsGstInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
@@ -207,11 +209,19 @@ int main(int argc, char *argv[])
 	//registerStaticIntfModule(openavbIntfToneGenInitialize);
 	registerStaticIntfModule(openavbIntfViewerInitialize);
 	registerStaticIntfModule(openavbIntfAlsaInitialize);
+	registerStaticIntfModule(openavbIntfAlsa2Initialize);
+	registerStaticIntfModule(openavbIntfAlsa2DualInitialize);
+#ifdef AVB_FEATURE_GSTREAMER
 	registerStaticIntfModule(openavbIntfMjpegGstInitialize);
+#endif
 	registerStaticIntfModule(openavbIntfMpeg2tsFileInitialize);
+#ifdef AVB_FEATURE_GSTREAMER
 	registerStaticIntfModule(openavbIntfMpeg2tsGstInitialize);
+#endif
 	registerStaticIntfModule(openavbIntfWavFileInitialize);
+#ifdef AVB_FEATURE_GSTREAMER
 	registerStaticIntfModule(openavbIntfH264RtpGstInitialize);
+#endif
 
 	tlHandleList = calloc(1, sizeof(tl_handle_t) * tlCount);
 

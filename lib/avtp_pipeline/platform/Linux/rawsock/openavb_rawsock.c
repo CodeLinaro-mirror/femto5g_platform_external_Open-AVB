@@ -33,7 +33,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "simple_rawsock.h"
 #include "ring_rawsock.h"
 
-#define IGB
+//#define IGB
 
 #if AVB_FEATURE_PCAP
 #include "pcap_rawsock.h"
@@ -73,7 +73,7 @@ void *openavbRawsockOpen(const char *ifname_uri, bool rx_mode, bool tx_mode, U16
 	AVB_TRACE_ENTRY(AVB_TRACE_RAWSOCK);
 
 	const char* ifname = ifname_uri;
-	char proto[IF_NAMESIZE] = "igb";
+	char proto[IF_NAMESIZE] = "pcap";
 	char *colon = strchr(ifname_uri, ':');
 	if (colon) {
 		ifname = colon + 1;

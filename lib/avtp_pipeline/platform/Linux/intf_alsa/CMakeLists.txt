@@ -1,5 +1,6 @@
 SET (SRC_FILES ${SRC_FILES}
 	${AVB_OSAL_DIR}/intf_alsa/openavb_intf_alsa.c
+	${AVB_OSAL_DIR}/intf_alsa/openavb_intf_alsa2.c
 	PARENT_SCOPE
 )
 

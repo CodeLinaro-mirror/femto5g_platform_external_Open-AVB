@@ -1112,6 +1112,7 @@ unlock:
 #define MIN_SYSCLOCK_WINDOW 72 /* ns */
 
 static inline void rdtscpll( uint64_t *val ) {
+/* This causes compile errors in the arm cross-compiler
 	uint32_t high, low;
 	__asm__ __volatile__( "lfence;"
 						  "rdtsc;"
@@ -1120,13 +1121,16 @@ static inline void rdtscpll( uint64_t *val ) {
 						  : "memory" );
 	*val = high;
 	*val = (*val << 32) | low;
+*/
 }
 
 static inline void __sync() {
+/* This causes compile errors in the arm cross-compiler
 	__asm__ __volatile__( "mfence;"
 						  :
 						  :
 						  : "memory" );
+*/
 }
 
 int
