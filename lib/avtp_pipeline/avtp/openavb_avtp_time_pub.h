@@ -113,6 +113,16 @@ void openavbAvtpTimeSetToSystemTime(avtp_time_t *pAvtpTime);
  */
 void openavbAvtpTimeSetToTimestamp(avtp_time_t *pAvtpTime, U32 timestamp);
 
+/** Set to U64 timestamp.
+ *
+ * Set the time in the avtp_time_t structure to the value of the timestamp
+ * parameter which is in the same format as a CRF timestamp.
+ *
+ * \param pAvtpTime A pointer to the avtp_time_t structure.
+ * \param timestamp A timestamp in the same format as the 1722 CRF timestamp.
+ */
+void openavbAvtpTimeSetToU64Timestamp(avtp_time_t *pAvtpTime, U64 timestamp);
+
 /** Set to timestamp.
  *
  * Set the time in the avtp_time_t structure to the value of timespec_t

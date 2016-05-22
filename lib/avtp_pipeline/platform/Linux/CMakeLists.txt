@@ -195,6 +195,7 @@ include_directories(
 		${AVB_SRC_DIR}/map_uncmp_audio
 		${AVB_SRC_DIR}/map_ctrl
 		${AVB_SRC_DIR}/map_h264
+		${AVB_SRC_DIR}/map_clk_ref
 		${AVB_SRC_DIR}/intf_ctrl
 		${AVB_SRC_DIR}/mcr
 		${AVB_SRC_DIR}/mediaq
@@ -219,6 +220,7 @@ add_subdirectory ( mediaq )
 add_subdirectory ( inih )
 add_subdirectory ( rawsock ) 
 add_subdirectory ( qmgr ) 
+add_subdirectory ( mcr )
 if (AVB_FEATURE_ENDPOINT)
 	add_subdirectory ( endpoint )
 	SET ( SRC_FILES ${SRC_FILES} ${AVB_OSAL_DIR}/openavb_osal_endpoint.c )
@@ -272,6 +274,7 @@ add_map_mod ( "map_pipe" )
 add_map_mod ( "map_aaf_audio" )
 add_map_mod ( "map_uncmp_audio" )
 add_map_mod ( "map_h264" )
+add_map_mod ( "map_clk_ref" )
 
 # Interface modules (common)
 macro (add_intf_mod INTF_NAME)
@@ -287,6 +290,7 @@ add_intf_mod ( "intf_logger" )
 add_intf_mod ( "intf_null" )
 add_intf_mod ( "intf_tonegen" )
 add_intf_mod ( "intf_viewer" )
+add_intf_mod ( "intf_clk_ref" )
 
 # Interface modules (platform)
 macro (add_intf_mod_platform INTF_NAME)

@@ -170,6 +170,16 @@ typedef void (*openavb_intf_gen_end_cb_t)(media_q_t *pMediaQ);
  */
 typedef unsigned int (*openavb_intf_get_src_bitrate_t)(media_q_t *pMediaQ);
 
+/** Query whether the TX callback blocks until the data is available
+ *
+ * This callback is called to determine whether the TX callback blocks until
+ * the data is available. This returns true if the TX callback does block.
+ * In that case, then the talker thread will not  sleep between calls to the TX
+ * callback. Otherwise the talker thread will sleep between calls to the TX
+ * callback.
+ */
+typedef bool (*openavb_intf_tx_blocking_in_intf_t)(media_q_t *pMediaQ);
+
 /** Interface callbacks structure.
  */
 typedef struct {
@@ -196,7 +206,10 @@ typedef struct {
 	/// It is pointer to openavb_intf_host_cb_list_t structure.
 	void *						intf_host_cb_list;
 	/// Source bit rate callback.
-	openavb_intf_get_src_bitrate_t  intf_get_src_bitrate_cb;
+	openavb_intf_get_src_bitrate_t		intf_get_src_bitrate_cb;
+	/// TX blocking in interface callback.
+	openavb_intf_tx_blocking_in_intf_t	intf_tx_blocking_in_intf_cb;
+
 } openavb_intf_cb_t;
 
 /** Main initialization entry point into the interface module.

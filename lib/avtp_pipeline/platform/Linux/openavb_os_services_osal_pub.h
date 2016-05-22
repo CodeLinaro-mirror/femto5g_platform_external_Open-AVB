@@ -64,7 +64,7 @@ typedef struct {
 
 #define MUTEX_ATTR_TYPE_DEFAULT				  	   PTHREAD_MUTEX_DEFAULT
 #define MUTEX_ATTR_TYPE_RECURSIVE				   PTHREAD_MUTEX_RECURSIVE
-#define MUTEX_HANDLE(mutex_handle)                 pthread_mutex_t mutex_handle    
+#define MUTEX_HANDLE(mutex_handle)                 pthread_mutex_t mutex_handle
 #define MUTEX_ATTR_HANDLE(mutex_attr_name)         pthread_mutexattr_t mutex_attr_name
 #define MUTEX_ATTR_CREATE_ERR()                    static mutex_err
 #define MUTEX_ATTR_INIT(mutex_attr_name)           pthread_mutexattr_init(&mutex_attr_name)

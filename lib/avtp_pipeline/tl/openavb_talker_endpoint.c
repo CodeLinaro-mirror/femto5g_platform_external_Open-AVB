@@ -144,6 +144,11 @@ bool openavbTLRunTalkerInit(tl_state_t *pTLState)
 	// The TSpec frame size is the L2 payload - i.e. no Ethernet headers, VLAN, FCS, etc...
 	pTalkerData->tSpec.maxFrameSize = pCfg->map_cb.map_max_data_size_cb(pTLState->pMediaQ);
 
+	if (pCfg->intf_cb.intf_tx_blocking_in_intf_cb != NULL) {
+		pCfg->tx_blocking_in_intf = pCfg->intf_cb.
+			intf_tx_blocking_in_intf_cb(pTLState->pMediaQ);
+	}
+
 	AVB_LOGF_INFO("Register "STREAMID_FORMAT": class: %c frame size: %d  frame interval: %d", STREAMID_ARGS(&streamID), AVB_CLASS_LABEL(pCfg->sr_class), pTalkerData->tSpec.maxFrameSize, pTalkerData->tSpec.maxIntervalFrames);
 
 	// Tell endpoint to register our stream.

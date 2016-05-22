@@ -62,6 +62,7 @@ extern bool openavbMapMjpegInitialize(media_q_t *pMediaQ, openavb_map_cb_t *pMap
 extern bool openavbMapMpeg2tsInitialize(media_q_t *pMediaQ, openavb_map_cb_t *pMapCB, U32 inMaxTransitUsec);
 extern bool openavbMapNullInitialize(media_q_t *pMediaQ, openavb_map_cb_t *pMapCB, U32 inMaxTransitUsec);
 extern bool openavbMapUncmpAudioInitialize(media_q_t *pMediaQ, openavb_map_cb_t *pMapCB, U32 inMaxTransitUsec);
+extern bool openavbMapClkRefInitialize(media_q_t *pMediaQ, openavb_map_cb_t *pMapCB, U32 inMaxTransitUsec);
 
 // Platform indendent interface modules
 extern bool openavbIntfEchoInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
@@ -70,6 +71,7 @@ extern bool openavbIntfLoggerInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *p
 extern bool openavbIntfNullInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 extern bool openavbIntfToneGenInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 extern bool openavbIntfViewerInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
+extern bool openavbIntfClkRefInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 
 // Linux interface modules
 extern bool openavbIntfAlsaInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
@@ -193,6 +195,7 @@ int main(int argc, char *argv[])
 	registerStaticMapModule(openavbMapMpeg2tsInitialize);
 	registerStaticMapModule(openavbMapNullInitialize);
 	registerStaticMapModule(openavbMapUncmpAudioInitialize);
+	registerStaticMapModule(openavbMapClkRefInitialize);
 
 	registerStaticIntfModule(openavbIntfEchoInitialize);
 	registerStaticIntfModule(openavbIntfCtrlInitialize);
@@ -200,6 +203,7 @@ int main(int argc, char *argv[])
 	registerStaticIntfModule(openavbIntfNullInitialize);
 	//registerStaticIntfModule(openavbIntfToneGenInitialize);
 	registerStaticIntfModule(openavbIntfViewerInitialize);
+	registerStaticIntfModule(openavbIntfClkRefInitialize);
 	registerStaticIntfModule(openavbIntfAlsaInitialize);
 	registerStaticIntfModule(openavbIntfAlsa2Initialize);
 	registerStaticIntfModule(openavbIntfAlsa2DualInitialize);

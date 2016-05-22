@@ -20,7 +20,8 @@ target_link_libraries( openavb_host
 	map_pipe
 	map_aaf_audio 
 	map_uncmp_audio 
-	map_h264 
+	map_h264
+	map_clk_ref 
 	intf_ctrl
 	intf_echo
 	intf_logger
@@ -30,6 +31,7 @@ target_link_libraries( openavb_host
 	intf_alsa
 	intf_mpeg2ts_file
 	intf_wav_file
+        intf_clk_ref
 	${GST_INTF}
 	avbTl
 	${PLATFORM_LINK_LIBRARIES}
@@ -54,7 +56,8 @@ target_link_libraries( openavb_harness
 	map_pipe
 	map_aaf_audio 
 	map_uncmp_audio 
-	map_h264 
+	map_h264
+	map_clk_ref 
 	intf_ctrl
 	intf_echo
 	intf_logger
@@ -64,6 +67,7 @@ target_link_libraries( openavb_harness
 	intf_alsa
 	intf_mpeg2ts_file
 	intf_wav_file
+        intf_clk_ref
 	${GST_INTF}
 	avbTl
 	${PLATFORM_LINK_LIBRARIES}

@@ -112,6 +112,7 @@ INPUT                  = @CMAKE_CURRENT_SOURCE_DIR@/index.md \
                          @CMAKE_CURRENT_SOURCE_DIR@/../map_null \
                          @CMAKE_CURRENT_SOURCE_DIR@/../map_pipe \
                          @CMAKE_CURRENT_SOURCE_DIR@/../map_uncmp_audio \
+                         @CMAKE_CURRENT_SOURCE_DIR@/../map_clk_ref \
                          @CMAKE_CURRENT_SOURCE_DIR@/../platform/Linux/intf_alsa \
                          @CMAKE_CURRENT_SOURCE_DIR@/../intf_ctrl \
                          @CMAKE_CURRENT_SOURCE_DIR@/../intf_echo \
@@ -119,6 +120,7 @@ INPUT                  = @CMAKE_CURRENT_SOURCE_DIR@/index.md \
                          @CMAKE_CURRENT_SOURCE_DIR@/../intf_null \
                          @CMAKE_CURRENT_SOURCE_DIR@/../intf_tonegen \
                          @CMAKE_CURRENT_SOURCE_DIR@/../intf_viewer \
+                         @CMAKE_CURRENT_SOURCE_DIR@/../intf_clk_ref \
                          @CMAKE_CURRENT_SOURCE_DIR@/../platform/Linux/intf_mjpeg_gst \
                          @CMAKE_CURRENT_SOURCE_DIR@/../platform/Linux/intf_mpeg2ts_file \
                          @CMAKE_CURRENT_SOURCE_DIR@/../platform/Linux/intf_mpeg2ts_gst \

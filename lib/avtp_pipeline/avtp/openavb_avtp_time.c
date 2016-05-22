@@ -204,6 +204,15 @@ void openavbAvtpTimeSetToTimestamp(avtp_time_t *pAvtpTime, U32 timestamp)
 	}
 }
 
+void openavbAvtpTimeSetToU64Timestamp(avtp_time_t *pAvtpTime, U64 timestamp)
+{
+	if (pAvtpTime) {
+		pAvtpTime->timeNsec = timestamp;
+		pAvtpTime->bTimestampValid = TRUE;
+		pAvtpTime->bTimestampUncertain = FALSE;
+	}
+}
+
 void openavbAvtpTimeSetToTimestampNS(avtp_time_t *pAvtpTime, U64 timeNS)
 {
 	if (pAvtpTime) {

@@ -38,6 +38,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
+#include <assert.h>
 #include "openavb_types_pub.h"
 #include "openavb_audio_pub.h"
 #include "openavb_trace_pub.h"
@@ -45,6 +46,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_map_uncmp_audio_pub.h"
 #include "openavb_map_aaf_audio_pub.h"
 #include "openavb_intf_pub.h"
+#include "openavb_reference_clock_pub.h"
 
 #define	AVB_LOG_COMPONENT	"ALSA Interface"
 #include "openavb_log_pub.h"
@@ -57,7 +59,20 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #define PCM_ACCESS_TYPE			SND_PCM_ACCESS_RW_INTERLEAVED
 #define PERIOD_SIZE 768
 
-#define DEBUG 1
+#define DEBUG 0
+#define DEBUG_MCR 0
+
+#define MUTEX_LOCK_ERR(mutex_handle) { \
+	MUTEX_CREATE_ERR(); \
+	MUTEX_LOCK(mutex_handle); \
+	MUTEX_LOG_ERR("Mutex Lock failure"); \
+}
+
+#define MUTEX_UNLOCK_ERR(mutex_handle) { \
+	MUTEX_CREATE_ERR(); \
+	MUTEX_UNLOCK(mutex_handle); \
+	MUTEX_LOG_ERR("Mutex Unlock failure"); \
+}
 
 typedef struct {
 	/////////////
@@ -93,6 +108,39 @@ typedef struct {
 
 	char *pCh2Filename;
 
+	U32 sampleSizeBytes;
+
+	U32 frameSizeBytes;
+
+	// This is used by the listener.
+	// 1 if the clock tick is to be generated when the audio is consumed.
+	// 0 otherwise.
+	U16 genClockTickOnConsumeAudio;
+
+	// intf_nv_clock_source_timestamp_interval
+	U32 clockSourceTimestampInterval;
+
+	// intf_nv_clock_source_timestamp_throwaway
+	// This is used by the listener when acting as a clock source.
+	// This specifies how many clock reference timestamps to throwaway
+	// when starting the stream to allow the ALSA buffer to fill and
+	// the consume rate to stabilize.
+	U32 clockSourceTimestampThrowaway;
+
+	// intf_nv_sync_to_clock_tick_on_tx_audio
+	// This is used by the talker.
+	// 1 if the talker should synchronize to the reference clock when
+	// transmitting audio.
+	// 0 otherwise.
+	U16 syncToClockTickOnTxAudio;
+
+	// intf_nv_clock_recovery_adjustment_range
+	// This useused by the talker.
+	// Clock recovery adjustment range. If the actual number of frames
+	// minus the reference number of frames is off by this amount,
+	// then we'll add one frame at the next clock tick.
+	U16 clockRecoveryAdjustmentRange;
+
 	/////////////
 	// Variable data
 	/////////////
@@ -102,7 +150,48 @@ typedef struct {
 	// ALSA read/write interval
 	U32 intervalCounter;
 
-        int ch2Fd;
+	int ch2Fd;
+
+	// VARIABLES FOR TALKER REFERENCE CLOCK
+
+	// The number of frames that have been transmitted minus
+	// the number of frames that should have been transmitted according to
+	// the reference clock. If this number if negative, then we haven't
+	// transmitted enough frames and we need to repeat frames to catch up.
+	// If this number is positive, then we transmitted too many frames and
+	// we need to remove frames to catch up.
+	S32 actualMinusRefFrames;
+
+	// The number of frames that are necessary to maintain the clock
+	// synchronization. If this is negative, then we need to repeat this
+	// many frames before the next clock tick. If this is positive,
+	// then we need to remove this many frames before the
+	// next clock tick. This is computed by actualMinusRefFrames
+	// divided by the clockRecoveryAdjustmentRange
+	S32 framesToRecoverClock;
+
+	// Mutex for actualMinusRefFrames
+	MUTEX_HANDLE(mtxActualMinusRefFrames);
+
+	// True if the talker has begun transmitting
+	bool txStarted;
+
+	// True if the reference clock has started
+	bool refClkStarted;
+
+	// The scratch audio buffer.
+	// When frames need to be added or removed for clock synchronization,
+	// extra frames are stored in this buffer. This is necessary because
+	// audio reads must be in multiples of the period size.
+	U8 *audioBuffer;
+	U32 audioBufferSize;
+	U32 audioBufferStartIdx;
+
+	// VARIABLES FOR LISTENER REFERENCE CLOCK
+
+	// The number of frames that have been passed to ALSA by the listener.
+	U32 framesConsumed;
+
 } pvt_data_t;
 
 
@@ -407,6 +496,37 @@ void openavbIntfAlsa2CfgCB(media_q_t *pMediaQ, const char *name, const char *val
 			pPvtData->pCh2Filename = strdup(value);
 		}
 
+		else if (strcmp(name, "intf_nv_clock_source_timestamp_interval") ==
+			 0) {
+			pPvtData->clockSourceTimestampInterval = strtol(value,
+				&pEnd, 10);
+			pPubMapUncmpAudioInfo->timestampInterval =
+				pPvtData->clockSourceTimestampInterval;
+		}
+
+		else if (strcmp(name, "intf_nv_clock_source_timestamp_throwaway") ==
+			 0) {
+			pPvtData->clockSourceTimestampThrowaway = strtol(value,
+				&pEnd, 10);
+		}
+
+		else if (strcmp(name, "intf_nv_gen_clock_tick_on_consume_audio") ==
+			 0) {
+			pPvtData->genClockTickOnConsumeAudio = strtol(value,
+				&pEnd, 10);
+		}
+
+		else if (strcmp(name, "intf_nv_sync_to_clock_tick_on_tx_audio") ==
+			 0) {
+			pPvtData->syncToClockTickOnTxAudio = strtol(value,
+				&pEnd, 10);
+		}
+
+		else if (strcmp(name, "intf_nv_clock_recovery_adjustment_range") ==
+			 0) {
+			pPvtData->clockRecoveryAdjustmentRange = strtol(value,
+				&pEnd, 10);
+		}
 	}
 
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
@@ -415,6 +535,23 @@ void openavbIntfAlsa2CfgCB(media_q_t *pMediaQ, const char *name, const char *val
 void openavbIntfAlsa2GenInitCB(media_q_t *pMediaQ) 
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_INTF);
+
+	media_q_pub_map_uncmp_audio_info_t *pPubMapUncmpAudioInfo;
+	pPubMapUncmpAudioInfo = (media_q_pub_map_uncmp_audio_info_t *)pMediaQ->pPubMapInfo;
+	if (!pPubMapUncmpAudioInfo) {
+		AVB_LOG_ERROR("Public map data for audio info not allocated.");
+		return;
+	}
+
+	pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
+	if (!pPvtData) {
+		AVB_LOG_ERROR("Private interface module data not allocated.");
+		return;
+	}
+
+	pPvtData->frameSizeBytes = pPubMapUncmpAudioInfo->itemFrameSizeBytes;
+	pPvtData->sampleSizeBytes = pPubMapUncmpAudioInfo->itemSampleSizeBytes;
+
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
 }
 
@@ -443,9 +580,7 @@ static int tx_set_params(struct pcm *pcm)
 	param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
 		pcm->channels);
 	param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, pcm->rate);
-
 	param_set_hw_refine(pcm, params);
-
 	if (param_set_hw_params(pcm, params)) {
 		AVB_LOGF_ERROR("Cannot set hw params: %d", errno);
 		return -errno;
@@ -505,6 +640,42 @@ static int tx_set_params(struct pcm *pcm)
 
 }
 
+// This is called every time the clock ticks for the talker.
+// The interval is the number of frames have should have been transmitted
+// since the last clock tick.
+static void handleClockTick(void *context, U64 timestamp,
+	U16 ticks, U32 interval, bool restart_clock)
+{
+	pvt_data_t *pPvtData = context;
+
+	MUTEX_LOCK_ERR(pPvtData->mtxActualMinusRefFrames);
+
+	pPvtData->refClkStarted = TRUE;
+
+	if (pPvtData->txStarted) {
+		// We received a clock tick so adjust the count by the timing
+		// interval.
+		pPvtData->actualMinusRefFrames -= interval;
+
+		// If we haven't transmitted enough frames or we have
+		// transmitted too few frames, compute how many frames we
+		// need to add or remove to maintain synchronization.
+		// This is computed here so that if if the clock stops
+		// ticking, the talker will freerun.
+		pPvtData->framesToRecoverClock +=
+			pPvtData->actualMinusRefFrames /
+			pPvtData->clockRecoveryAdjustmentRange;
+#if DEBUG_MCR
+		if (pPvtData->framesToRecoverClock)
+			AVB_LOGF_ERROR("framesToRecoverClock: %d, actual-ref: %d",
+				       pPvtData->framesToRecoverClock,
+				       pPvtData->actualMinusRefFrames);
+#endif
+	}
+
+	MUTEX_UNLOCK_ERR(pPvtData->mtxActualMinusRefFrames);
+}
+
 // A call to this callback indicates that this interface module will be
 // a talker. Any talker initialization can be done in this function.
 void openavbIntfAlsa2TxInitCB(media_q_t *pMediaQ) 
@@ -516,6 +687,11 @@ void openavbIntfAlsa2TxInitCB(media_q_t *pMediaQ)
 		if (!pPvtData) {
 			AVB_LOG_ERROR("Private interface module data not allocated.");
 			return;
+		}
+
+		// Register the handler for the reference clock ticks
+		if (pPvtData->syncToClockTickOnTxAudio) {
+			refClkRegisterObserver(handleClockTick, pPvtData);
 		}
 
 		// Set the PCM flags to capture audio
@@ -569,6 +745,175 @@ void openavbIntfAlsa2TxInitCB(media_q_t *pMediaQ)
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
 }
 
+// read correct amount
+static bool readAudioFromAlsa(pvt_data_t *pPvtData, void *buffer, U32 buflen)
+{
+	// Set the tx_start flag to TRUE so that we can start counting clock
+	// ticks.
+	pPvtData->txStarted = TRUE;
+
+	// If the reference clock hasn't started, then simply read from
+	// ALSA and copy it to the buffer. No nead to do clock sync magic.
+	if (!pPvtData->refClkStarted) {
+		S32 rslt = pcm_read(pPvtData->pcmHandle, buffer, buflen);
+		if (rslt != 0) {
+			AVB_LOGF_ERROR("pcm_read() error: %d, %s", rslt, strerror(rslt));
+			return FALSE;
+		}
+		return TRUE;
+	}
+
+	// The clock sync magic starts here.
+
+	U32 bufIdx = 0;
+
+	// If the scratch audio buffer hasn't been allocated yet, allocate the audio
+	// buffer. Initialize the start index to the end to indicate that there
+	// is no data in the buffer.
+	if (pPvtData->audioBuffer == NULL) {
+		pPvtData->audioBuffer = malloc(buflen);
+		if (pPvtData->audioBuffer == NULL) {
+			AVB_LOG_ERROR("Failed to allocated memory for audio buffer");
+			return FALSE;
+		}
+		pPvtData->audioBufferSize = buflen;
+		// The data is always at the end of the buffer so
+		// an empty buffer has audioBufferStartIdx as the same
+		// as the audioBufferSize.
+		pPvtData->audioBufferStartIdx = pPvtData->audioBufferSize;
+	}
+
+	assert(pPvtData->audioBufferSize == buflen);
+
+	// Copy the bytes left in the scratch audio buffer to the output buffer.
+	if (pPvtData->audioBufferSize - pPvtData->audioBufferStartIdx > 0) {
+		memcpy(buffer,
+		       pPvtData->audioBuffer + pPvtData->audioBufferStartIdx,
+		       pPvtData->audioBufferSize - pPvtData->audioBufferStartIdx);
+		bufIdx += pPvtData->audioBufferSize - pPvtData->audioBufferStartIdx;
+		pPvtData->audioBufferStartIdx = pPvtData->audioBufferSize;
+	}
+
+	// If we've already filled up the output buffer, return it.
+	if (bufIdx == buflen) {
+#if DEBUG_MCR
+		AVB_LOG_ERROR("Extra packet for clock synchronization");
+#endif
+		return TRUE;
+	}
+
+	// Now the scratch buffer is empty. Read new data into the scratch buffer.
+	S32 rslt = pcm_read(pPvtData->pcmHandle, pPvtData->audioBuffer,
+			    pPvtData->audioBufferSize);
+	pPvtData->audioBufferStartIdx = 0;
+
+	if (rslt != 0) {
+		AVB_LOGF_ERROR("pcm_read() error: %d, %s", rslt, strerror(rslt));
+		return FALSE;
+	}
+
+	// Fill up the rest of the output buffer with data from the scratch buffer.
+	memcpy(buffer + bufIdx, pPvtData->audioBuffer, buflen - bufIdx);
+	pPvtData->audioBufferStartIdx += buflen - bufIdx;
+	bufIdx = buflen;
+
+	// At this point, the scratch buffer can be empty, or partially full,
+	// but it can't be completely full.
+
+	MUTEX_LOCK_ERR(pPvtData->mtxActualMinusRefFrames);
+
+	// Subtract the number of frames read from ALSA. (We're counting the
+	// frames as they come out of ALSA and then adjusting by the number
+	// of added or removed frames rather than when counting when the frames
+	// are queued for transmit because frames come out of ALSA at
+	// more regular intervals.)
+	pPvtData->actualMinusRefFrames += pPvtData->audioBufferSize /
+		pPvtData->frameSizeBytes;
+	// Determine how many frames to remove or repeat.
+	// Do this inside the critical section but do the actual remove or
+	// repeating of frames outside the critical section.
+	S32 frames_repeated = 0;
+	S32 frames_removed = 0;
+
+	// If the number of frames to recover clock is negative, then we need to
+	// repeat this many frames to catch up. But we can only repeat as
+	// many frames as we have space in the scratch buffer. We'll make up
+	// the remainder the next time this function is called.
+	if (pPvtData->framesToRecoverClock < 0) {
+		frames_repeated = -1 * pPvtData->framesToRecoverClock;
+		if (pPvtData->audioBufferStartIdx < frames_repeated) {
+			frames_repeated = pPvtData->audioBufferStartIdx;
+		}
+	}
+	// If we need to remove frames, we can remove as many frames as we want.
+	// We'll just have to read from ALSA again if we need to remove more
+	// frames than we already have.
+	else if (pPvtData->framesToRecoverClock > 0) {
+		frames_removed = pPvtData->framesToRecoverClock;
+	}
+
+	// Adjust the count actualMinusRefFrames by the number of frames
+	// removed or repeated.
+	pPvtData->actualMinusRefFrames += frames_repeated - frames_removed;
+	pPvtData->framesToRecoverClock += frames_repeated - frames_removed;
+
+	MUTEX_UNLOCK_ERR(pPvtData->mtxActualMinusRefFrames);
+#if DEBUG_MCR
+	static U32 total_frames_repeated = 0;
+	static U32 total_frames_removed = 0;
+	static U32 counter = 0;
+	total_frames_repeated += frames_repeated;
+	total_frames_removed += frames_removed;
+	counter++;
+	if (counter % 100 == 0) {
+	AVB_LOGF_ERROR("total_repeated: %d, total_removed: %d, actual-ref: %d",
+		       total_frames_repeated, total_frames_removed, pPvtData->actualMinusRefFrames);
+
+	}
+#endif
+
+	// Repeat the frames as necessary by copying the last frames in the
+	// output buffer to the begining of the scratch buffer
+	U32 i;
+	for (i = 0; i < frames_repeated; i++) {
+		pPvtData->audioBufferStartIdx -= pPvtData->frameSizeBytes;
+		memcpy(pPvtData->audioBuffer + pPvtData->audioBufferStartIdx,
+		       buffer + buflen - pPvtData->frameSizeBytes,
+		       pPvtData->frameSizeBytes);
+	}
+
+	// Remove the frames as necessary
+	for (i = 0; i < frames_removed; i++) {
+		// If there are no frames to remove, read some more frames
+		if (pPvtData->audioBufferStartIdx >= pPvtData->audioBufferSize) {
+#if DEBUG_MCR
+			AVB_LOG_ERROR("Extra read for clock synchronization");
+#endif
+			rslt = pcm_read(pPvtData->pcmHandle, pPvtData->audioBuffer,
+					pPvtData->audioBufferSize);
+			pPvtData->audioBufferStartIdx = 0;
+
+			if (rslt != 0) {
+				AVB_LOGF_ERROR("pcm_read() error: %d, %s", rslt, strerror(rslt));
+				// Return TRUE because we have already filled
+				// the output buffer.
+				return TRUE;
+			}
+
+			// Adjust the count because we just read some more frames
+			// from ALSA
+			MUTEX_LOCK_ERR(pPvtData->mtxActualMinusRefFrames);
+			pPvtData->actualMinusRefFrames += pPvtData->audioBufferSize /
+				pPvtData->frameSizeBytes;
+			MUTEX_UNLOCK_ERR(pPvtData->mtxActualMinusRefFrames);
+		}
+
+		pPvtData->audioBufferStartIdx += pPvtData->frameSizeBytes;
+	}
+
+	return TRUE;
+}
+
 // This callback will be called for each AVB transmit interval. 
 bool openavbIntfAlsa2TxCB(media_q_t *pMediaQ)
 {
@@ -598,36 +943,26 @@ bool openavbIntfAlsa2TxCB(media_q_t *pMediaQ)
 
 		pMediaQItem = openavbMediaQHeadLock(pMediaQ);
 		if (pMediaQItem) {
-			S32 rslt = 0;
-
 			if (pMediaQItem->itemSize < pPubMapUncmpAudioInfo->itemSize) {
 				AVB_LOG_ERROR("Media queue item not large enough for samples");
 			}
 
-			rslt = pcm_read(pPvtData->pcmHandle,
-					pMediaQItem->pPubData + pMediaQItem->dataLen,
-					pPubMapUncmpAudioInfo->itemSize - pMediaQItem->dataLen);
+			bool rslt = readAudioFromAlsa(pPvtData,
+				pMediaQItem->pPubData + pMediaQItem->dataLen,
+				pMediaQItem->itemSize - pMediaQItem->dataLen);
 
-			if (rslt != 0) {
-				AVB_LOGF_ERROR("pcm_read() error: %d, %s", rslt, strerror(rslt));
+			if (!rslt) {
 				openavbMediaQHeadUnlock(pMediaQ);
 				AVB_TRACE_EXIT(AVB_TRACE_INTF);
 				return FALSE;
 			}
 
-			pMediaQItem->dataLen = pPubMapUncmpAudioInfo->itemSize;
-			if (pMediaQItem->dataLen != pPubMapUncmpAudioInfo->itemSize) {
-				openavbMediaQHeadUnlock(pMediaQ);
-				AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
-				return TRUE;
-			}
-			else {
-				openavbAvtpTimeSetToWallTime(pMediaQItem->pAvtpTime);
-				openavbMediaQHeadPush(pMediaQ);
+			pMediaQItem->dataLen = pMediaQItem->itemSize;
+			openavbAvtpTimeSetToWallTime(pMediaQItem->pAvtpTime);
+			openavbMediaQHeadPush(pMediaQ);
 
-				AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
-				return TRUE;
-			}
+			AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
+			return TRUE;
 		}
 		else {
 			AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
@@ -792,6 +1127,37 @@ void openavbIntfAlsa2RxInitCB(media_q_t *pMediaQ)
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
 }
 
+static void consumeAudio(pvt_data_t *pPvtData, void *data, U32 dataLen)
+{
+	S32 rslt;
+
+	rslt = pcm_write(pPvtData->pcmHandle, data, dataLen);
+	if (rslt != 0) {
+		AVB_LOGF_ERROR("pcm_write: %s", pcm_error(pPvtData->pcmHandle));
+		return;
+	}
+
+	// Trigger a clock tick if we've consumed enough frames.
+	if (pPvtData->genClockTickOnConsumeAudio &&
+	    pPvtData->clockSourceTimestampInterval) {
+		pPvtData->framesConsumed += dataLen /
+			pPvtData->frameSizeBytes;
+		while (pPvtData->framesConsumed >= pPvtData->clockSourceTimestampInterval) {
+			if (pPvtData->clockSourceTimestampThrowaway <= 0) {
+				U64 walltime;
+				if (CLOCK_GETTIME64(OPENAVB_CLOCK_WALLTIME, &walltime)) {
+					refClkSignalTick(walltime, 1,
+						pPvtData->clockSourceTimestampInterval, FALSE);
+				}
+			}
+			else {
+				pPvtData->clockSourceTimestampThrowaway--;
+			}
+			pPvtData->framesConsumed -= pPvtData->clockSourceTimestampInterval;
+		}
+	}
+}
+
 // This callback is called when acting as a listener.
 bool openavbIntfAlsa2RxCB(media_q_t *pMediaQ) 
 {
@@ -799,13 +1165,6 @@ bool openavbIntfAlsa2RxCB(media_q_t *pMediaQ)
 
 	if (pMediaQ) {
 		pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
-		/*
-		media_q_pub_map_uncmp_audio_info_t *pPubMapUncmpAudioInfo = pMediaQ->pPubMapInfo;
-		if (!pPvtData) {
-			AVB_LOG_ERROR("Private interface module data not allocated.");
-			return FALSE;
-		}
-		*/
 
 		bool moreItems = TRUE;
 
@@ -813,12 +1172,9 @@ bool openavbIntfAlsa2RxCB(media_q_t *pMediaQ)
 			media_q_item_t *pMediaQItem = openavbMediaQTailLock(pMediaQ, pPvtData->ignoreTimestamp);
 			if (pMediaQItem) {
 				if (pMediaQItem->dataLen) {
-					S32 rslt;
-
-					rslt = pcm_write(pPvtData->pcmHandle, pMediaQItem->pPubData, pMediaQItem->dataLen);
-					if (rslt != 0) {
-						AVB_LOGF_ERROR("pcm_write: %s", pcm_error(pPvtData->pcmHandle));
-					}
+					consumeAudio(pPvtData,
+						pMediaQItem->pPubData,
+						pMediaQItem->dataLen);
 				}
 				openavbMediaQTailPull(pMediaQ);
 			} else {
@@ -844,6 +1200,8 @@ void openavbIntfAlsa2EndCB(media_q_t *pMediaQ)
 			return;
 		}
 
+		refClkUnregisterObserver(pPvtData);
+
 		if (pPvtData->pcmHandle) {
 			pcm_close(pPvtData->pcmHandle);
 			pPvtData->pcmHandle = NULL;
@@ -851,6 +1209,11 @@ void openavbIntfAlsa2EndCB(media_q_t *pMediaQ)
 
 		if (pPvtData->ch2Fd > 0) {
 			close(pPvtData->ch2Fd);
+		}
+
+		if (pPvtData->audioBuffer) {
+			free(pPvtData->audioBuffer);
+			pPvtData->audioBuffer = NULL;
 		}
 	}
 
@@ -861,6 +1224,13 @@ void openavbIntfAlsa2GenEndCB(media_q_t *pMediaQ)
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_INTF);
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
+}
+
+bool openavbIntfAlsa2TxBlockingInIntfCB(media_q_t *pMediaQ)
+{
+	AVB_TRACE_ENTRY(AVB_TRACE_INTF);
+	AVB_TRACE_EXIT(AVB_TRACE_INTF);
+	return TRUE;
 }
 
 // Main initialization entry point into the interface module
@@ -886,6 +1256,8 @@ extern DLL_EXPORT bool openavbIntfAlsa2Initialize(media_q_t *pMediaQ, openavb_in
 		pIntfCB->intf_rx_cb = openavbIntfAlsa2RxCB;
 		pIntfCB->intf_end_cb = openavbIntfAlsa2EndCB;
 		pIntfCB->intf_gen_end_cb = openavbIntfAlsa2GenEndCB;
+		pIntfCB->intf_tx_blocking_in_intf_cb =
+			openavbIntfAlsa2TxBlockingInIntfCB;
 
 		pPvtData->ignoreTimestamp = FALSE;
 		pPvtData->pDeviceName = strdup(PCM_DEVICE_NAME_DEFAULT);
@@ -895,6 +1267,17 @@ extern DLL_EXPORT bool openavbIntfAlsa2Initialize(media_q_t *pMediaQ, openavb_in
 		pPvtData->periodTimeUsec = 100000;
 
 		pPvtData->ch2Fd = 0;
+		pPvtData->clockSourceTimestampThrowaway = 10;
+
+		pPvtData->clockRecoveryAdjustmentRange = 500;
+
+		MUTEX_ATTR_HANDLE(mta);
+		MUTEX_ATTR_INIT(mta);
+		MUTEX_ATTR_SET_TYPE(mta, MUTEX_ATTR_TYPE_DEFAULT);
+		MUTEX_ATTR_SET_NAME(mta, "mtxActualMinusRefFrames");
+		MUTEX_CREATE_ERR();
+		MUTEX_CREATE(pPvtData->mtxActualMinusRefFrames, mta);
+		MUTEX_LOG_ERR("Error creating mutex");
 	}
 
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
@@ -1031,6 +1414,12 @@ bool openavbIntfAlsa2DualTxCB(media_q_t *pMediaQ)
 			AVB_LOG_ERROR("Private interface module data not allocated.");
 			return FALSE;
 		}
+
+		// Register the handler for the reference clock ticks
+		if (pPvtData->syncToClockTickOnTxAudio) {
+			refClkRegisterObserver(handleClockTick, pPvtData);
+		}
+
 		//put current wall time into tail item used by AAF mapping module
 		if ((pPubMapUncmpAudioInfo->sparseMode != TS_SPARSE_MODE_UNSPEC)) {
 			pMediaQItem = openavbMediaQTailLock(pMediaQ, TRUE);
@@ -1138,6 +1527,8 @@ extern DLL_EXPORT bool openavbIntfAlsa2DualInitialize(media_q_t *pMediaQ, openav
 		pIntfCB->intf_rx_cb = openavbIntfAlsa2RxCB;
 		pIntfCB->intf_end_cb = openavbIntfAlsa2EndCB;
 		pIntfCB->intf_gen_end_cb = openavbIntfAlsa2GenEndCB;
+		pIntfCB->intf_tx_blocking_in_intf_cb =
+			openavbIntfAlsa2TxBlockingInIntfCB;
 
 		pPvtData->ignoreTimestamp = FALSE;
 		pPvtData->pDeviceName = strdup(PCM_DEVICE_NAME_DEFAULT);
@@ -1147,6 +1538,16 @@ extern DLL_EXPORT bool openavbIntfAlsa2DualInitialize(media_q_t *pMediaQ, openav
 		pPvtData->periodTimeUsec = 100000;
 
 		pPvtData->ch2Fd = 0;
+
+		pPvtData->clockRecoveryAdjustmentRange = 500;
+
+		MUTEX_ATTR_HANDLE(mta);
+		MUTEX_ATTR_INIT(mta);
+		MUTEX_ATTR_SET_TYPE(mta, MUTEX_ATTR_TYPE_DEFAULT);
+		MUTEX_ATTR_SET_NAME(mta, "mtxActualMinusRefFrames");
+		MUTEX_CREATE_ERR();
+		MUTEX_CREATE(pPvtData->mtxActualMinusRefFrames, mta);
+		MUTEX_LOG_ERR("Error creating mutex");
 	}
 
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);

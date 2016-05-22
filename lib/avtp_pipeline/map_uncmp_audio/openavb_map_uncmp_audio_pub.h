@@ -127,6 +127,9 @@ typedef struct {
 	/// Interface Module may set this presentation latency which listener mapping modules will use to adjust the presetnation time
 	S32 presentationLatencyUSec;
 	
+	/// The number of frames between each clock tick when generating reference
+	/// clock ticks.
+	U32 timestampInterval;
 } media_q_pub_map_uncmp_audio_info_t;
 
 #endif  // OPENAVB_MAP_UNCMP_AUDIO_PUB_H

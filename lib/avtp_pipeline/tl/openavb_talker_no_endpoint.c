@@ -112,6 +112,11 @@ bool openavbTLRunTalkerInit(tl_state_t *pTLState)
 		pTalkerData->wakeRate = pCfg->map_cb.map_transmit_interval_cb(pTLState->pMediaQ) / pCfg->batch_factor;
 	}
 
+	if (pCfg->intf_cb.intf_tx_blocking_in_intf_cb != NULL) {
+		pCfg->tx_blocking_in_intf = pCfg->intf_cb.
+			intf_tx_blocking_in_intf_cb(pTLState->pMediaQ);
+	}
+
 	if_info_t ifinfo;
 	openavbCheckInterface(pTalkerData->ifname, &ifinfo);
 

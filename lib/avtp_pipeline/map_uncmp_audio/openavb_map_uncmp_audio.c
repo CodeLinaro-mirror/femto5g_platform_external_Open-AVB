@@ -38,6 +38,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_trace_pub.h"
 #include "openavb_avtp_time_pub.h"
 #include "openavb_mediaq_pub.h"
+#include "openavb_reference_clock_pub.h"
 
 // TODO_OPENAVB : Is this needed?
 //#include "openavb_avdecc_pub.h"
@@ -153,6 +154,12 @@ typedef struct {
 
 	avb_audio_mcr_t audioMcr;
 
+	// 1 if the clock tick is to be generated when the audio is received.
+	// 0 otherwise.
+	U16 genClockTickOnReceiveAudio;
+
+	// The number of frames of audio that we have received
+	U32 framesReceived;
 } pvt_data_t;
 
 static void x_calculateSizes(media_q_t *pMediaQ)
@@ -320,6 +327,12 @@ void openavbMapUncmpAudioCfgCB(media_q_t *pMediaQ, const char *name, const char 
 		else if (strcmp(name, "map_nv_audio_mcr") == 0) {
 			char *pEnd;
 			pPvtData->audioMcr = (avb_audio_mcr_t)strtol(value, &pEnd, 10);
+		}
+		else if (strcmp(name, "map_nv_gen_clock_tick_on_receive_audio") ==
+			 0) {
+			char *pEnd;
+			pPvtData->genClockTickOnReceiveAudio = strtol(value,
+				&pEnd, 10);
 		}
 	}
 
@@ -585,6 +598,7 @@ bool openavbMapUncmpAudioRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 		U8 *pHdr = pData;
 		U8 *pPayload = pData + TOTAL_HEADER_SIZE;
 		media_q_pub_map_uncmp_audio_info_t *pPubMapInfo = pMediaQ->pPubMapInfo;
+		pvt_data_t *pPvtData = pMediaQ->pPvtMapInfo;
 
 		//pHdr[HIDX_AVTP_TIMESTAMP32];
 		//pHdr[HIDX_GATEWAY32];
@@ -611,6 +625,23 @@ bool openavbMapUncmpAudioRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 		U8 *pAVTPDataUnit = pPayload;
 		U8 *pAVTPDataUnitEnd = pData + AVTP_V0_HEADER_SIZE + MAP_HEADER_SIZE + payloadLen;
 
+		// Generate a clock tick if we have received enough frames
+		if (pPvtData->genClockTickOnReceiveAudio &&
+		    pPubMapInfo->timestampInterval) {
+			pPvtData->framesReceived += (pAVTPDataUnitEnd -
+				pAVTPDataUnit) / pPubMapInfo->packetFrameSizeBytes;
+
+			while (pPvtData->framesReceived >=
+			       pPubMapInfo->timestampInterval) {
+				U64 walltime;
+				if (CLOCK_GETTIME64(OPENAVB_CLOCK_WALLTIME, &walltime)) {
+					refClkSignalTick(walltime, 1,
+						pPubMapInfo->timestampInterval, FALSE);
+				}
+				pPvtData->framesReceived -= pPubMapInfo->timestampInterval;
+			}
+		}
+
 		while (((pAVTPDataUnit + pPubMapInfo->packetFrameSizeBytes) <= pAVTPDataUnitEnd)) {
 			// Get item pointer in media queue
 			media_q_item_t *pMediaQItem = openavbMediaQHeadLock(pMediaQ);
@@ -622,7 +653,6 @@ bool openavbMapUncmpAudioRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 
 				// Get the timestamp
 				U32 timestamp = ntohl(*(U32 *)(&pHdr[HIDX_AVTP_TIMESTAMP32]));
-				pvt_data_t *pPvtData = pMediaQ->pPvtMapInfo;
 				if ((pPvtData->audioMcr != AVB_MCR_NONE) && tsValid && !tsUncertain) {
 					// MCR mode set and timestamp is valid, and timestamp uncertain is not set
 					openavbAvtpTimePushMCR(pMediaQItem->pAvtpTime, timestamp);
