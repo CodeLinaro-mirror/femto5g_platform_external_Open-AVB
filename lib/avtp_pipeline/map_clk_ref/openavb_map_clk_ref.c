@@ -25,7 +25,7 @@ BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
 OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-********************************************************************************
+*******************************************************************************/
 
 /*
 * MODULE SUMMARY : Clock reference stream mapping module conforming to 1722-D15
@@ -34,6 +34,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include "openavb_types_pub.h"
 #include "openavb_trace_pub.h"
 #include "openavb_avtp_time_pub.h"
@@ -73,6 +74,12 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //                 Valid for example if the talker detects a discontinuity in
 //                 the gPTP time.
 #define HIDX_AVTP_HIDE4_MR1_HIDE1_FS1_TU1 1
+#define MEDIA_CLOCK_RESTART_MASK 0x8
+#define FRAME_SYNC_MASK 0x2
+#define TIMING_UNCERTAIN_MASK 0x1
+
+// 1 Byte : sequence number
+#define HIDX_AVTP_SEQUENCE_NUMBER8 2
 
 // 1 Byte : type (Section 11.2.6)
 #define HIDX_AVTP_TYPE 3
@@ -86,6 +93,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //                to arrive at the nominal sampling frequency.
 //   baseFrequency 28 bits: (Section 11.2.9) From 1 Hz to 536,870,911 Hz
 #define HIDX_AVTP_PULL4_BASE_FREQ28 12
+#define PULL_OFFSET 28
 
 // crf_data_length 2 bytes: (Section 11.2.10) length of the crf_data field.
 // This must be a multiple of 8.
@@ -103,6 +111,9 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define HIDX_DATA 20
 
 typedef struct {
+	// listener variables
+	bool lastClockRestartFlag;
+	U8 lastSequenceNumber;
 } pvt_data_t;
 
 
@@ -232,6 +243,8 @@ void openavbMapClkRefGenInitCB(media_q_t *pMediaQ)
 				     pPubMapInfo->packingFactor *
 				     pPubMapInfo->timestampsPerPacket *
 				     CRF_TIMESTAMP_SIZE);
+		openavbMediaQAllocItemMapData(pMediaQ,
+			sizeof(media_q_item_map_clk_ref_data_t), 0);
 	}
 	AVB_TRACE_EXIT(AVB_TRACE_MAP);
 }
@@ -336,12 +349,18 @@ tx_cb_ret_t openavbMapClkRefTxCB(media_q_t *pMediaQ, U8 *pData, U32 *dataLen)
 		// Set media clock restart to 0.
 		// Set frame sync to 0.
 		// Frame timing uncertain to 0.
-		pHdr[HIDX_AVTP_HIDE4_MR1_HIDE1_FS1_TU1] &= ~0xf;
+		pHdr[HIDX_AVTP_HIDE4_MR1_HIDE1_FS1_TU1] &=
+			~MEDIA_CLOCK_RESTART_MASK;
+		pHdr[HIDX_AVTP_HIDE4_MR1_HIDE1_FS1_TU1] &= ~FRAME_SYNC_MASK;
+		pHdr[HIDX_AVTP_HIDE4_MR1_HIDE1_FS1_TU1] &=
+			~TIMING_UNCERTAIN_MASK;
+
 		// Set the type of the CRF stream
 		pHdr[HIDX_AVTP_TYPE] = pPubMapInfo->crfType;
 		// Set the pull and base frequency
 		U32 pull_and_base_freq = pPubMapInfo->baseFrequency;
-		pull_and_base_freq |= pPubMapInfo->pullMultiplier << 28;
+		pull_and_base_freq |= pPubMapInfo->pullMultiplier <<
+			PULL_OFFSET;
 		*(U32 *)(&pHdr[HIDX_AVTP_PULL4_BASE_FREQ28]) =
 			htonl(pull_and_base_freq);
 		// Set the data length
@@ -381,6 +400,8 @@ void openavbMapClkRefRxInitCB(media_q_t *pMediaQ)
 	AVB_TRACE_EXIT(AVB_TRACE_MAP);
 }
 
+#define MAX_U8 256
+
 // This callback occurs when running as a listener and data is available.
 bool openavbMapClkRefRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 {
@@ -389,32 +410,62 @@ bool openavbMapClkRefRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 		media_q_pub_map_clk_ref_info_t *pPubMapInfo = pMediaQ->pPubMapInfo;
 		U8 *pHdr = pData;
 		U8 *pPayload = pData + TOTAL_HEADER_SIZE;
+		pvt_data_t *pPvtData = pMediaQ->pPvtMapInfo;
 
-		// TODO: read other fields such as clock restart
 		U16 payloadLen = ntohs(*(U16 *)(&pHdr[HIDX_DATALEN16]));
-
+		bool clockRestartFlag = (pHdr[HIDX_AVTP_HIDE4_MR1_HIDE1_FS1_TU1] &
+			MEDIA_CLOCK_RESTART_MASK) ? TRUE : FALSE;
 		bool tsUncertain = (pHdr[HIDX_AVTP_HIDE4_MR1_HIDE1_FS1_TU1] &
-				    0x01) ? TRUE : FALSE;
+				    TIMING_UNCERTAIN_MASK) ? TRUE : FALSE;
+		U8 sequenceNumber = pHdr[HIDX_AVTP_SEQUENCE_NUMBER8];
 
 		U16 timestampInterval = ntohs(*(U16 *)(&pHdr[
 			HIDX_TIMESTAMP_INTERVAL16]));
-		if (timestampInterval) {
-			pPubMapInfo->timestampInterval = timestampInterval;
-		}
 
 		U8 *pAVTPDataUnit = pPayload;
 		U8 *pAVTPDataUnitEnd = pPayload + payloadLen;
+
+		bool restartClock =
+			(pPvtData->lastClockRestartFlag != clockRestartFlag) ||
+			((pPvtData->lastSequenceNumber + 1) % MAX_U8 != sequenceNumber);
 
 		while (((pAVTPDataUnit + CRF_TIMESTAMP_SIZE) <=
 			pAVTPDataUnitEnd)) {
 			// Get item pointer in media queue
 			media_q_item_t *pMediaQItem = openavbMediaQHeadLock(pMediaQ);
+
+			// If we need to restart the clock, then we need an empty
+			// media Q item, and we need to set the restart clock flag on that
+			// item
+			if (restartClock) {
+				if (pMediaQItem && pMediaQItem->dataLen != 0) {
+					openavbMediaQHeadPush(pMediaQ);
+					pMediaQItem = openavbMediaQHeadLock(pMediaQ);
+					assert(!pMediaQItem || pMediaQItem->dataLen == 0);
+				}
+				if (pMediaQItem) {
+					media_q_item_map_clk_ref_data_t *pItemPubMapData =
+						(media_q_item_map_clk_ref_data_t *)
+						pMediaQItem->pPubMapData;
+					pItemPubMapData->restartClock = TRUE;
+				}
+				restartClock = FALSE;
+			} else if (pMediaQItem && pMediaQItem->dataLen == 0) {
+				media_q_item_map_clk_ref_data_t *pItemPubMapData =
+					(media_q_item_map_clk_ref_data_t *)
+					pMediaQItem->pPubMapData;
+				pItemPubMapData->restartClock = FALSE;
+			}
+
 			if (pMediaQItem) {
 				U32 itemSizeWritten = 0;
 				U8 *pItemData = (U8 *)pMediaQItem->pPubData +
 					pMediaQItem->dataLen;
 				U8 *pItemDataEnd = (U8 *)pMediaQItem->pPubData +
 					pMediaQItem->itemSize;
+				media_q_item_map_clk_ref_data_t *pItemPubMapData =
+					(media_q_item_map_clk_ref_data_t *)
+					pMediaQItem->pPubMapData;
 
 				if (pMediaQItem->dataLen == 0) {
 					// Set time stamp info on first data
@@ -431,6 +482,10 @@ bool openavbMapClkRefRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 					openavbAvtpTimeSetTimestampUncertain(
 						pMediaQItem->pAvtpTime,
 						tsUncertain);
+
+					// Set the timestamp interval
+					pItemPubMapData->timestampInterval =
+						timestampInterval;
 				}
 
 				while (((pAVTPDataUnit +
@@ -455,6 +510,9 @@ bool openavbMapClkRefRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 					// The item is full push it.
 					openavbMediaQHeadPush(pMediaQ);
 				}
+
+				pPvtData->lastClockRestartFlag = clockRestartFlag;
+				pPvtData->lastSequenceNumber = sequenceNumber;
 			}
 			else {
 				IF_LOG_INTERVAL(1000) AVB_LOG_INFO("Media queue full");

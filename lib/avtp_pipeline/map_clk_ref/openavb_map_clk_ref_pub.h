@@ -25,7 +25,7 @@ BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
 OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-********************************************************************************
+*******************************************************************************/
 
 /*
 * HEADER SUMMARY : Clock reference mapping module public interface
@@ -113,5 +113,13 @@ typedef struct {
 	/// CB for interface modules to do translations in place before data is moved into the mediaQ on rx.	
 	openavb_intf_rx_translate_cb_t	intf_rx_translate_cb;
 } media_q_pub_map_clk_ref_info_t;
+
+/**
+ * Contains information in the header of the CRF packet for use by the interface.
+ */
+typedef struct {
+	bool restartClock;
+	U16 timestampInterval;
+} media_q_item_map_clk_ref_data_t;
 
 #endif  // OPENAVB_MAP_CLK_REF_PUB_H

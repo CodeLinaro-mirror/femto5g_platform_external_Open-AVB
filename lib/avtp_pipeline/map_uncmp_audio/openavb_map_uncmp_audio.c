@@ -69,6 +69,9 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 // - 1 Byte - TV bit (timestamp valid)
 #define HIDX_AVTP_HIDE7_TV1			1
 
+// - 1 Byte - Sequence number
+#define HIDX_AVTP_SEQ_NUM8			2
+
 // - 1 Byte - TU bit (timestamp uncertain)
 #define HIDX_AVTP_HIDE7_TU1			3
 
@@ -160,6 +163,8 @@ typedef struct {
 
 	// The number of frames of audio that we have received
 	U32 framesReceived;
+
+	U8 lastSequenceNumber
 } pvt_data_t;
 
 static void x_calculateSizes(media_q_t *pMediaQ)
@@ -587,8 +592,27 @@ tx_cb_ret_t openavbMapUncmpAudioTxCB(media_q_t *pMediaQ, U8 *pData, U32 *dataLen
 void openavbMapUncmpAudioRxInitCB(media_q_t *pMediaQ)
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_MAP);
+	if (pMediaQ) {
+		pvt_data_t *pPvtData = pMediaQ->pPvtMapInfo;
+		if (!pPvtData) {
+			AVB_LOG_ERROR("Private mapping module data not allocated.");
+			return;
+		}
+
+		// If we're going to be the clock source, restart the clock.
+		media_q_pub_map_uncmp_audio_info_t *pPubMapInfo = pMediaQ->pPubMapInfo;
+		if (pPvtData->genClockTickOnReceiveAudio && pPubMapInfo->timestampInterval) {
+			U64 walltime;
+			if (CLOCK_GETTIME64(OPENAVB_CLOCK_WALLTIME, &walltime)) {
+				refClkSignalTick(walltime, 0,
+						 pPubMapInfo->timestampInterval, TRUE);
+			}
+		}
+	}
 	AVB_TRACE_EXIT(AVB_TRACE_MAP);
 }
+
+#define MAX_U8 256
 
 // This callback occurs when running as a listener and data is available.
 bool openavbMapUncmpAudioRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
@@ -616,6 +640,7 @@ bool openavbMapUncmpAudioRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 		//pHdr[HIDX_RESC8];
 		bool tsValid = (pHdr[HIDX_AVTP_HIDE7_TV1] & 0x01) ? TRUE : FALSE;
 		bool tsUncertain = (pHdr[HIDX_AVTP_HIDE7_TU1] & 0x01) ? TRUE : FALSE;
+		U8 sequenceNumber = pHdr[HIDX_AVTP_SEQ_NUM8];
 
 		// Per iec61883-6 Secion 7.2
 		// index = mod((SYT_INTERVAL - mod(DBC, SYT_INTERVAL)), SYT_INTERVAL)
@@ -628,17 +653,35 @@ bool openavbMapUncmpAudioRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 		// Generate a clock tick if we have received enough frames
 		if (pPvtData->genClockTickOnReceiveAudio &&
 		    pPubMapInfo->timestampInterval) {
-			pPvtData->framesReceived += (pAVTPDataUnitEnd -
-				pAVTPDataUnit) / pPubMapInfo->packetFrameSizeBytes;
+			bool restartClock = sequenceNumber !=
+				(pPvtData->lastSequenceNumber + 1) % MAX_U8;
+			pPvtData->lastSequenceNumber = sequenceNumber;
 
-			while (pPvtData->framesReceived >=
-			       pPubMapInfo->timestampInterval) {
+			if (restartClock) {
 				U64 walltime;
+
+				pPvtData->framesReceived = 0;
 				if (CLOCK_GETTIME64(OPENAVB_CLOCK_WALLTIME, &walltime)) {
-					refClkSignalTick(walltime, 1,
-						pPubMapInfo->timestampInterval, FALSE);
+					refClkSignalTick(walltime, 0,
+						pPubMapInfo->timestampInterval,
+						TRUE);
 				}
-				pPvtData->framesReceived -= pPubMapInfo->timestampInterval;
+			} else {
+				pPvtData->framesReceived += (pAVTPDataUnitEnd - pAVTPDataUnit) /
+					pPubMapInfo->packetFrameSizeBytes;
+				while (pPvtData->framesReceived >=
+				       pPubMapInfo->timestampInterval) {
+					// Signal a clock tick. If the stream was
+					// previously invalid (pPvtData->dataValid == FALSE),
+					// then restart the clock.
+					U64 walltime;
+					if (CLOCK_GETTIME64(OPENAVB_CLOCK_WALLTIME, &walltime)) {
+						refClkSignalTick(walltime, 1,
+							pPubMapInfo->timestampInterval,
+							FALSE);
+					}
+					pPvtData->framesReceived -= pPubMapInfo->timestampInterval;
+				}
 			}
 		}
 

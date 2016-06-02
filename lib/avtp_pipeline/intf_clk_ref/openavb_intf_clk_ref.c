@@ -25,7 +25,7 @@ BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
 OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-********************************************************************************
+*******************************************************************************/
 
 /*
 * MODULE SUMMARY : Clock Reference interface module.
@@ -216,56 +216,23 @@ void openavbIntfClkRefTxInitCB(media_q_t *pMediaQ)
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
 }
 
-// This callback will be called for each AVB transmit interval. 
-bool openavbIntfClkRefTxCB(media_q_t *pMediaQ)
+bool writeTimestampsToMediaQ(media_q_t *pMediaQ)
 {
-	AVB_TRACE_ENTRY(AVB_TRACE_INTF_DETAIL);
-
-	// Validate parameters
-	if (!pMediaQ) {
-		AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
-		return FALSE;
-	}
-
 	pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
-	if (!pPvtData) {
-		AVB_LOG_ERROR("Private interface module data not allocated.");
-		AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
-		return FALSE;
-	}
-
-
-	// Wait until we have enough timestamps. Then read the
-	// timestamps and write them to the media queue item.
-	SEM_ERR_T(err);
-	SEM_TIMEDWAIT(pPvtData->timestampSem, 200, err);
-	if (!SEM_IS_ERR_NONE(err)) {
-		if (SEM_IS_ERR_TIMEOUT(errno)) {
-#ifdef DEBUG
-			AVB_LOG_ERROR("Timestamp semaphore timeout.");
-#endif
-			return false;
-		}
-		else {
-			AVB_LOG_ERROR("Error waiting on timestamp semaphore.");
-			SEM_LOG_ERR(errno);
-			AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
-			return FALSE;
-		}
-	}
 
 	// Check if we have enough timestamps.
 	if (timestamp_buff_count(pPvtData) < pPvtData->timestampsPerPacket) {
-		AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
 		return FALSE;
 	}
 
 	// While we have more than a packet's worth of timestamps in the
 	// buffer...
+	bool ret = FALSE;
 	media_q_item_t *pMediaQItem = NULL;
 	while (timestamp_buff_count(pPvtData) >=
 		pPvtData->timestampsPerPacket) {
 		U16 timestamps_written = 0;
+
 
 		// Write a packet's worth of timestamps to the media Q.
 		for (timestamps_written = 0;
@@ -277,8 +244,7 @@ bool openavbIntfClkRefTxCB(media_q_t *pMediaQ)
 				pMediaQItem =
 					openavbMediaQHeadLock(pMediaQ);
 				if (!pMediaQItem) {
-					AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
-					return FALSE;	// Media queue full
+					break; // Media queue full
 				}
 			}
 
@@ -306,13 +272,14 @@ bool openavbIntfClkRefTxCB(media_q_t *pMediaQ)
 				pMediaQItem = NULL;
 			}
 		}
-#ifdef DEBUG
-		static U32 counter = 0;
-		counter++;
-		if (counter % 50 == 0) {
-			AVB_LOGF_ERROR("Timestamp packets sent: %d", counter);
+
+		// If the for loop exited early because of a full Media Q,
+		// break out of the while loop.
+		if (timestamps_written < pPvtData->timestampsPerPacket) {
+			break;
 		}
-#endif
+
+		ret = TRUE;
 	}
 
 	// At this point, either the media Q item is pushed, or it's
@@ -323,8 +290,57 @@ bool openavbIntfClkRefTxCB(media_q_t *pMediaQ)
 		openavbMediaQHeadUnlock(pMediaQ);
 	}
 
+	return ret;
+}
+
+// This callback will be called for each AVB transmit interval. 
+bool openavbIntfClkRefTxCB(media_q_t *pMediaQ)
+{
+	AVB_TRACE_ENTRY(AVB_TRACE_INTF_DETAIL);
+
+	// Validate parameters
+	if (!pMediaQ) {
+		AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
+		return FALSE;
+	}
+
+	pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
+	if (!pPvtData) {
+		AVB_LOG_ERROR("Private interface module data not allocated.");
+		AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
+		return FALSE;
+	}
+
+
+	// Wait until we have enough timestamps. Then read the
+	// timestamps and write them to the media queue item.
+	SEM_ERR_T(err);
+	SEM_TIMEDWAIT(pPvtData->timestampSem, 200, err);
+	if (!SEM_IS_ERR_NONE(err)) {
+		if (SEM_IS_ERR_TIMEOUT(errno)) {
+			// If there is no clock source, e.g. there is no
+			// audio listener or the listener isn't configured
+			// to generate clock ticks, then wait for the
+			// timestamp semaphore will time out. This is normal
+			// behavior, not an error.
+#ifdef DEBUG
+			AVB_LOG_ERROR("Timestamp semaphore timeout.");
+#endif
+			AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
+			return false;
+		}
+		else {
+			AVB_LOG_ERROR("Error waiting on timestamp semaphore.");
+			SEM_LOG_ERR(errno);
+
+			return FALSE;
+		}
+	}
+
+	bool ret = writeTimestampsToMediaQ(pMediaQ);
+
 	AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
-	return TRUE;
+	return ret;
 }
 
 // A call to this callback indicates that this interface module will be
@@ -363,6 +379,12 @@ bool openavbIntfClkRefRxCB(media_q_t *pMediaQ)
 						 pMediaQItem->readIdx);
 			pMediaQItem->readIdx += CRF_TIMESTAMP_SIZE;
 
+			media_q_item_map_clk_ref_data_t *pItemPubMapData =
+				(media_q_item_map_clk_ref_data_t *)
+				pMediaQItem->pPubMapData;
+			bool restartClock = pItemPubMapData->restartClock;
+			pItemPubMapData->restartClock = FALSE;
+
 			// If there are no more timestamps, pull the item.
 			// If there are more timestamps, set the item timestamp
 			// to the next timestamp and unlock the item.
@@ -383,7 +405,7 @@ bool openavbIntfClkRefRxCB(media_q_t *pMediaQ)
 			// Notify the clock observers (e.g. the audio talker)
 			// that the tick has occurred.
 			refClkSignalTick(timestamp, 1,
-				pPubMapClkRefInfo->timestampInterval, FALSE);
+				pItemPubMapData->timestampInterval, restartClock);
 		}
 	}
 
@@ -442,8 +464,6 @@ extern DLL_EXPORT bool openavbIntfClkRefInitialize(media_q_t *pMediaQ, openavb_i
 			return FALSE;
 		}
 
-		pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
-
 		pIntfCB->intf_cfg_cb = openavbIntfClkRefCfgCB;
 		pIntfCB->intf_gen_init_cb = openavbIntfClkRefGenInitCB;
 		pIntfCB->intf_tx_init_cb = openavbIntfClkRefTxInitCB;
@@ -454,8 +474,6 @@ extern DLL_EXPORT bool openavbIntfClkRefInitialize(media_q_t *pMediaQ, openavb_i
 		pIntfCB->intf_gen_end_cb = openavbIntfClkRefGenEndCB;
 		pIntfCB->intf_tx_blocking_in_intf_cb =
 			openavbIntfClkRefBlockingInIntfCB;
-
-		pPvtData->timestampBufferSize = 50;
 	}
 
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);

@@ -42,6 +42,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_avtp_time_pub.h"
 #include "openavb_mediaq_pub.h"
 #include "openavb_map_pub.h"
+#include "openavb_reference_clock_pub.h"
 #include "openavb_map_aaf_audio_pub.h"
 
 #define	AVB_LOG_COMPONENT	"AAF Mapping"
@@ -56,6 +57,9 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 
 // - 1 Byte - TV bit (timestamp valid)
 #define HIDX_AVTP_HIDE7_TV1			1
+
+// - 1 Byte - Sequence number
+#define HIDX_AVTP_SEQ_NUM8			2
 
 // - 1 Byte - TU bit (timestamp uncertain)
 #define HIDX_AVTP_HIDE7_TU1			3
@@ -119,7 +123,14 @@ typedef struct {
 
 	// MCR clock recovery interval	
 	U32 mcrRecoveryInterval;
-	
+
+	// 1 if the clock tick is to be generated when the audio is received.
+	// 0 otherwise.
+	U16 genClockTickOnReceiveAudio;
+
+	// The number of frames of audio that we have received
+	U32 framesReceived;
+
 	/////////////
 	// Variable data
 	/////////////
@@ -139,6 +150,8 @@ typedef struct {
 	U32 sparseMode;
 
 	bool mediaQItemSyncTS;
+
+	U8 lastSequenceNumber;
 
 } pvt_data_t;
 
@@ -334,6 +347,12 @@ void openavbMapAVTPAudioCfgCB(media_q_t *pMediaQ, const char *name, const char *
 		else if (strcmp(name, "map_nv_mcr_recovery_interval") == 0) {
 			char *pEnd;
 			pPvtData->mcrRecoveryInterval = strtol(value, &pEnd, 10);
+		}
+		else if (strcmp(name, "map_nv_gen_clock_tick_on_receive_audio") ==
+			 0) {
+			char *pEnd;
+			pPvtData->genClockTickOnReceiveAudio = strtol(value,
+				&pEnd, 10);
 		}
 	}
 
@@ -576,9 +595,21 @@ void openavbMapAVTPAudioRxInitCB(media_q_t *pMediaQ)
 				AVB_LOGF_WARNING("Wrong packing factor value set (%d) for sparse timestamping mode", pPvtData->packingFactor);
 			}
 		}
+
+		// If we're going to be the clock source, restart the clock.
+		media_q_pub_map_aaf_audio_info_t *pPubMapInfo = pMediaQ->pPubMapInfo;
+		if (pPvtData->genClockTickOnReceiveAudio && pPubMapInfo->timestampInterval) {
+			U64 walltime;
+			if (CLOCK_GETTIME64(OPENAVB_CLOCK_WALLTIME, &walltime)) {
+				refClkSignalTick(walltime, 0,
+						 pPubMapInfo->timestampInterval, TRUE);
+			}
+		}
 	}
 	AVB_TRACE_EXIT(AVB_TRACE_MAP);
 }
+
+#define MAX_U8 256
 
 // This callback occurs when running as a listener and data is available.
 bool openavbMapAVTPAudioRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
@@ -605,6 +636,7 @@ bool openavbMapAVTPAudioRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 		bool listenerSparseMode = (pPvtData->sparseMode == TS_SPARSE_MODE_ENABLED) ? TRUE : FALSE;
 		bool streamSparseMode = (pHdrV0[HIDX_AVTP_HIDE7_SP] & SP_M0_BIT) ? TRUE : FALSE;
 		U16 payloadLen = ntohs(*(U16 *)(&pHdrV0[HIDX_STREAM_DATA_LEN16]));
+		U8 sequenceNumber = pHdrV0[HIDX_AVTP_SEQ_NUM8];
 
 		if (payloadLen  > dataLen - TOTAL_HEADER_SIZE) {
 			if (pPvtData->dataValid)
@@ -653,6 +685,41 @@ bool openavbMapAVTPAudioRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 				AVB_LOGF_ERROR("Listener sparse mode (%d) doesn't match stream sparse mode (%d)",
 					listenerSparseMode, streamSparseMode);
 			dataValid = FALSE;
+		}
+
+		// Generate a clock tick if we have received enough frames
+		if (dataValid && pPvtData->genClockTickOnReceiveAudio &&
+		    pPubMapInfo->timestampInterval) {
+			bool restartClock = (pPvtData->dataValid == FALSE) ||
+				sequenceNumber != (pPvtData->lastSequenceNumber + 1) % MAX_U8;
+			pPvtData->lastSequenceNumber = sequenceNumber;
+
+			if (restartClock) {
+				U64 walltime;
+
+				pPvtData->framesReceived = 0;
+				if (CLOCK_GETTIME64(OPENAVB_CLOCK_WALLTIME, &walltime)) {
+					refClkSignalTick(walltime, 0,
+						pPubMapInfo->timestampInterval,
+						TRUE);
+				}
+			} else {
+				pPvtData->framesReceived += pPvtData->payloadSize /
+					pPubMapInfo->packetFrameSizeBytes;
+				while (pPvtData->framesReceived >=
+				       pPubMapInfo->timestampInterval) {
+					// Signal a clock tick. If the stream was
+					// previously invalid (pPvtData->dataValid == FALSE),
+					// then restart the clock.
+					U64 walltime;
+					if (CLOCK_GETTIME64(OPENAVB_CLOCK_WALLTIME, &walltime)) {
+						refClkSignalTick(walltime, 1,
+							pPubMapInfo->timestampInterval,
+							FALSE);
+					}
+					pPvtData->framesReceived -= pPubMapInfo->timestampInterval;
+				}
+			}
 		}
 
 		if (dataValid) {

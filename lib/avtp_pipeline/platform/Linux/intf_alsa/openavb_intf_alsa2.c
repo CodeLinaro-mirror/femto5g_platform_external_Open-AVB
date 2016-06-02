@@ -644,18 +644,29 @@ static int tx_set_params(struct pcm *pcm)
 // The interval is the number of frames have should have been transmitted
 // since the last clock tick.
 static void handleClockTick(void *context, U64 timestamp,
-	U16 ticks, U32 interval, bool restart_clock)
+	U16 ticks, U32 interval, bool restartClock)
 {
 	pvt_data_t *pPvtData = context;
 
 	MUTEX_LOCK_ERR(pPvtData->mtxActualMinusRefFrames);
 
-	pPvtData->refClkStarted = TRUE;
+	// If restartClock is true, then set the counters to 0
+	if (restartClock) {
+#if DEBUG_MCR
+		AVB_LOG_ERROR("Restarting the clock");
+#endif
+		pPvtData->actualMinusRefFrames = 0;
+		pPvtData->framesToRecoverClock = 0;
+	}
 
-	if (pPvtData->txStarted) {
+	if (ticks) {
+		pPvtData->refClkStarted = TRUE;
+	}
+
+	if (ticks && pPvtData->txStarted) {
 		// We received a clock tick so adjust the count by the timing
 		// interval.
-		pPvtData->actualMinusRefFrames -= interval;
+		pPvtData->actualMinusRefFrames -= ticks * interval;
 
 		// If we haven't transmitted enough frames or we have
 		// transmitted too few frames, compute how many frames we
@@ -666,10 +677,11 @@ static void handleClockTick(void *context, U64 timestamp,
 			pPvtData->actualMinusRefFrames /
 			pPvtData->clockRecoveryAdjustmentRange;
 #if DEBUG_MCR
-		if (pPvtData->framesToRecoverClock)
-			AVB_LOGF_ERROR("framesToRecoverClock: %d, actual-ref: %d",
-				       pPvtData->framesToRecoverClock,
-				       pPvtData->actualMinusRefFrames);
+		if (pPvtData->framesToRecoverClock != 0) {
+			AVB_LOGF_ERROR("actualMinusRefFrames: %d, framesToRecoverClock: %d",
+				       pPvtData->actualMinusRefFrames,
+				       pPvtData->framesToRecoverClock);
+		}
 #endif
 	}
 
@@ -797,7 +809,7 @@ static bool readAudioFromAlsa(pvt_data_t *pPvtData, void *buffer, U32 buflen)
 	// If we've already filled up the output buffer, return it.
 	if (bufIdx == buflen) {
 #if DEBUG_MCR
-		AVB_LOG_ERROR("Extra packet for clock synchronization");
+		AVB_LOG_ERROR("extra packet for clock sync.");
 #endif
 		return TRUE;
 	}
@@ -819,7 +831,6 @@ static bool readAudioFromAlsa(pvt_data_t *pPvtData, void *buffer, U32 buflen)
 
 	// At this point, the scratch buffer can be empty, or partially full,
 	// but it can't be completely full.
-
 	MUTEX_LOCK_ERR(pPvtData->mtxActualMinusRefFrames);
 
 	// Subtract the number of frames read from ALSA. (We're counting the
@@ -841,8 +852,10 @@ static bool readAudioFromAlsa(pvt_data_t *pPvtData, void *buffer, U32 buflen)
 	// the remainder the next time this function is called.
 	if (pPvtData->framesToRecoverClock < 0) {
 		frames_repeated = -1 * pPvtData->framesToRecoverClock;
-		if (pPvtData->audioBufferStartIdx < frames_repeated) {
-			frames_repeated = pPvtData->audioBufferStartIdx;
+		if ((pPvtData->audioBufferStartIdx / pPvtData->frameSizeBytes) <
+		    frames_repeated) {
+			frames_repeated = pPvtData->audioBufferStartIdx /
+				pPvtData->frameSizeBytes;
 		}
 	}
 	// If we need to remove frames, we can remove as many frames as we want.
@@ -858,19 +871,6 @@ static bool readAudioFromAlsa(pvt_data_t *pPvtData, void *buffer, U32 buflen)
 	pPvtData->framesToRecoverClock += frames_repeated - frames_removed;
 
 	MUTEX_UNLOCK_ERR(pPvtData->mtxActualMinusRefFrames);
-#if DEBUG_MCR
-	static U32 total_frames_repeated = 0;
-	static U32 total_frames_removed = 0;
-	static U32 counter = 0;
-	total_frames_repeated += frames_repeated;
-	total_frames_removed += frames_removed;
-	counter++;
-	if (counter % 100 == 0) {
-	AVB_LOGF_ERROR("total_repeated: %d, total_removed: %d, actual-ref: %d",
-		       total_frames_repeated, total_frames_removed, pPvtData->actualMinusRefFrames);
-
-	}
-#endif
 
 	// Repeat the frames as necessary by copying the last frames in the
 	// output buffer to the begining of the scratch buffer
@@ -887,7 +887,7 @@ static bool readAudioFromAlsa(pvt_data_t *pPvtData, void *buffer, U32 buflen)
 		// If there are no frames to remove, read some more frames
 		if (pPvtData->audioBufferStartIdx >= pPvtData->audioBufferSize) {
 #if DEBUG_MCR
-			AVB_LOG_ERROR("Extra read for clock synchronization");
+			AVB_LOG_ERROR("extra read for clock sync.");
 #endif
 			rslt = pcm_read(pPvtData->pcmHandle, pPvtData->audioBuffer,
 					pPvtData->audioBufferSize);
