@@ -46,7 +46,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * \param context pointer that was passed into refClkRegisterObserver
  * \param timestamp time at which the tick occurred. Typically, this will be the
  *        AVTP time (number of nanoseconds since some arbitrary start time).
- * \param ticks the number of ticks that have elapsed since the the last time
+ * \param ticks the number of ticks that have elapsed since the last time
  *        time this function was called. This will almost always be 1. However,
  *        if the ticks were delayed for some reason, multiple ticks can be
  *        signalled with a single call by setting this to more than 1.
@@ -69,7 +69,8 @@ typedef void (*openavb_ref_clk_observer_cb_t)(void *context, U64 timestamp,
  *        when the callback function is called. This pointer is also used to
  *        identify the observer in refClkUnregisterObserver so this should not
  *        be NULL
- * \return true if the function was successfully registered, false otherwise
+ * \return true if the callback function was successfully registered, false
+ *        otherwise
  */
 bool refClkRegisterObserver(openavb_ref_clk_observer_cb_t callback,
 	void *context);
@@ -82,6 +83,8 @@ bool refClkRegisterObserver(openavb_ref_clk_observer_cb_t callback,
  *
  * \param context pointer that was passed in as the context when registering
  *        the function. This is used to identify the callback
+ * \return true if the function successfully unregisters the callback function,
+ *        false otherwise
  */
 bool refClkUnregisterObserver(void *context);
 
@@ -92,11 +95,12 @@ bool refClkUnregisterObserver(void *context);
  * a tick has occurred.
  *
  * \param timestamp time at which the tick occurred. Typically, this will be the
- *        AVTP time (number of nanoseconds since some arbitrary start time).
+ *        AVTP time (number of nanoseconds since some arbitrary start time)
+ *        associated with the current time.
  * \param ticks the number of ticks that have elapsed since the the last time
  *        time this function was called. This will almost always be 1. However,
  *        if the ticks were delayed for some reason, multiple ticks can be
- *        signalled with a single call by setting this to more than 1.
+ *        signaled with a single call by setting this to more than 1.
  * \param interval the number of events (e.g. audio samples) that the observer
  *        should process between each tick.
  * \param restart_clock true if the clock has been restarted and the observer

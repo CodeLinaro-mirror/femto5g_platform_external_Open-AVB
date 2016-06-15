@@ -205,6 +205,8 @@ static inline bool listenerDoStream(tl_state_t *pTLState)
 	return bRet;
 }
 
+#define WAIT_FOR_GPTP_LOOP_SLEEP_US 100
+
 // Called from openavbTLThreadFn() which is started from openavbTLRun() 
 void openavbTLRunListener(tl_state_t *pTLState)
 {
@@ -217,6 +219,30 @@ void openavbTLRunListener(tl_state_t *pTLState)
 	}
 
 	openavb_tl_cfg_t *pCfg = &pTLState->cfg;
+
+	// If we need to wait for GPTP to get a time, then keep
+	// trying to the the GPTP time until we succeed or until the
+	// app needs to close.
+	if (pTLState->cfg.wait_for_gptp) {
+		U64 gptpTime;
+		bool errorPrinted = FALSE;
+		while (pTLState->bRunning) {
+			gptpTime = 0;
+			if (CLOCK_GETTIME64(OPENAVB_CLOCK_WALLTIME,
+					    &gptpTime) && gptpTime != 0) {
+				break;
+			}
+			if (!errorPrinted) {
+				errorPrinted = TRUE;
+				AVB_LOG_WARNING("Waiting for the GPTP time");
+			}
+			usleep(WAIT_FOR_GPTP_LOOP_SLEEP_US);
+		}
+		if (!pTLState->bRunning) {
+			AVB_LOG_ERROR("Could not acquire the GPTP time");
+			return;
+		}
+	}
 
 	pTLState->pPvtListenerData = calloc(1, sizeof(listener_data_t));
 	if (!pTLState->pPvtListenerData) {

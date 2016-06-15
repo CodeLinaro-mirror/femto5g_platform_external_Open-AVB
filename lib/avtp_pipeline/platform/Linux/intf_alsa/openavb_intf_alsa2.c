@@ -959,6 +959,7 @@ bool openavbIntfAlsa2TxCB(media_q_t *pMediaQ)
 
 			pMediaQItem->dataLen = pMediaQItem->itemSize;
 			openavbAvtpTimeSetToWallTime(pMediaQItem->pAvtpTime);
+
 			openavbMediaQHeadPush(pMediaQ);
 
 			AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);

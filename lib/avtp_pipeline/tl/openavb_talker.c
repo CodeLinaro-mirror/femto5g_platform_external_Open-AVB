@@ -280,6 +280,7 @@ static inline bool talkerDoStream(tl_state_t *pTLState)
 	return bRet;
 }
 
+#define WAIT_FOR_GPTP_LOOP_SLEEP_US 100
 
 // Called from openavbTLThreadFn() which is started from openavbTLRun() 
 void openavbTLRunTalker(tl_state_t *pTLState)
@@ -290,6 +291,30 @@ void openavbTLRunTalker(tl_state_t *pTLState)
 		AVB_LOG_ERROR("Invalid TLState");
 		AVB_TRACE_EXIT(AVB_TRACE_TL);
 		return;
+	}
+
+	// If we need to wait for GPTP to get a time, then keep
+	// trying to the the GPTP time until we succeed or until the
+	// app needs to close.
+	if (pTLState->cfg.wait_for_gptp) {
+		U64 gptpTime;
+		bool errorPrinted = FALSE;
+		while (pTLState->bRunning) {
+			gptpTime = 0;
+			if (CLOCK_GETTIME64(OPENAVB_CLOCK_WALLTIME,
+					    &gptpTime) && gptpTime != 0) {
+				break;
+			}
+			if (!errorPrinted) {
+				errorPrinted = TRUE;
+				AVB_LOG_WARNING("Waiting for the GPTP time");
+			}
+			usleep(WAIT_FOR_GPTP_LOOP_SLEEP_US);
+		}
+		if (!pTLState->bRunning) {
+			AVB_LOG_ERROR("Could not acquire the GPTP time");
+			return;
+		}
 	}
 
 	pTLState->pPvtTalkerData = calloc(1, sizeof(talker_data_t));
