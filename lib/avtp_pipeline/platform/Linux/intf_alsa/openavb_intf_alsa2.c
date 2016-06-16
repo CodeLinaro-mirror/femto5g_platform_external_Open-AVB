@@ -57,7 +57,6 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 
 #define PCM_DEVICE_NAME_DEFAULT	"default"
 #define PCM_ACCESS_TYPE			SND_PCM_ACCESS_RW_INTERLEAVED
-#define PERIOD_SIZE 768
 
 #define DEBUG 0
 #define DEBUG_MCR 0
@@ -573,7 +572,7 @@ static int tx_set_params(struct pcm *pcm)
 	param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT, pcm->format);
 	param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
 		SNDRV_PCM_SUBFORMAT_STD);
-	param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, pcm->period_size); // TODO: set this from the pMediaQ->pPubMapInfo
+	param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, pcm->period_size);
 	param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
 	param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
 		pcm->channels * 16);
@@ -740,13 +739,12 @@ void openavbIntfAlsa2TxInitCB(media_q_t *pMediaQ)
 							   pPvtData->audioBitDepth,
 							   pPvtData->audioEndian,
 							   pMediaQ->pMediaQDataFormat);
-		pPvtData->pcmHandle->period_size = PERIOD_SIZE;
+		media_q_pub_map_uncmp_audio_info_t *pPubMapUncmpAudioInfo = pMediaQ->pPubMapInfo;
+		pPvtData->pcmHandle->period_size = pPubMapUncmpAudioInfo->itemSize;
 
 		tx_set_params(pPvtData->pcmHandle);
 
-
 		// Get ready for playback
-		//bufsize = pPvtData->pcmHandle->period_size; TODO Make sure this period size is the same as the item size.
 		if (pcm_prepare(pPvtData->pcmHandle)) {
 			AVB_LOGF_ERROR("Failed in pcm_prepare: %d", errno);
 			pcm_close(pPvtData->pcmHandle);
@@ -1006,7 +1004,7 @@ static int rx_set_params(struct pcm *pcm)
 	param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT, pcm->format);
 	param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
 		SNDRV_PCM_SUBFORMAT_STD);
-	param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, PERIOD_SIZE);  // TODO set this from pMediaQ->pPubMapInfo
+	param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, pcm->period_size);
 	param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
 	param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
 		pcm->channels * 16);
@@ -1113,6 +1111,9 @@ void openavbIntfAlsa2RxInitCB(media_q_t *pMediaQ)
 									   pPvtData->audioBitDepth,
 									   pPvtData->audioEndian,
 									   pMediaQ->pMediaQDataFormat);
+		media_q_pub_map_uncmp_audio_info_t *pPubMapUncmpAudioInfo = pMediaQ->pPubMapInfo;
+		pPvtData->pcmHandle->period_size = pPubMapUncmpAudioInfo->itemSize;
+
 		rx_set_params(pPvtData->pcmHandle);
 
 		// Get ready for playback
@@ -1323,13 +1324,13 @@ void openavbIntfAlsa2DualTxInitCB(media_q_t *pMediaQ)
 							   pPvtData->audioBitDepth,
 							   pPvtData->audioEndian,
 							   pMediaQ->pMediaQDataFormat);
-		pPvtData->pcmHandle->period_size = PERIOD_SIZE / pPvtData->audioChannels;
+		media_q_pub_map_uncmp_audio_info_t *pPubMapUncmpAudioInfo = pMediaQ->pPubMapInfo;
+		pPvtData->pcmHandle->period_size = pPubMapUncmpAudioInfo->itemSize / pPvtData->audioChannels;
 
 		tx_set_params(pPvtData->pcmHandle);
 
 
 		// Get ready for playback
-		//bufsize = pPvtData->pcmHandle->period_size; TODO Make sure this period size is the same as the item size.
 		if (pcm_prepare(pPvtData->pcmHandle)) {
 			AVB_LOG_ERROR("Failed in pcm_prepare");
 			pcm_close(pPvtData->pcmHandle);
