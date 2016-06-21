@@ -531,7 +531,34 @@ tx_cb_ret_t openavbMapAVTPAudioTxCB(media_q_t *pMediaQ, U8 *pData, U32 *dataLen)
 				return TX_CB_RET_PACKET_NOT_READY;
 			}
 
-			memcpy(pPayload, (uint8_t *)pMediaQItem->pPubData + pMediaQItem->readIdx, pPvtData->payloadSize);
+			// Copy the samples from the media queue item to the packet payload
+			if (pPubMapInfo->audioEndian != AVB_AUDIO_ENDIAN_BIG) {
+				// The samples in the media queue item are little endian.
+				// Convert them to big endian when copying them to the payload
+				U8 *pItemData = (U8 *)pMediaQItem->pPubData + pMediaQItem->readIdx;
+				U8 *pAVTPDataUnit = pPayload;
+				U8 *pAVTPDataUnitEnd = pPayload + pPvtData->payloadSize;
+
+				while (pAVTPDataUnit + pPubMapInfo->packetSampleSizeBytes <=
+				       pAVTPDataUnitEnd) {
+					if (pPubMapInfo->packetSampleSizeBytes == 2) {
+						*(S16 *)pAVTPDataUnit = htons(*(S16 *)pItemData);
+					} else if (pPubMapInfo->packetSampleSizeBytes == 3) {
+						*pAVTPDataUnit = *(pItemData + 2);
+						*(pAVTPDataUnit + 1) = *(pItemData + 1);
+						*(pAVTPDataUnit + 2) = *pItemData;
+					} else if (pPubMapInfo->packetSampleSizeBytes == 4) {
+						*(S32 *)pAVTPDataUnit = htonl(*(S32 *)pItemData);
+					} else {
+						AVB_LOG_ERROR("Invalid packet sample size");
+						break;
+					}
+					pItemData += pPubMapInfo->itemSampleSizeBytes;
+					pAVTPDataUnit += pPubMapInfo->packetSampleSizeBytes;
+				}
+			} else {
+				memcpy(pPayload, (uint8_t *)pMediaQItem->pPubData + pMediaQItem->readIdx, pPvtData->payloadSize);
+			}
 
 			pMediaQItem->readIdx += pPvtData->payloadSize;
 			if (pMediaQItem->readIdx >= pMediaQItem->dataLen) {
@@ -644,7 +671,12 @@ bool openavbMapAVTPAudioRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 					       payloadLen, dataLen - TOTAL_HEADER_SIZE);
 			dataValid = FALSE;
 		}
-
+		if (payloadLen != pPvtData->payloadSize) {
+			if (pPvtData->dataValid)
+				AVB_LOGF_ERROR("payload length %d is not the expected payload length %d",
+					       payloadLen, pPvtData->payloadSize);
+			dataValid = FALSE;
+		}
 		if ((tmp = ((format_info >> 24) & 0xFF)) != pPvtData->aaf_format) {
 			if (pPvtData->dataValid)
 				AVB_LOGF_ERROR("Listener format %d doesn't match received data (%d)",
@@ -760,7 +792,34 @@ bool openavbMapAVTPAudioRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 						pPubMapInfo->intf_rx_translate_cb(pMediaQ, pPayload, pPvtData->payloadSize);
 					}
 
-					memcpy((uint8_t *)pMediaQItem->pPubData + pMediaQItem->dataLen, pPayload, pPvtData->payloadSize);
+					// Copy the samples from the payload to the media queue item
+					if (pPubMapInfo->audioEndian != AVB_AUDIO_ENDIAN_BIG) {
+						// The samples in the payload are big endian. Convert them
+						// to little endian when copying them to the media queue item
+						U8 *pItemData = (U8 *)pMediaQItem->pPubData + pMediaQItem->dataLen;
+						U8 *pAVTPDataUnit = pPayload;
+						U8 *pAVTPDataUnitEnd = pPayload + payloadLen;
+
+						while (pAVTPDataUnit + pPubMapInfo->packetSampleSizeBytes <=
+						       pAVTPDataUnitEnd) {
+							if (pPubMapInfo->itemSampleSizeBytes == 2) {
+								*(S16 *)pItemData = ntohs(*(S16 *)pAVTPDataUnit);
+							} else if (pPubMapInfo->itemSampleSizeBytes == 3) {
+								*pItemData = *(pAVTPDataUnit + 2);
+								*(pItemData + 1) = *(pAVTPDataUnit + 1);
+								*(pItemData + 2) = *pAVTPDataUnit;
+							} else if (pPubMapInfo->itemSampleSizeBytes == 4) {
+								*(S32 *)pItemData = ntohl(*(S32 *)pAVTPDataUnit);
+							} else {
+								AVB_LOG_ERROR("Invalid audio sample size");
+								break;
+							}
+							pItemData += pPubMapInfo->itemSampleSizeBytes;
+							pAVTPDataUnit += pPubMapInfo->packetSampleSizeBytes;
+						}
+					} else {
+						memcpy((uint8_t *)pMediaQItem->pPubData + pMediaQItem->dataLen, pPayload, pPvtData->payloadSize);
+					}
 					pMediaQItem->dataLen += pPvtData->payloadSize;
 				}
 
