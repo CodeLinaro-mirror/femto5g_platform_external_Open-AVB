@@ -339,6 +339,14 @@ U8* simpleRawsockGetRxFrame(void *pvRawsock, U32 timeout, unsigned int *offset, 
 //		return NULL;
 //	}
 
+	// Set the timeout
+	struct timeval tv;
+	tv.tv_sec = timeout / MICROSECONDS_PER_SECOND;
+	tv.tv_usec = timeout % MICROSECONDS_PER_SECOND;
+
+	setsockopt(rawsock->sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,
+		   sizeof(struct timeval));
+
 	int flags = 0;
 
 	U8 *pBuffer = rawsock->rxBuffer;
@@ -346,7 +354,10 @@ U8* simpleRawsockGetRxFrame(void *pvRawsock, U32 timeout, unsigned int *offset, 
 	*len = recv(rawsock->sock, pBuffer, rawsock->base.frameSize, flags);
 
 	if (*len == -1) {
-		AVB_LOGF_ERROR("%s %s", __func__, strerror(errno));
+		// Print the error message if it wasn't a timeout
+		if (errno != EAGAIN && errno != EWOULDBLOCK) {
+			AVB_LOGF_ERROR("%s %s", __func__, strerror(errno));
+		}
 		AVB_TRACE_EXIT(AVB_TRACE_RAWSOCK_DETAIL);
 		return NULL;
 	}

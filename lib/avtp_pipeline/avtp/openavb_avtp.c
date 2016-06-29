@@ -63,12 +63,7 @@ static openavbRC openAvtpSock(avtp_stream_t *pStream)
 		pStream->rawsock = openavbRawsockOpen(pStream->ifname, FALSE, TRUE, ETHERTYPE_AVTP, pStream->frameLen, pStream->nbuffers);
 	}
 	else {
-#ifndef UBUNTU
-		// This is the normal case for most of our supported platforms
-		pStream->rawsock = openavbRawsockOpen(pStream->ifname, TRUE, FALSE, ETHERTYPE_8021Q, pStream->frameLen, pStream->nbuffers);
-#else
 		pStream->rawsock = openavbRawsockOpen(pStream->ifname, TRUE, FALSE, ETHERTYPE_AVTP, pStream->frameLen, pStream->nbuffers);
-#endif
 	}
 
 	if (pStream->rawsock != NULL) {
