@@ -387,6 +387,10 @@ unsigned long openavbRawsockGetTXOutOfBuffers(void *pvRawsock)
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_RAWSOCK_DETAIL);
 
+	if (pvRawsock == NULL) {
+		return 0;
+	}
+
 	unsigned long ret = ((base_rawsock_t*)pvRawsock)->cb.getTXOutOfBuffers(pvRawsock);
 
 	AVB_TRACE_EXIT(AVB_TRACE_RAWSOCK_DETAIL);
@@ -396,6 +400,10 @@ unsigned long openavbRawsockGetTXOutOfBuffers(void *pvRawsock)
 unsigned long openavbRawsockGetTXOutOfBuffersCyclic(void *pvRawsock)
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_RAWSOCK_DETAIL);
+
+	if (pvRawsock == NULL) {
+		return 0;
+	}
 
 	unsigned long ret = ((base_rawsock_t*)pvRawsock)->cb.getTXOutOfBuffersCyclic(pvRawsock);
 
