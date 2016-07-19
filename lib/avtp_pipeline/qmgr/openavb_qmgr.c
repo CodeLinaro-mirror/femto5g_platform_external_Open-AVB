@@ -43,6 +43,10 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "avb_sched.h"
 #include "openavb_ether_hal.h"
 
+#ifdef AVB_FEATURE_NEUTRINO
+#include "neutrino.h"
+#endif
+
 #define AVB_DEFAULT_QDISC_MODE AVB_SHAPER_HWQ_PER_CLASS
 
 // We have a singleton Qmgr, so we use file-static data here
@@ -92,9 +96,12 @@ static qmgrStream_t qmgr_streams[MAX_AVB_STREAMS];
 static bool setupHWQueue(int nClass, unsigned classBytesPerSec)
 {
 	int err = 0;
-	U32 class_a_bytes_per_sec, class_b_bytes_per_sec;
-
 	AVB_TRACE_ENTRY(AVB_TRACE_QUEUE_MANAGER);
+
+#ifdef AVB_FEATURE_NEUTRINO
+	err = ntn_set_class_bandwidth(nClass, classBytesPerSec, qdisc_data.ifname);
+#else
+	U32 class_a_bytes_per_sec, class_b_bytes_per_sec;
 
 	if (nClass == SR_CLASS_A) {
 		class_a_bytes_per_sec = classBytesPerSec;
@@ -103,10 +110,11 @@ static bool setupHWQueue(int nClass, unsigned classBytesPerSec)
 		class_a_bytes_per_sec =  qmgr_classes[SR_CLASS_A].classBytesPerSec;
 		class_b_bytes_per_sec = classBytesPerSec;
 	}
-
 	err = igb_set_class_bandwidth2(qdisc_data.igb_dev, class_a_bytes_per_sec, class_b_bytes_per_sec);
+#endif
+
 	if (err)
-		AVB_LOGF_ERROR("Adding stream; igb_set_class_bandwidth failed: %s", strerror(err));
+		AVB_LOGF_ERROR("Adding stream; set_class_bandwidth failed: %s", strerror(err));
 
 	AVB_TRACE_EXIT(AVB_TRACE_QUEUE_MANAGER);
 	return !err;
@@ -222,10 +230,10 @@ bool openavbQmgrInitialize(int mode, int ifindex, const char* ifname, unsigned m
 	AVB_TRACE_ENTRY(AVB_TRACE_QUEUE_MANAGER);
 	bool ret = FALSE;
 
-//	if (!ifname || mtu == 0 || link_kbit == 0 || nsr_kbit == 0) {
-//		AVB_LOG_ERROR("Initializing QMgr; invalid argument");
-//		return FALSE;
-//	}
+	if (!ifname) {
+		AVB_LOG_ERROR("Initializing QMgr; invalid argument");
+		return FALSE;
+	}
 
 	LOCK();
 
@@ -246,33 +254,32 @@ bool openavbQmgrInitialize(int mode, int ifindex, const char* ifname, unsigned m
 	AVB_LOGF_DEBUG("Initializing QMgr; mode=%d, idx=%d, mtu=%u, link_kbit=%u, nsr_kbit=%u",
 				   qdisc_data.mode, ifindex, mtu, link_kbit, nsr_kbit);
 
+#ifndef AVB_FEATURE_NEUTRINO
 	if ( qdisc_data.mode != AVB_SHAPER_DISABLED
 	     && (qdisc_data.igb_dev = igbAcquireDevice()) == 0)
 	{
 		AVB_LOG_ERROR("Initializing QMgr; unable to acquire igb device");
+		goto exit;
 	}
-	else
-	{
-		// Initialize data for classes and streams
-		memset(qmgr_classes, 0, sizeof(qmgr_classes));
-		memset(qmgr_streams, 0, sizeof(qmgr_streams));
+#endif
 
-		// Save the configuration
-		if (ifname)
-			strncpy(qdisc_data.ifname, ifname, IFNAMSIZ - 1);
-		qdisc_data.ifindex = ifindex;
-		qdisc_data.linkKbit = link_kbit;
-		qdisc_data.linkMTU = mtu;
-		qdisc_data.nsrKbit  = nsr_kbit;
+	// Initialize data for classes and streams
+	memset(qmgr_classes, 0, sizeof(qmgr_classes));
+	memset(qmgr_streams, 0, sizeof(qmgr_streams));
 
-		if (qdisc_data.mode == AVB_SHAPER_DISABLED) {
-			ret = TRUE;
-		} else {
-			ret = TRUE;
-			// igb device aquired, nothing more to do
-		}
-	}
+	// Save the configuration
+	if (ifname)
+		strncpy(qdisc_data.ifname, ifname, IFNAMSIZ - 1);
+	qdisc_data.ifindex = ifindex;
+	qdisc_data.linkKbit = link_kbit;
+	qdisc_data.linkMTU = mtu;
+	qdisc_data.nsrKbit  = nsr_kbit;
 
+	ret = TRUE;
+
+#ifndef AVB_FEATURE_NEUTRINO
+exit:
+#endif
 	UNLOCK();
 	AVB_TRACE_EXIT(AVB_TRACE_QUEUE_MANAGER);
 	return ret;
@@ -294,8 +301,10 @@ void openavbQmgrFinalize(void)
 				}
 			}
 		}
+#ifndef AVB_FEATURE_NEUTRINO
 		igbReleaseDevice(qdisc_data.igb_dev);
 		qdisc_data.igb_dev = NULL;
+#endif
 	}
 
 	UNLOCK();

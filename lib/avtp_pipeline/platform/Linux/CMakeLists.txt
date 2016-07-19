@@ -92,6 +92,10 @@ endif ()
 if (NOT DEFINED AVB_FEATURE_ENDPOINT)
   set ( AVB_FEATURE_ENDPOINT 0 )
 endif ()
+# Default Neutrino feature
+if (NOT DEFINED AVB_FEATURE_NEUTRINO)
+  set ( AVB_FEATURE_NEUTRINO 0 )
+endif ()
 
 
 # Export feature flags for sub-builds
@@ -103,6 +107,9 @@ if (AVB_FEATURE_GSTREAMER)
 endif ()
 if (AVB_FEATURE_ENDPOINT)
   set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DAVB_FEATURE_ENDPOINT=1" )
+endif ()
+if (AVB_FEATURE_NEUTRINO)
+  set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DAVB_FEATURE_NEUTRINO=1" )
 endif ()
 
 #Export Platform defines
@@ -157,9 +164,6 @@ set ( CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_SPECIFIC_LINK
 # Setup platform directories
 include_directories ( ${PLATFORM_INCLUDE_DIRECTORIES} )
 link_directories ( ${PLATFORM_LINK_DIRECTORIES} )
-
-find_library(TEMP NAMES ${PLATFORM_LINK_LIBRARIES} PATHS ${PLATFORM_LINK_DIRECTORIES} )
-set ( PLATFORM_LINK_LIBRARIES ${TEMP} )
 
 # Add our include directories
 #

@@ -9,6 +9,8 @@ help:
 	@echo ''
 	@echo '  lib               - igb library'
 	@echo ''
+	@echo '  ntn               - neutrino library'
+	@echo ''
 	@echo '  daemons_all       - build all daemons (mrpd gptp maap)'
 	@echo '  mrpd              - mrpd daemon'
 	@echo '  gptp              - gptp daemon for linux'
@@ -43,6 +45,12 @@ lib: FORCE
 
 lib_clean:
 	$(call descend,lib/igb/,clean)
+
+ntn: FORCE
+	$(call descend,lib/neutrino)
+
+ntn_clean:
+	$(call descend,lib/neutrino/,clean)
 
 mrpd:
 	$(call descend,daemons/$@)
@@ -107,13 +115,13 @@ live_stream:
 live_stream_clean:
 	$(call descend,examples/live_stream/,clean)
 
-avtp_pipeline: lib
+avtp_pipeline: lib ntn
 	$(MAKE) -s -C lib/avtp_pipeline -f avtp_pipeline.mk
 
 avtp_pipeline_clean:
 	$(MAKE) -s -C lib/avtp_pipeline -f avtp_pipeline.mk clean
 
-avtp_pipeline_doc: lib
+avtp_pipeline_doc: lib ntn
 	$(MAKE) -s -C lib/avtp_pipeline -f avtp_pipeline.mk doc
 
 examples_all: simple_talker simple_listener mrp_client live_stream jackd-talker \
@@ -122,8 +130,8 @@ examples_all: simple_talker simple_listener mrp_client live_stream jackd-talker 
 examples_all_clean: simple_talker_clean simple_listener_clean mrp_client_clean \
 	jackd-talker_clean jackd-listener_clean live_stream_clean
 
-all: igb lib daemons_all examples_all avtp_pipeline
+all: igb lib ntn daemons_all examples_all avtp_pipeline
 
-clean: igb_clean lib_clean daemons_all_clean examples_all_clean avtp_pipeline_clean
+clean: igb_clean lib_clean ntn_clean daemons_all_clean examples_all_clean avtp_pipeline_clean
 
 .PHONY: FORCE

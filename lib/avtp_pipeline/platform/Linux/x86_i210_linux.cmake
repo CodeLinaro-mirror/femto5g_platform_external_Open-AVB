@@ -11,6 +11,7 @@ set ( OPENAVB_PLATFORM "${OPENAVB_HAL}-${OPENAVB_OSAL}" )
 set ( PLATFORM_INCLUDE_DIRECTORIES 	
 	${CMAKE_SOURCE_DIR}/platform/x86_i210/include 
 	${CMAKE_SOURCE_DIR}/../igb 
+	${CMAKE_SOURCE_DIR}/../neutrino
 	${CMAKE_SOURCE_DIR}/openavb_common
 	${CMAKE_SOURCE_DIR}/../../daemons/common
 	${CMAKE_SOURCE_DIR}/../../daemons/mrpd
@@ -18,10 +19,12 @@ set ( PLATFORM_INCLUDE_DIRECTORIES
 
 set ( PLATFORM_LINK_DIRECTORIES
 	${CMAKE_SOURCE_DIR}/../igb
+	${CMAKE_SOURCE_DIR}/../neutrino
 )
 
 set ( PLATFORM_LINK_LIBRARIES
 	igb
+	neutrino
 )
 
 
