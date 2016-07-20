@@ -386,13 +386,7 @@ void openavbIntfWavFileGenInitCB(media_q_t *pMediaQ)
 			return;
 		}
 
-		if (strcmp(pMediaQ->pMediaQDataFormat, MapAVTPAudioMediaQDataFormat) == 0) {
-			// WAV files are little-endian, AAF (SAF) need big-endian
-			pPvtData->audioEndian = AVB_AUDIO_ENDIAN_BIG;
-		}
-		else {
-			pPvtData->audioEndian = AVB_AUDIO_ENDIAN_LITTLE;
-		}
+		pPvtData->audioEndian = AVB_AUDIO_ENDIAN_LITTLE;
 	}
 
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
