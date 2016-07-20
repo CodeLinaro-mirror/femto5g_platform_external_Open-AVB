@@ -83,7 +83,9 @@ inline int stopPTP(void)
 	return retVal;
 }
 
-bool startEndpoint(int mode, int ifindex, const char* ifname, unsigned mtu, unsigned link_kbit, unsigned nsr_kbit)
+bool startEndpoint(int mode, int ifindex, const char* ifname, unsigned mtu,
+		   unsigned link_kbit, unsigned nsr_kbit,
+		   const char* endpointIniFile)
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_ENDPOINT);
 	LOG_EAVB_CORE_VERSION();
@@ -98,6 +100,13 @@ bool startEndpoint(int mode, int ifindex, const char* ifname, unsigned mtu, unsi
 
 	// Set endpoint configuration
 	memset(&x_cfg, 0, sizeof(openavb_endpoint_cfg_t));
+
+	if (endpointIniFile != NULL &&
+	    openavbReadConfig(endpointIniFile, &x_cfg) != 0) {
+		AVB_LOG_ERROR("Failed to read the endpoint configuration file");
+		goto error;
+	}
+
 	x_cfg.fqtss_mode = mode;
 	x_cfg.ifindex = ifindex;
 	if (ifname)
@@ -129,7 +138,9 @@ void stopEndpoint()
 	AVB_TRACE_ENTRY(AVB_TRACE_ENDPOINT);
 
 	endpointRunning = FALSE;
-	pthread_join(endpointServerHandle, NULL);
+	if (endpointServerHandle != NULL) {
+		pthread_join(endpointServerHandle, NULL);
+	}
 
 	openavbUnconfigure(&x_cfg);
 

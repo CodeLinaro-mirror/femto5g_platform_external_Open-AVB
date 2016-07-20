@@ -168,7 +168,10 @@ extern U32 DLL_EXPORT avbLogGetMsg(U8 *pBuf, U32 bufSize)
 
 void *loggingThreadFn(void *pv)
 {
-	while (loggingThreadRunning) {
+	// The do/while loop ensures that this loop is executed at least once
+	// even if loggingThreadRunning is set to false during startup
+	// (as in the case of an initialization error).
+	do {
 		SLEEP_MSEC(LOG_QUEUE_SLEEP_MSEC);
 
 		bool more = TRUE;
@@ -187,7 +190,7 @@ void *loggingThreadFn(void *pv)
 				more = TRUE;
 			}
 		}
-	}
+	} while (loggingThreadRunning);
 
 	return NULL;
 }

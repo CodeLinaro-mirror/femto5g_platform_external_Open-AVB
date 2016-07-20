@@ -160,7 +160,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	osalAVBInitialize(optIfnameGlobal);
+	osalAVBInitialize(optIfnameGlobal, NULL);
 
 	iniIdx = optind;
 	U32 tlCount = argc - iniIdx;

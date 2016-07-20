@@ -118,6 +118,7 @@ void openavbTlHarnessUsage(char *programName)
 		"  -s val     Stream count. Starts 'val' number of streams for each configuration file. stream_uid will be overriden.\n"
 		"  -d val     Last byte of destination address from static pool. Full address will be 91:e0:f0:00:fe:val.\n"
 		"  -I val     Use given (val) interface globally, can be overriden by giving the ifname= option to the config line.\n"
+		"  -e val     Read the endpoint configuration parameters from the given (val) file.\n"
 		"\n"
 		"Examples:\n"
 		"  %s talker.ini\n"
@@ -168,6 +169,7 @@ int main(int argc, char *argv[])
 	bool optDestAddrSet = FALSE;
 	U8 destAddr[ETH_ALEN] = {0x91, 0xe0, 0xf0, 0x00, 0xfe, 0x00};
 	char *optIfnameGlobal = NULL;
+	char *endpointIniFile = NULL;
 
 	// Talker listener vars
 	int iniIdx = 0;
@@ -230,7 +232,7 @@ int main(int argc, char *argv[])
 
 	bool optDone = FALSE;
 	while (!optDone) {
-		int opt = getopt(argc, argv, "a:his:d:I:");
+		int opt = getopt(argc, argv, "a:his:d:I:e:");
 		if (opt != EOF) {
 			switch (opt) {
 				case 'a':
@@ -250,6 +252,9 @@ int main(int argc, char *argv[])
 				case 'I':
 					optIfnameGlobal = strdup(optarg);
 					break;
+				case 'e':
+					endpointIniFile = strdup(optarg);
+					break;
 				case '?':
 				default:
 					openavbTlHarnessUsage(programName);
@@ -261,7 +266,11 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	osalAVBInitialize(optIfnameGlobal);
+	if (!osalAVBInitialize(optIfnameGlobal, endpointIniFile)) {
+		AVB_LOG_ERROR("Failed to initialize AVB");
+		osalAVBFinalize();
+		exit(-1);
+	}
 
 	// Setup the talker listener counts and lists
 	iniIdx = optind;

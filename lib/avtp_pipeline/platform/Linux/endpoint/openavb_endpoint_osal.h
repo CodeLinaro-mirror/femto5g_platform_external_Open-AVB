@@ -56,7 +56,9 @@ typedef struct {
 } openavbEndpointMessage_t;
 
 
-bool startEndpoint(int mode, int ifindex, const char* ifname, unsigned mtu, unsigned link_kbit, unsigned nsr_kbit);
+bool startEndpoint(int mode, int ifindex, const char* ifname, unsigned mtu,
+		   unsigned link_kbit, unsigned nsr_kbit,
+		   const char* endpointIniFile);
 void stopEndpoint();
 
 #endif // OSAL_ENDPOINT_H

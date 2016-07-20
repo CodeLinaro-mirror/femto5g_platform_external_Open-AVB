@@ -191,6 +191,12 @@ int openavbReadConfig(const char *ini_file, openavb_endpoint_cfg_t *pCfg)
 	memset(pCfg, 0, sizeof(openavb_endpoint_cfg_t));
 	pCfg->fqtss_mode = -1;
 
+	// If no ini file is passed in, simply return an error
+	if (ini_file == NULL) {
+		AVB_LOG_ERROR("Couldn't parse INI file");
+		return -1;
+	}
+
 	int result = ini_parse(ini_file, cfgCallback, pCfg);
 	if (result < 0) {
 		AVB_LOGF_ERROR("Couldn't parse INI file: %s", ini_file);

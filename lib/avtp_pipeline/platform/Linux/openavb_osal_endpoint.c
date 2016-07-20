@@ -38,12 +38,17 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_pub.h"
 #include "openavb_log.h"
 
-extern DLL_EXPORT bool osalAVBInitialize(const char* ifname)
+extern DLL_EXPORT bool osalAVBInitialize(const char* ifname,
+					 const char* endpointIniFile)
 {
 	avbLogInit();
 	osalAVBTimeInit();
-	startEndpoint(FQTSS_MODE_DISABLED, 0, ifname, 0, 0, 0);
-	return TRUE;
+	if (!startEndpoint(FQTSS_MODE_DISABLED, 0, ifname, 0, 0, 0,
+			   endpointIniFile)) {
+		return FALSE;
+	} else {
+		return TRUE;
+	}
 }
 
 extern DLL_EXPORT bool osalAVBFinalize(void)
