@@ -33,6 +33,7 @@
 ******************************************************************************/
 
 #include "mrp_client.h"
+#include "openavb_srp.h"
 
 #define AVB_LOG_COMPONENT "MRP"
 #include "openavb_log.h"
@@ -47,14 +48,14 @@ volatile int mrp_okay;
 volatile int mrp_error = 0;;
 
 volatile int domain_a_valid = 0;
-int domain_class_a_id = 0;
-int domain_class_a_priority = 0;
-u_int16_t domain_class_a_vid = 0;
+int domain_class_a_id = SR_CLASS_A_ID;
+int domain_class_a_priority = SR_CLASS_A_DEFAULT_PRIORITY;
+u_int16_t domain_class_a_vid = SR_CLASS_A_DEFAULT_VID;
 
 volatile int domain_b_valid = 0;
-int domain_class_b_id = 0;
-int domain_class_b_priority = 0;
-u_int16_t domain_class_b_vid = 0;
+int domain_class_b_id = SR_CLASS_B_ID;
+int domain_class_b_priority = SR_CLASS_B_DEFAULT_PRIORITY;
+u_int16_t domain_class_b_vid = SR_CLASS_B_DEFAULT_VID;
 
 pthread_t monitor_thread;
 pthread_attr_t monitor_attr;
