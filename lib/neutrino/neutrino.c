@@ -35,7 +35,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <syslog.h>
-#include <DWC_ETH_QOS_yapphdr.h>
 #include "neutrino.h"
 
 #define SPEED_1000 1000
@@ -110,7 +109,7 @@ static unsigned int get_hi_credit(float bw, int connected_speed, int class)
 static unsigned int get_low_credit(float bw, int connected_speed, int class)
 {
 	int low_credit = 0;
-    typedef unsigned long long u64;
+	typedef unsigned long long u64;
 	float idle_slope;
 	float send_slope;
 	unsigned int multiplier = 1;
@@ -131,7 +130,7 @@ int ntn_set_class_bandwidth(int nClass, unsigned classBytesPerSec, char *ifname)
 	int ret;
 	struct ifreq ifr;
 	struct ifr_data_struct data;
-	struct DWC_ETH_QOS_avb_algorithm avb_struct;
+	struct avb_algorithm avb_struct;
 	int sockfd = -1;
 	unsigned int classBitsPerSecond = classBytesPerSec * 8;
 	float bw100 = 0;
@@ -168,7 +167,7 @@ int ntn_set_class_bandwidth(int nClass, unsigned classBytesPerSec, char *ifname)
 
 	data.cmd = DWC_ETH_QOS_AVB_ALGORITHM;
 	data.chInx = avb_struct.chInx;
-	avb_struct.algorithm = classBitsPerSecond > 0 ? eDWC_ETH_QOS_AVB_CBS : eDWC_ETH_QOS_AVB_SP;
+	avb_struct.algorithm = classBitsPerSecond > 0 ? AVB_CBS : AVB_SP;
 	avb_struct.cc = classBitsPerSecond > 0 ? 1 : 0;
 
 	avb_struct.speed100params.idle_slope = get_idle_slope(bw100, SPEED_100);
@@ -181,7 +180,7 @@ int ntn_set_class_bandwidth(int nClass, unsigned classBytesPerSec, char *ifname)
 	avb_struct.speed1000params.hi_credit = get_hi_credit(bw1000, SPEED_1000, avb_struct.chInx);
 	avb_struct.speed1000params.low_credit = get_low_credit(bw1000, SPEED_1000, avb_struct.chInx);
 
-	avb_struct.op_mode = eDWC_ETH_QOS_QAVB;
+	avb_struct.op_mode = QAVB;
 	data.ptr = &avb_struct;
 	strncpy(ifr.ifr_ifrn.ifrn_name, ifname, IFNAMSIZ - 1);
 	ifr.ifr_ifru.ifru_data = (void *)&data;
@@ -197,4 +196,3 @@ finish:
 	close(sockfd);
 	return ret;
 }
-
