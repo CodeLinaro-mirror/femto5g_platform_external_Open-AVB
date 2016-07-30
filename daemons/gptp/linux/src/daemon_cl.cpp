@@ -60,7 +60,8 @@ void print_usage( char *arg0 ) {
 	   arg0 );
   fprintf
 	  ( stderr,
-		"\t-S start syntonization\n\t-P pulse per second\n"
+		"\t-S <0|1> start syntonization and set hardware timer (1 is default)\n"
+		"\t-P pulse per second\n"
 		"\t-M <filename> save/restore state\n"
 		"\t-A <count> initial accelerated sync count\n"
 		"\t-G <group> group id for shared memory\n"
@@ -74,7 +75,7 @@ int main(int argc, char **argv)
 	InterfaceName *ifname;
 	int sig;
 
-	bool syntonize = false;
+	bool syntonize = true;
 	int i;
 	bool pps = false;
 	uint8_t priority1 = 248;
@@ -129,7 +130,13 @@ int main(int argc, char **argv)
 		if( argv[i][0] == '-' ) {
 			if( toupper( argv[i][1] ) == 'S' ) {
 				// Get syntonize directive from command line
-				syntonize = true;
+				// 1 is to start syntonization and set hardware timer.
+				// 0 is to not start syntonization or set hardware timer.
+				if (i + 1 < argc && isdigit(argv[i + 1][0])) {
+					syntonize = (atoi(argv[++i]) != 0);
+				} else {
+					syntonize = true;
+				}
 			}
 			else if( toupper( argv[i][1] ) == 'T' ) {
 				override_portstate = true;
