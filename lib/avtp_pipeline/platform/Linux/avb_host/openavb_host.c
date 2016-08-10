@@ -224,6 +224,11 @@ int main(int argc, char *argv[])
 #endif
 
 	tlHandleList = calloc(1, sizeof(tl_handle_t) * tlCount);
+	if (tlHandleList == NULL) {
+		AVB_LOG_ERROR("Out of memory");
+		osalAVBFinalize();
+		exit(-1);
+	}
 
 	// Open all streams
 	for (i1 = 0; i1 < tlCount; i1++) {

@@ -41,7 +41,7 @@
 /**
  * Provides strncpy
  */
-errno_t PLAT_strncpy( char *dest, const char *src, rsize_t max );
+errno_t PLAT_strlcpy( char *dest, const char *src, rsize_t max );
 /**
  * provides snprintf
  */

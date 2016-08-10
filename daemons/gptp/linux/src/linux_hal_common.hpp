@@ -581,8 +581,7 @@ public:
 	LinuxIPCArg( char *group_name ) {
 		int len = strnlen(group_name,16);
 		this->group_name = new char[len+1];
-		strncpy( this->group_name, group_name, len+1 );
-		this->group_name[len] = '\0';
+		PLAT_strlcpy( this->group_name, group_name, len+1 );
 	}
 	/**
 	 * Destroys IPCArg internal variables

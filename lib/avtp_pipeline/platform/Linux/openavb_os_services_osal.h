@@ -47,6 +47,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include <dlfcn.h>
 
 #include "openavb_tasks.h"
+#include "openavb_time.h"
 
 #define EXTERN_DLL_EXPORT  extern DLL_EXPORT
 

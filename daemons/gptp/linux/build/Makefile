@@ -31,9 +31,9 @@
 ALTERNATE_LINUX_INCPATH=$(HOME)/header/include/
 
 CFLAGS_G = -Wall -g -Wnon-virtual-dtor -I. -I../../common -I../src \
-	-I$(ALTERNATE_LINUX_INCPATH)
+	-I$(ALTERNATE_LINUX_INCPATH) -DUSE_GLIB `pkg-config --cflags glib-2.0`
 
-LDFLAGS_G = -lpthread -lrt
+LDFLAGS_G = -lpthread -lrt `pkg-config --libs glib-2.0`
 
 COMMON_DIR = ../../common
 SRC_DIR = ../src

@@ -407,7 +407,6 @@ bool openavbMapClkRefRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_MAP_DETAIL);
 	if (pMediaQ && pData) {
-		media_q_pub_map_clk_ref_info_t *pPubMapInfo = pMediaQ->pPubMapInfo;
 		U8 *pHdr = pData;
 		U8 *pPayload = pData + TOTAL_HEADER_SIZE;
 		pvt_data_t *pPvtData = pMediaQ->pPvtMapInfo;

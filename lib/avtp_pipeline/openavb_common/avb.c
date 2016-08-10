@@ -40,6 +40,12 @@
 
 #include "avb.h"
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 int pci_connect(device_t * igb_dev)
 {
 	char devpath[IGB_BIND_NAMESZ];
@@ -537,7 +543,7 @@ int32_t avb_get_iface_mac_address(int8_t *iface, uint8_t *addr)
 
 	memset(&ifreq, 0, sizeof(ifreq));
 
-	strncpy(ifreq.ifr_name, (const char*)iface, sizeof(ifreq.ifr_name));
+	strlcpy(ifreq.ifr_name, (const char*)iface, sizeof(ifreq.ifr_name));
 	ret = ioctl(fd, SIOCGIFHWADDR, &ifreq);
 	if (ret < 0) {
 		close(fd);

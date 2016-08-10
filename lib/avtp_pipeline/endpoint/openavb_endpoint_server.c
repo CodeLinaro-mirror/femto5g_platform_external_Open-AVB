@@ -57,6 +57,12 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_qmgr.h"  // for INVALID_FWMARK
 #include "openavb_maap.h"
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 // forward declarations
 static bool openavbEptSrvrReceiveFromClient(int h, openavbEndpointMessage_t *msg);
 
@@ -133,7 +139,7 @@ void openavbEptSrvrNotifyTlkrOfSrpCb(int h,
 	memset(&msgBuf, 0, OPENAVB_ENDPOINT_MSG_LEN);
 	msgBuf.type = OPENAVB_ENDPOINT_TALKER_CALLBACK;
 	memcpy(&(msgBuf.streamID), streamID, sizeof(AVBStreamID_t));
-	strncpy(msgBuf.params.talkerCallback.ifname, ifname, IFNAMSIZ - 1);
+	strlcpy(msgBuf.params.talkerCallback.ifname, ifname, IFNAMSIZ);
 	memcpy(msgBuf.params.talkerCallback.destAddr, destAddr, ETH_ALEN);
 	msgBuf.params.talkerCallback.lsnrDecl = lsnrDecl;
 	msgBuf.params.talkerCallback.classRate = classRate;
@@ -168,7 +174,7 @@ void openavbEptSrvrNotifyLstnrOfSrpCb(int h,
 	memset(&msgBuf, 0, OPENAVB_ENDPOINT_MSG_LEN);
 	msgBuf.type = OPENAVB_ENDPOINT_LISTENER_CALLBACK;
 	memcpy(&(msgBuf.streamID), streamID, sizeof(AVBStreamID_t));
-	strncpy(msgBuf.params.listenerCallback.ifname, ifname, IFNAMSIZ - 1);
+	strlcpy(msgBuf.params.listenerCallback.ifname, ifname, IFNAMSIZ);
 	if (destAddr) 
 		memcpy(msgBuf.params.listenerCallback.destAddr, destAddr, ETH_ALEN);
 	msgBuf.params.listenerCallback.tlkrDecl = tlkrDecl;

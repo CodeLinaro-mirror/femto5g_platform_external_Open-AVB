@@ -39,7 +39,7 @@ BUILD_KERNEL=$(shell uname -r)
 endif
 
 # PTP is required for AVB support
-CFLAGS_EXTRA += -DIGB_PTP
+CFLAGS_EXTRA += -DIGB_PTP -DUSE_GLIB
 
 # Use IGB_PTP compile flag to enable IEEE-1588 PTP (documented in README)
 ifeq ($(filter %IGB_PTP,$(CFLAGS_EXTRA)),-DIGB_PTP)

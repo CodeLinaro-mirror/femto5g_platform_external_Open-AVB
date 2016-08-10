@@ -429,17 +429,12 @@ int mrp_connect(void)
 
 int mrp_disconnect(void)
 {
-	char *msgbuf;
+	char msgbuf[1500] = {0};
 	int rc;
 
-	msgbuf = malloc(1500);
-	if (NULL == msgbuf)
-		return -1;
-	memset(msgbuf, 0, 64);
-	sprintf(msgbuf, "BYE");
+	snprintf(msgbuf, sizeof(msgbuf), "BYE");
 	mrp_okay = 0;
-	rc = send_mrp_msg(msgbuf, 1500);
-	free(msgbuf);
+	rc = send_mrp_msg(msgbuf, sizeof(msgbuf));
 
 	if (rc != 1500)
 		return -1;
@@ -457,18 +452,12 @@ int mrp_monitor(void)
 
 int mrp_register_domain(int *class_id, int *priority, u_int16_t * vid)
 {
-	char *msgbuf;
+	char msgbuf[1500] = {0};
 	int rc;
 
-	msgbuf = malloc(1500);
-	if (NULL == msgbuf)
-		return -1;
-	memset(msgbuf, 0, 1500);
-
-	sprintf(msgbuf, "S+D:C=%d,P=%d,V=%04x", *class_id, *priority, *vid);
+	snprintf(msgbuf, sizeof(msgbuf), "S+D:C=%d,P=%d,V=%04x", *class_id, *priority, *vid);
 	mrp_okay = 0;
-	rc = send_mrp_msg(msgbuf, 1500);
-	free(msgbuf);
+	rc = send_mrp_msg(msgbuf, sizeof(msgbuf));
 
 	if (rc != 1500)
 		return -1;
@@ -483,15 +472,10 @@ mrp_advertise_stream(uint8_t * streamid,
 		     u_int16_t vlan,
 		     int pktsz, int interval, int priority, int latency)
 {
-	char *msgbuf;
+	char msgbuf[1500] = {0};
 	int rc;
 
-	msgbuf = malloc(1500);
-	if (NULL == msgbuf)
-		return -1;
-	memset(msgbuf, 0, 1500);
-
-	sprintf(msgbuf, "S++:S=%02X%02X%02X%02X%02X%02X%02X%02X"
+	snprintf(msgbuf, sizeof(msgbuf), "S++:S=%02X%02X%02X%02X%02X%02X%02X%02X"
 		",A=%02X%02X%02X%02X%02X%02X"
 		",V=%04X"
 		",Z=%d"
@@ -503,8 +487,7 @@ mrp_advertise_stream(uint8_t * streamid,
 		destaddr[3], destaddr[4], destaddr[5], vlan, pktsz,
 		interval, priority << 5, latency);
 	mrp_okay = 0;
-	rc = send_mrp_msg(msgbuf, 1500);
-	free(msgbuf);
+	rc = send_mrp_msg(msgbuf, sizeof(msgbuf));
 
 	if (rc != 1500)
 		return -1;
@@ -518,13 +501,10 @@ mrp_unadvertise_stream(uint8_t * streamid,
 		       u_int16_t vlan,
 		       int pktsz, int interval, int priority, int latency)
 {
-	char *msgbuf;
+	char msgbuf[1500] = {0};
 	int rc;
-	msgbuf = malloc(1500);
-	if (NULL == msgbuf)
-		return -1;
-	memset(msgbuf, 0, 1500);
-	sprintf(msgbuf, "S--:S=%02X%02X%02X%02X%02X%02X%02X%02X"
+
+	snprintf(msgbuf, sizeof(msgbuf), "S--:S=%02X%02X%02X%02X%02X%02X%02X%02X"
 		",A=%02X%02X%02X%02X%02X%02X"
 		",V=%04X"
 		",Z=%d"
@@ -536,8 +516,7 @@ mrp_unadvertise_stream(uint8_t * streamid,
 		destaddr[3], destaddr[4], destaddr[5], vlan, pktsz,
 		interval, priority << 5, latency);
 	mrp_okay = 0;
-	rc = send_mrp_msg(msgbuf, 1500);
-	free(msgbuf);
+	rc = send_mrp_msg(msgbuf, sizeof(msgbuf));
 
 	if (rc != 1500)
 		return -1;
@@ -548,17 +527,12 @@ mrp_unadvertise_stream(uint8_t * streamid,
 
 int mrp_await_listener(unsigned char *streamid)
 {
-	char *msgbuf;
+	char msgbuf[1500] = {0};
 	int rc;
 
 	memcpy(monitor_stream_id, streamid, sizeof(monitor_stream_id));
-	msgbuf = malloc(1500);
-	if (NULL == msgbuf)
-		return -1;
-	memset(msgbuf, 0, 1500);
-	sprintf(msgbuf, "S??");
-	rc = send_mrp_msg(msgbuf, 1500);
-	free(msgbuf);
+	snprintf(msgbuf, sizeof(msgbuf), "S??");
+	rc = send_mrp_msg(msgbuf, sizeof(msgbuf));
 	if (rc != 1500)
 		return -1;
 
@@ -576,20 +550,15 @@ int mrp_await_listener(unsigned char *streamid)
 int mrp_get_domain(int *class_a_id, int *a_priority, u_int16_t * a_vid,
 		   int *class_b_id, int *b_priority, u_int16_t * b_vid)
 {
-	char *msgbuf;
+	char msgbuf[1500] = {0};
 	int ret;
 	int tries = 5;
 
 	/* we may not get a notification if we are joining late,
 	 * so query for what is already there ...
 	 */
-	msgbuf = malloc(1500);
-	if (NULL == msgbuf)
-		return -1;
-	memset(msgbuf, 0, 1500);
-	sprintf(msgbuf, "S??");
+	snprintf(msgbuf, sizeof(msgbuf), "S??");
 	ret = send_mrp_msg(msgbuf, 1500);
-	free(msgbuf);
 	if (ret != 1500)
 		return -1;
 	while (!halt_tx && (domain_a_valid == 0) && (domain_b_valid == 0) && tries--) {
@@ -616,16 +585,11 @@ int mrp_get_domain(int *class_a_id, int *a_priority, u_int16_t * a_vid,
 
 int mrp_join_vlan()
 {
-	char *msgbuf;
+	char msgbuf[1500] = {0};
 	int rc;
 
-	msgbuf = malloc(1500);
-	if (NULL == msgbuf)
-		return -1;
-	memset(msgbuf, 0, 1500);
-	sprintf(msgbuf, "V++:I=0002");
-	rc = send_mrp_msg(msgbuf, 1500);
-	free(msgbuf);
+	snprintf(msgbuf, sizeof(msgbuf), "V++:I=0002");
+	rc = send_mrp_msg(msgbuf, sizeof(msgbuf));
 
 	if (rc != 1500)
 		return -1;
@@ -635,19 +599,14 @@ int mrp_join_vlan()
 
 int mrp_join_listener(uint8_t * streamid)
 {
-	char *msgbuf;
+	char msgbuf[1500] = {0};
 	int rc;
 
-	msgbuf = malloc(1500);
-	if (NULL == msgbuf)
-		return -1;
-	memset(msgbuf, 0, 1500);
-	sprintf(msgbuf, "S+L:S=%02X%02X%02X%02X%02X%02X%02X%02X"
+	snprintf(msgbuf, sizeof(msgbuf), "S+L:S=%02X%02X%02X%02X%02X%02X%02X%02X"
 		",D=2", streamid[0], streamid[1], streamid[2], streamid[3],
 		streamid[4], streamid[5], streamid[6], streamid[7]);
 	mrp_okay = 0;
-	rc = send_mrp_msg(msgbuf, 1500);
-	free(msgbuf);
+	rc = send_mrp_msg(msgbuf, sizeof(msgbuf));
 
 	if (rc != 1500)
 		return -1;
@@ -665,20 +624,15 @@ int recv_mrp_okay()
 
 int mrp_send_ready(uint8_t *stream_id)
 {
-	char *databuf;
+	char databuf[1500] = {0};
 	int rc;
 
-	databuf = malloc(1500);
-	if (NULL == databuf)
-		return -1;
-	memset(databuf, 0, 1500);
-	sprintf(databuf, "S+L:L=%02x%02x%02x%02x%02x%02x%02x%02x, D=2",
+	snprintf(databuf, sizeof(databuf), "S+L:L=%02x%02x%02x%02x%02x%02x%02x%02x, D=2",
 		     stream_id[0], stream_id[1],
 		     stream_id[2], stream_id[3],
 		     stream_id[4], stream_id[5],
 		     stream_id[6], stream_id[7]);
-	rc = send_mrp_msg(databuf, 1500);
-	free(databuf);
+	rc = send_mrp_msg(databuf, sizeof(databuf));
 
 	if (rc != 1500)
 		return -1;
@@ -688,21 +642,16 @@ int mrp_send_ready(uint8_t *stream_id)
 
 int mrp_send_leave(uint8_t *stream_id)
 {
-	char *databuf;
+	char databuf[1500] = {0};
 	int rc;
 
-	databuf = malloc(1500);
-	if (NULL == databuf)
-		return -1;
-	memset(databuf, 0, 1500);
-	sprintf(databuf, "S-L:L=%02x%02x%02x%02x%02x%02x%02x%02x, D=3",
+	snprintf(databuf, sizeof(databuf), "S-L:L=%02x%02x%02x%02x%02x%02x%02x%02x, D=3",
 		     stream_id[0], stream_id[1],
 		     stream_id[2], stream_id[3],
 		     stream_id[4], stream_id[5],
 		     stream_id[6], stream_id[7]);
 
-	rc = send_mrp_msg(databuf, 1500);
-	free(databuf);
+	rc = send_mrp_msg(databuf, sizeof(databuf));
 
 	if (rc != 1500)
 		return -1;

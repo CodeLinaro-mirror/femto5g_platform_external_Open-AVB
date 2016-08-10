@@ -55,11 +55,13 @@ void openavbEptClntCheckVerMatchesSrvr(int endpointHandle, U32 AVBVersion)
 
 	tl_state_t *pTLState = TLHandleListGet(endpointHandle);
 
-	if (AVBVersion == AVB_CORE_VER_FULL) {
-		pTLState->AVBVerState = OPENAVB_TL_AVB_VER_VALID;
-	}
-	else {
-		pTLState->AVBVerState = OPENAVB_TL_AVB_VER_INVALID;
+	if (pTLState != NULL) {
+		if (AVBVersion == AVB_CORE_VER_FULL) {
+			pTLState->AVBVerState = OPENAVB_TL_AVB_VER_VALID;
+		}
+		else {
+			pTLState->AVBVerState = OPENAVB_TL_AVB_VER_INVALID;
+		}
 	}
 
 	AVB_TRACE_EXIT(AVB_TRACE_TL);

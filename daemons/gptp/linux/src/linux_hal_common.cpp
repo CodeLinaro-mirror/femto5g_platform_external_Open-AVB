@@ -177,8 +177,10 @@ struct LinuxTimerQueueActionArg {
 };
 
 LinuxTimerQueue::~LinuxTimerQueue() {
-	pthread_join(_private->signal_thread,NULL);
-	if( _private != NULL ) delete _private;
+	if( _private != NULL ) {
+		pthread_join(_private->signal_thread,NULL);
+		delete _private;
+	}
 }
 
 bool LinuxTimerQueue::init() {

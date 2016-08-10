@@ -119,124 +119,124 @@ int main(int argc, char *argv[])
 
 #ifdef XXX
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"M++:M=010203040506");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"M++:M=010203040506");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 	
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"M++:M=ffffffffffff");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"M++:M=ffffffffffff");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"V++:I=0002");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"V++:I=0002");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"M++:M=060504030201");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"M++:M=060504030201");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"M++:S=1");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"M++:S=1");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"M--:M=060504030201");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"M--:M=060504030201");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"M--:S=1");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"M--:S=1");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"M+?:M=060504030201");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"M+?:M=060504030201");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"M+?:S=1");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"M+?:S=1");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"M--:M=060504030201");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"M--:M=060504030201");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"M--:S=1");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"M--:S=1");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"V--:I=0002");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"V--:I=0002");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"V+?:I=0002");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"V+?:I=0002");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"V--:I=0002");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"V--:I=0002");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"S+?:S=DEADBEEFBADFCA11,A=112233445566,V=0002,Z=576,I=8000,P=96,L=1000");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"S+?:S=DEADBEEFBADFCA11,A=112233445566,V=0002,Z=576,I=8000,P=96,L=1000");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"S--:S=DEADBEEFBADFCA11");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"S--:S=DEADBEEFBADFCA11");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"S++:S=FFEEDDCCBBAA9988,A=112233445567,V=0002,Z=576,I=8000,P=96,L=1000");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"S++:S=FFEEDDCCBBAA9988,A=112233445567,V=0002,Z=576,I=8000,P=96,L=1000");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"S+L:L=DEADBEEFBADFCA11,D=2");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"S+L:L=DEADBEEFBADFCA11,D=2");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"S+L:L=F00F00F00F00F000,D=2");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"S+L:L=F00F00F00F00F000,D=2");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf, "S+D:C=6,P=3,V=0002");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE, "S+D:C=6,P=3,V=0002");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf, "S-D:C=6,P=3,V=0002");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE, "S-D:C=6,P=3,V=0002");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"S-L:L=F00F00F00F00F000");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"S-L:L=F00F00F00F00F000");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 #endif /* XXX */
 
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"V++:I=0002"); /* JOIN_IN VID 2: SR_PVID, SRP traffic */
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"V++:I=0002"); /* JOIN_IN VID 2: SR_PVID, SRP traffic */
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 
 #ifdef YYYY	
 	memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-	sprintf(msgbuf,"S+L:L=0050c24edb0a0001,D=2");
+	snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"S+L:L=0050c24edb0a0001,D=2");
 	rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 	if (-1 == rc) goto out;
 #endif /* YYYY */
@@ -244,19 +244,19 @@ int main(int argc, char *argv[])
 	do {
 		/* query MMRP Registrar MAC Address database */
 		memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-		sprintf(msgbuf,"M??");
+		snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"M??");
 		rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 		if (-1 == rc) goto out;
 
 		/* query MVRP Registrar VID database */
 		memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-		sprintf(msgbuf,"V??");
+		snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"V??");
 		rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 		if (-1 == rc) goto out;
 
 		/* query MSRP Registrar database */
 		memset(msgbuf,0,MRPDCLIENT_MAX_MSG_SIZE);
-		sprintf(msgbuf,"S??");
+		snprintf(msgbuf,MRPDCLIENT_MAX_MSG_SIZE,"S??");
 		rc = mrpdclient_sendto(mrpd_sock, msgbuf, MRPDCLIENT_MAX_MSG_SIZE);
 		if (-1 == rc) goto out;
 

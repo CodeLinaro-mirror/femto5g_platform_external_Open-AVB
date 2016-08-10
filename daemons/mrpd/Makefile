@@ -1,6 +1,7 @@
 OPT=-O2
 #CFLAGS=$(OPT) -Wall -Wextra -Wno-parentheses -Wstrict-prototypes -Wmissing-prototypes -ggdb
-CFLAGS=$(OPT) -Wall -Wextra -Wno-parentheses -ggdb -D_GNU_SOURCE
+CFLAGS=$(OPT) -Wall -Wextra -Wno-parentheses -ggdb -D_GNU_SOURCE -DUSE_GLIB `pkg-config --cflags glib-2.0`
+LDLIBS+= `pkg-config --libs glib-2.0`
 
 ifeq ($(ARCH),arm)
 CC?=arm-none-linux-gnueabi-gcc

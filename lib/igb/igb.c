@@ -53,6 +53,11 @@
 #include "e1000_82575.h"
 #include "igb_internal.h"
 
+#ifdef USE_GLIB
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 /*********************************************************************
  *  PCI Device ID Table
  *
@@ -164,7 +169,7 @@ igb_attach(char *dev_path, device_t *pdev)
 	 * dev_path should look something "0000:01:00.0"
 	 */
 
-	strncpy(bind.iface, dev_path, IGB_BIND_NAMESZ - 1);
+	strlcpy(bind.iface, dev_path, IGB_BIND_NAMESZ - 1);
 
 	if (ioctl(adapter->ldev, IGB_BIND, &bind) < 0) {
 		error = ENXIO;

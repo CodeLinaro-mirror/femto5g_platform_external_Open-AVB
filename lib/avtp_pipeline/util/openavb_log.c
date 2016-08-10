@@ -38,6 +38,12 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 
 #include "openavb_log.h"
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 typedef struct {
 	U8 msg[LOG_QUEUE_MSG_SIZE];
   	bool bRT;						// TRUE = Details are in RT queue
@@ -93,39 +99,39 @@ void avbLogRTRender(log_queue_item_t *pLogItem)
 								
 				switch (pLogRTItem->dataType) {
 					case LOG_RT_DATATYPE_CONST_STR:
-						strcat((char *)pLogItem->msg, pLogRTItem->pFormat);
+						strlcat((char *)pLogItem->msg, pLogRTItem->pFormat, LOG_QUEUE_MSG_SIZE);
 						break;
 					case LOG_RT_DATATYPE_NOW_TS:
-						sprintf(rt_msg, "[%lu:%09lu] ", pLogRTItem->data.nowTS.tv_sec, pLogRTItem->data.nowTS.tv_nsec);
-						strcat((char *)pLogItem->msg, rt_msg);
+						snprintf(rt_msg, LOG_RT_MSG_LEN, "[%lu:%09lu] ", pLogRTItem->data.nowTS.tv_sec, pLogRTItem->data.nowTS.tv_nsec);
+						strlcat((char *)pLogItem->msg, rt_msg, LOG_QUEUE_MSG_SIZE);
 						break;
 					case LOG_RT_DATATYPE_U16:
-						sprintf(rt_msg, pLogRTItem->pFormat, pLogRTItem->data.unsignedShortVar);
-						strcat((char *)pLogItem->msg, rt_msg);
+						snprintf(rt_msg, LOG_RT_MSG_LEN, pLogRTItem->pFormat, pLogRTItem->data.unsignedShortVar);
+						strlcat((char *)pLogItem->msg, rt_msg, LOG_QUEUE_MSG_SIZE);
 						break;
 					case LOG_RT_DATATYPE_S16:
-						sprintf(rt_msg, pLogRTItem->pFormat, pLogRTItem->data.signedShortVar);
-						strcat((char *)pLogItem->msg, rt_msg);
+						snprintf(rt_msg, LOG_RT_MSG_LEN, pLogRTItem->pFormat, pLogRTItem->data.signedShortVar);
+						strlcat((char *)pLogItem->msg, rt_msg, LOG_QUEUE_MSG_SIZE);
 						break;
 					case LOG_RT_DATATYPE_U32:
-						sprintf(rt_msg, pLogRTItem->pFormat, pLogRTItem->data.unsignedLongVar);
-						strcat((char *)pLogItem->msg, rt_msg);
+						snprintf(rt_msg, LOG_RT_MSG_LEN, pLogRTItem->pFormat, pLogRTItem->data.unsignedLongVar);
+						strlcat((char *)pLogItem->msg, rt_msg, LOG_QUEUE_MSG_SIZE);
 						break;
 					case LOG_RT_DATATYPE_S32:
-						sprintf(rt_msg, pLogRTItem->pFormat, pLogRTItem->data.signedLongVar);
-						strcat((char *)pLogItem->msg, rt_msg);
+						snprintf(rt_msg, LOG_RT_MSG_LEN, pLogRTItem->pFormat, pLogRTItem->data.signedLongVar);
+						strlcat((char *)pLogItem->msg, rt_msg, LOG_QUEUE_MSG_SIZE);
 						break;
 					case LOG_RT_DATATYPE_U64:
-						sprintf(rt_msg, pLogRTItem->pFormat, pLogRTItem->data.unsignedLongLongVar);
-						strcat((char *)pLogItem->msg, rt_msg);
+						snprintf(rt_msg, LOG_RT_MSG_LEN, pLogRTItem->pFormat, pLogRTItem->data.unsignedLongLongVar);
+						strlcat((char *)pLogItem->msg, rt_msg, LOG_QUEUE_MSG_SIZE);
 						break;
 					case LOG_RT_DATATYPE_S64:
-						sprintf(rt_msg, pLogRTItem->pFormat, pLogRTItem->data.signedLongLongVar);
-						strcat((char *)pLogItem->msg, rt_msg);
+						snprintf(rt_msg, LOG_RT_MSG_LEN, pLogRTItem->pFormat, pLogRTItem->data.signedLongLongVar);
+						strlcat((char *)pLogItem->msg, rt_msg, LOG_QUEUE_MSG_SIZE);
 						break;
 					case LOG_RT_DATATYPE_FLOAT:
-						sprintf(rt_msg, pLogRTItem->pFormat, pLogRTItem->data.floatVar);
-						strcat((char *)pLogItem->msg, rt_msg);
+						snprintf(rt_msg, LOG_RT_MSG_LEN, pLogRTItem->pFormat, pLogRTItem->data.floatVar);
+						strlcat((char *)pLogItem->msg, rt_msg, LOG_QUEUE_MSG_SIZE);
 						break;
 					default:
 						break;
@@ -133,7 +139,7 @@ void avbLogRTRender(log_queue_item_t *pLogItem)
 
 				if (pLogRTItem->bEnd) {
 					if (OPENAVB_TCAL_LOG_EXTRA_NEWLINE)
-						strcat((char *)pLogItem->msg, "\n");
+						strlcat((char *)pLogItem->msg, "\n", LOG_QUEUE_MSG_SIZE);
 					bMore = FALSE;
 				}
 				openavbQueueTailPull(logRTQueue);
@@ -243,7 +249,7 @@ extern void DLL_EXPORT avbLogFn(
 
 		LOG_LOCK();
 
-		vsprintf(msg, fmt, args);
+		vsnprintf(msg, LOG_MSG_LEN, fmt, args);
 
 		if (OPENAVB_LOG_FILE_INFO && path) {
 			char* file = strrchr(path, '/');
@@ -253,33 +259,33 @@ extern void DLL_EXPORT avbLogFn(
 				file += 1;
 			else
 				file = (char*)path;
-			sprintf(file_msg, " %s:%d", file, line);
+			snprintf(file_msg, LOG_FILE_LEN, " %s:%d", file, line);
 		}
 		if (OPENAVB_LOG_PROC_INFO) {
-			sprintf(proc_msg, " P:%5.5d", GET_PID());
+			snprintf(proc_msg, LOG_PROC_LEN, " P:%5.5d", GET_PID());
 		}
 		if (OPENAVB_LOG_THREAD_INFO) {
-			sprintf(thread_msg, " T:%lu", THREAD_SELF());
+			snprintf(thread_msg, LOG_THREAD_LEN, " T:%lu", THREAD_SELF());
 		}
 		if (OPENAVB_LOG_TIME_INFO) {
 			time_t tNow = time(NULL);
 			struct tm tmNow;
 			localtime_r(&tNow, &tmNow);
 
-			sprintf(time_msg, "%2.2d:%2.2d:%2.2d", tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec);
+			snprintf(time_msg, LOG_TIME_LEN, "%2.2d:%2.2d:%2.2d", tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec);
 		}
 		if (OPENAVB_LOG_TIMESTAMP_INFO) {
 			struct timespec nowTS;
 			CLOCK_GETTIME(OPENAVB_CLOCK_REALTIME, &nowTS);
 
-			sprintf(timestamp_msg, "%lu:%09lu", nowTS.tv_sec, nowTS.tv_nsec);
+			snprintf(timestamp_msg, LOG_TIMESTAMP_LEN, "%lu:%09lu", nowTS.tv_sec, nowTS.tv_nsec);
 		}
 
 		// using sprintf and puts allows using static buffers rather than heap.
 		if (OPENAVB_TCAL_LOG_EXTRA_NEWLINE)
-			/* S32 full_msg_len = */ sprintf(full_msg, "[%s%s%s%s %s %s%s] %s: %s\n", time_msg, timestamp_msg, proc_msg, thread_msg, company, component, file_msg, tag, msg);
+			/* S32 full_msg_len = */ snprintf(full_msg, LOG_FULL_MSG_LEN, "[%s%s%s%s %s %s%s] %s: %s\n", time_msg, timestamp_msg, proc_msg, thread_msg, company, component, file_msg, tag, msg);
 		else
-			/* S32 full_msg_len = */ sprintf(full_msg, "[%s%s%s%s %s %s%s] %s: %s", time_msg, timestamp_msg, proc_msg, thread_msg, company, component, file_msg, tag, msg);
+			/* S32 full_msg_len = */ snprintf(full_msg, LOG_FULL_MSG_LEN, "[%s%s%s%s %s %s%s] %s: %s", time_msg, timestamp_msg, proc_msg, thread_msg, company, component, file_msg, tag, msg);
 
 		if (!OPENAVB_LOG_FROM_THREAD && !OPENAVB_LOG_PULL_MODE) {
 			fputs(full_msg, AVB_LOG_OUTPUT_FD);
@@ -290,7 +296,7 @@ extern void DLL_EXPORT avbLogFn(
 				if (elem) {
 					log_queue_item_t *pLogItem = (log_queue_item_t *)openavbQueueData(elem);
 					pLogItem->bRT = FALSE;
-					strncpy((char *)pLogItem->msg, full_msg, LOG_QUEUE_MSG_LEN);
+					strlcpy((char *)pLogItem->msg, full_msg, LOG_QUEUE_MSG_SIZE);
 					openavbQueueHeadPush(logQueue);
 				}
 			}

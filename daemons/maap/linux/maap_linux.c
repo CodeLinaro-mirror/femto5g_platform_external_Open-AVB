@@ -51,6 +51,12 @@
 #include <inttypes.h>
 #include <unistd.h>
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 #include "maap_protocol.h"
 
 uint8_t *maap_shm_mem;
@@ -138,7 +144,7 @@ int main(int argc, char *argv[])
 	}
 
 	memset(&buffer, 0x00, sizeof(buffer));
-	strncpy(buffer.ifr_name, (char *)iface, IFNAMSIZ);
+	strlcpy(buffer.ifr_name, (char *)iface, IFNAMSIZ);
 	if (ioctl(socketfd, SIOCGIFINDEX, &buffer) < 0)
 	{
 		printf("Error: could not get interface index\n");
@@ -195,10 +201,15 @@ int main(int argc, char *argv[])
 	}
 
 	pthread_mutex_init(&(lock), NULL);
-	seed = src_mac[6] + time(NULL);
+	seed = src_mac[5] + time(NULL);
 	srand(seed);
 
 	maap_Info = (maap_info_t *)calloc(1,sizeof(maap_info_t));
+	if (maap_Info == NULL) {
+		printf("Error: out of memory\n");
+		close(socketfd);
+		return -1;
+	}
 
 	/* Initialize packet header and data */
 	Init(maap_Info, src_mac);  

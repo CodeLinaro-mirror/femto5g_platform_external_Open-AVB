@@ -40,6 +40,12 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_ether_hal.h"
 #include "openavb_list.h"
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 #define	AVB_LOG_COMPONENT	"Endpoint"
 //#define AVB_LOG_LEVEL AVB_LOG_LEVEL_DEBUG
 #include "openavb_pub.h"
@@ -110,7 +116,7 @@ bool startEndpoint(int mode, int ifindex, const char* ifname, unsigned mtu,
 	x_cfg.fqtss_mode = mode;
 	x_cfg.ifindex = ifindex;
 	if (ifname)
-		strncpy(x_cfg.ifname, ifname, sizeof(x_cfg.ifname));
+		strlcpy(x_cfg.ifname, ifname, sizeof(x_cfg.ifname));
 
 	igbGetMacAddr(x_cfg.ifmac);
 
@@ -138,7 +144,7 @@ void stopEndpoint()
 	AVB_TRACE_ENTRY(AVB_TRACE_ENDPOINT);
 
 	endpointRunning = FALSE;
-	if (endpointServerHandle != NULL) {
+	if (endpointServerHandle != 0) {
 		pthread_join(endpointServerHandle, NULL);
 	}
 
@@ -339,7 +345,15 @@ openavbRC openavbSrpRegisterStream(void* avtpHandle,
 	streamId[7] = _streamId->uniqueID & 0xFF;
 
 	openavb_list_node_t node = openavbListNew(strElemList, sizeof(strElem_t));
+	if (node == NULL) {
+		AVB_LOG_ERROR("Out of memory. Node is NULL.");
+		goto error;
+	}
 	strElem_t* elem = openavbListData(node);
+	if (elem == NULL) {
+		AVB_LOG_ERROR("Out of memory. Elem is NULL.");
+		goto error;
+	}
 
 	elem->avtpHandle = avtpHandle;
 	elem->talker = true;
@@ -448,7 +462,15 @@ openavbRC openavbSrpAttachStream(void* avtpHandle,
 	if (!node) {
 		// not found so add it
 		node = openavbListNew(strElemList, sizeof(strElem_t));
+		if (node == NULL) {
+			AVB_LOG_ERROR("Out of memory. Node is NULL.");
+			goto error;
+		}
 		strElem_t* elem = openavbListData(node);
+		if (elem == NULL) {
+			AVB_LOG_ERROR("Out of memory. Elem is NULL.");
+			goto error;
+		}
 
 		elem->avtpHandle = avtpHandle;
 		elem->talker = false;
@@ -463,6 +485,9 @@ openavbRC openavbSrpAttachStream(void* avtpHandle,
 
 	AVB_TRACE_EXIT(AVB_TRACE_SRP_PUBLIC);
 	return OPENAVB_SRP_SUCCESS;
+error:
+	AVB_TRACE_EXIT(AVB_TRACE_SRP_PUBLIC);
+	return OPENAVB_SRP_FAILURE;
 }
 
 openavbRC openavbSrpDetachStream(AVBStreamID_t* _streamId)

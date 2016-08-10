@@ -368,6 +368,11 @@ public:
    * @return void
    */
   void registerPort(IEEE1588Port * port, uint16_t index) {
+	  /* Validate parameter */
+	  if (index <= 0) {
+		  return;
+	  }
+
 	  if (index < MAX_PORTS) {
 		  port_list[index - 1] = port;
 	  }

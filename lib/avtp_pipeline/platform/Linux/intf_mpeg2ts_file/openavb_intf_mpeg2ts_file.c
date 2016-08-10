@@ -216,6 +216,16 @@ static unsigned int openavbComputeFileBitrate(char *fileName, media_q_t *pMediaQ
 		struct PIDStatus *fPIDStatusTable = (struct PIDStatus*) calloc(MAX_TABLE_PIDS, sizeof(struct PIDStatus));
 		double fTSPacketCount = 0;
 		int i = 0;
+
+		if (fPIDStatusTable == NULL) {
+			AVB_LOG_ERROR("Out of memory. fPIDStatusTable is NULL.");
+			goto end;
+		}
+		if (packets == NULL) {
+			AVB_LOG_ERROR("Out of memory. packets is NULL.");
+			goto end;
+		}
+
 		for(i = 0; i < MAX_TABLE_PIDS; ++i)
 		{
 			fPIDStatusTable[i].pid = -1;
@@ -250,6 +260,10 @@ static unsigned int openavbComputeFileBitrate(char *fileName, media_q_t *pMediaQ
 
 				unsigned pid = ((pkt[1]&0x1F)<<8) | pkt[2];
 				int idx = pidTableFindOrCreatePid(fPIDStatusTable, pid);
+				if (idx == -1) {
+					AVB_LOG_ERROR("PID status table is full.");
+					goto end;
+				}
 				if (!fPIDStatusTable[idx].used) {
 					// We're seeing this PID's PCR for the first time:
 					fPIDStatusTable[idx].used = 1;
@@ -277,6 +291,7 @@ static unsigned int openavbComputeFileBitrate(char *fileName, media_q_t *pMediaQ
 				}
 			}
 		}
+end:
 		fclose(input);
 		free(fPIDStatusTable);
 		free(packets);

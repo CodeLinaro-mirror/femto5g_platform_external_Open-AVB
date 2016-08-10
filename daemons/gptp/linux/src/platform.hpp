@@ -38,7 +38,12 @@
 
 /**@file*/
 
-#define PLAT_strncpy( dest, src, max ) strncpy( dest, src, max+1 ) /*!< Provides strncpy */
+#ifdef USE_GLIB
+uint32_t PLAT_strlcpy(char *dest, const char *src, uint32_t max);
+#else
+#define PLAT_strlcpy( dest, src, max ) strlcpy(dest, src, max)
+#endif
+
 #define PLAT_snprintf(...) snprintf( __VA_ARGS__ )	/*!< Provides snprintf*/
 
 /**

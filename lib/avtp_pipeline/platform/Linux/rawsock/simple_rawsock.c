@@ -34,6 +34,12 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include <linux/if_packet.h>
 #include <linux/filter.h>
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 #include "openavb_trace.h"
 
 #define	AVB_LOG_COMPONENT	"Raw Socket"
@@ -54,7 +60,7 @@ bool simpleAvbCheckInterface(const char *ifname, if_info_t *info)
 	memset(info, 0, sizeof(if_info_t));
 
 	AVB_LOGF_DEBUG("ifname=%s", ifname);
-	strncpy(info->name, ifname, IFNAMSIZ - 1);
+	strlcpy(info->name, ifname, IFNAMSIZ);
 
 	// open a throw-away socket - used for our ioctls
 	int sk = socket(AF_INET, SOCK_STREAM, 0);
@@ -67,7 +73,7 @@ bool simpleAvbCheckInterface(const char *ifname, if_info_t *info)
 	// set the name of the interface in the ioctl request struct
 	struct ifreq ifr;
 	memset(&ifr, 0, sizeof(struct ifreq));
-	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name) - 1);
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	// First check if the interface is up
 	//  (also proves that the interface exists!)

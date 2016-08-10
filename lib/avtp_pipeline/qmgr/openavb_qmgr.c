@@ -47,6 +47,12 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "neutrino.h"
 #endif
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 #define AVB_DEFAULT_QDISC_MODE AVB_SHAPER_HWQ_PER_CLASS
 
 // We have a singleton Qmgr, so we use file-static data here
@@ -204,6 +210,7 @@ void openavbQmgrRemoveStream(U16 fwmark)
 		|| nStream >= MAX_AVB_STREAMS
 		|| nClass < 0
 		|| nClass >= MAX_AVB_SR_CLASSES
+		|| idx >= MAX_AVB_STREAMS
 		|| qmgr_streams[idx].streamBytesPerSec == 0)
 	{
 		// something is wrong
@@ -269,7 +276,7 @@ bool openavbQmgrInitialize(int mode, int ifindex, const char* ifname, unsigned m
 
 	// Save the configuration
 	if (ifname)
-		strncpy(qdisc_data.ifname, ifname, IFNAMSIZ - 1);
+		strlcpy(qdisc_data.ifname, ifname, IFNAMSIZ);
 	qdisc_data.ifindex = ifindex;
 	qdisc_data.linkKbit = link_kbit;
 	qdisc_data.linkMTU = mtu;

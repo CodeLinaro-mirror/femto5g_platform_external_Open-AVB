@@ -63,6 +63,12 @@
 #include "msrp.h"
 #include "mmrp.h"
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 static void mrpd_log_timer_event(char *src, int event);
 
 /* global mgmt parameters */
@@ -447,7 +453,7 @@ mrpd_init_protocol_socket(u_int16_t etype, int *sock,
 
 	memset(&if_request, 0, sizeof(if_request));
 
-	strncpy(if_request.ifr_name, interface, sizeof(if_request.ifr_name) - 1);
+	strlcpy(if_request.ifr_name, interface, sizeof(if_request.ifr_name));
 
 	rc = ioctl(lsock, SIOCGIFHWADDR, &if_request);
 	if (rc < 0) {
@@ -460,7 +466,7 @@ mrpd_init_protocol_socket(u_int16_t etype, int *sock,
 
 	memset(&if_request, 0, sizeof(if_request));
 
-	strncpy(if_request.ifr_name, interface, sizeof(if_request.ifr_name)-1);
+	strlcpy(if_request.ifr_name, interface, sizeof(if_request.ifr_name));
 
 	rc = ioctl(lsock, SIOCGIFINDEX, &if_request);
 	if (rc < 0) {

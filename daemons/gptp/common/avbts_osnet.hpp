@@ -165,7 +165,7 @@ class InterfaceName: public InterfaceLabel {
 	 */
 	InterfaceName(char *name, int length) {
 		this->name = new char[length + 1];
-		PLAT_strncpy(this->name, name, length);
+		PLAT_strlcpy(this->name, name, length + 1);
 	}
 
 	/**
@@ -203,11 +203,11 @@ class InterfaceName: public InterfaceLabel {
 	 * @param  string [out] String to store interface's name
 	 * @param  length Length of string
 	 * @return TRUE if length is greater than size of interface name plus one. FALSE otherwise.
-	 * @todo If string is null, strncpy will fail silently.
+	 * @todo If string is null, strlcpy will fail silently.
 	 */
 	bool toString(char *string, size_t length) {
 		if (length >= strlen(name) + 1) {
-			PLAT_strncpy(string, name, length);
+			PLAT_strlcpy(string, name, length + 1);
 			return true;
 		}
 		return false;
@@ -229,7 +229,7 @@ class factory_name_t {
 	 * @param name_a [in] Name to be assigned to the object
 	 */
 	factory_name_t(const char *name_a) {
-		PLAT_strncpy(name, name_a, FACTORY_NAME_LENGTH - 1);
+		PLAT_strlcpy(name, name_a, FACTORY_NAME_LENGTH);
 	} 
 
 	/**

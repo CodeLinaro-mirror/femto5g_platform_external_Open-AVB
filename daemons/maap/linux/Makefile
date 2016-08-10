@@ -1,7 +1,7 @@
 BUILD_DIR=.
 COMMON_DIR=../common
 INCFLAGS=$(COMMON_DIR)/maap_protocol.c 
-CFLAGS=$(OPT) -Wall
+CFLAGS=$(OPT) -Wall -Werror -DUSE_GLIB `pkg-config --cflags --libs glib-2.0`
 EXTRA_FLAGS=-I$(COMMON_DIR) 
 FLAGS=-lpthread -lpcap
 CC?=gcc

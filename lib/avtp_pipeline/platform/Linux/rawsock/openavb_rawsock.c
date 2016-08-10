@@ -33,6 +33,12 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "simple_rawsock.h"
 #include "ring_rawsock.h"
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 //#define IGB
 
 #if AVB_FEATURE_PCAP
@@ -56,7 +62,7 @@ bool openavbCheckInterface(const char *ifname_uri, if_info_t *info)
 	char *colon = strchr(ifname_uri, ':');
 	if (colon) {
 		ifname = colon + 1;
-		strncpy(proto, ifname_uri, colon - ifname_uri);
+		memcpy(proto, ifname_uri, colon - ifname_uri);
 	}
 
 	AVB_LOGF_DEBUG("%s ifname_uri %s ifname %s proto %s", __func__, ifname_uri, ifname, proto);
@@ -78,7 +84,7 @@ void *openavbRawsockOpen(const char *ifname_uri, bool rx_mode, bool tx_mode, U16
 	if (colon) {
 		ifname = colon + 1;
 		*colon = 0;
-		strncpy(proto, ifname_uri, sizeof(proto));
+		strlcpy(proto, ifname_uri, sizeof(proto));
 	}
 
 	AVB_LOGF_DEBUG("%s ifname_uri %s ifname %s proto %s", __func__, ifname_uri, ifname, proto);

@@ -34,6 +34,14 @@
 #include <platform.hpp>
 #include <arpa/inet.h>
 
+#ifdef USE_GLIB
+#include <glib.h>
+
+uint32_t PLAT_strlcpy(char *dest, const char *src, uint32_t max) {
+	return g_strlcpy(dest, src, max);
+}
+#endif
+
 uint16_t PLAT_htons( uint16_t s ) {
 	return htons( s );
 }

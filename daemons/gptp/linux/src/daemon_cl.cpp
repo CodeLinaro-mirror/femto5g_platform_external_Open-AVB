@@ -80,7 +80,7 @@ int main(int argc, char **argv)
 	bool pps = false;
 	uint8_t priority1 = 248;
 	bool override_portstate = false;
-	PortState port_state;
+	PortState port_state = (PortState) 0;
 
 	int restorefd = -1;
 	void *restoredata = ((void *) -1);
@@ -197,7 +197,8 @@ int main(int argc, char **argv)
 			else if(toupper(argv[i][1]) == 'D'){
 				input_delay=true;
 				int delay_count=0;
-				char *cli_inp_delay = strtok(argv[i+1],",");
+				char *saveptr;
+				char *cli_inp_delay = strtok_r(argv[i+1],",",&saveptr);
 				while (cli_inp_delay != NULL)
 				{
 					if(delay_count>3)
@@ -208,7 +209,7 @@ int main(int argc, char **argv)
 					}
 					phy_delay[delay_count]=atoi(cli_inp_delay);
 					delay_count++;
-					cli_inp_delay = strtok(NULL,",");
+					cli_inp_delay = strtok_r(NULL,",",&saveptr);
 				}
 				if (delay_count != 4)
 				{

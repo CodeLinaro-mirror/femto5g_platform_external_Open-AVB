@@ -251,6 +251,9 @@ if ( AVB_FEATURE_PCAP )
   list ( APPEND SRC_FILES ${AVB_OSAL_DIR}/rawsock/pcap_rawsock.c )
 endif ()
 
+# Use GLIB for strlcpy and strlcat
+set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_GLIB" )
+
 add_library ( avbTl ${SRC_FILES} )
 target_link_libraries ( avbTl dl )
 

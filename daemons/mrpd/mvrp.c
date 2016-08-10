@@ -44,6 +44,8 @@
 #include "mvrp.h"
 #include "parse.h"
 
+#define BUFSIZE 128
+
 int mvrp_send_notifications(struct mvrp_attribute *attrib, int notify);
 static struct mvrp_attribute *mvrp_conditional_reclaim(struct mvrp_attribute *sattrib);
 int mvrp_txpdu(void);
@@ -1019,17 +1021,17 @@ int mvrp_send_notifications(struct mvrp_attribute *attrib, int notify)
 
 	variant = regsrc = NULL;
 
-	variant = (char *)malloc(128);
-	regsrc = (char *)malloc(128);
+	variant = (char *)malloc(BUFSIZE);
+	regsrc = (char *)malloc(BUFSIZE);
 
 	if ((NULL == variant) || (NULL == regsrc))
 		goto free_msgbuf;
 
 	memset(msgbuf, 0, MAX_MRPD_CMDSZ);
 
-	sprintf(variant, "%04x", attrib->attribute);
+	snprintf(variant, BUFSIZE, "%04x", attrib->attribute);
 
-	sprintf(regsrc, "R=%02x%02x%02x%02x%02x%02x",
+	snprintf(regsrc, BUFSIZE, "R=%02x%02x%02x%02x%02x%02x",
 		attrib->registrar.macaddr[0],
 		attrib->registrar.macaddr[1],
 		attrib->registrar.macaddr[2],
@@ -1086,9 +1088,9 @@ int mvrp_dumptable(struct sockaddr_in *client)
 
 	stage = variant = regsrc = NULL;
 
-	stage = (char *)malloc(128);
-	variant = (char *)malloc(128);
-	regsrc = (char *)malloc(128);
+	stage = (char *)malloc(BUFSIZE);
+	variant = (char *)malloc(BUFSIZE);
+	regsrc = (char *)malloc(BUFSIZE);
 
 	if ((NULL == stage) || (NULL == variant) || (NULL == regsrc))
 		goto free_msgbuf;
@@ -1099,16 +1101,16 @@ int mvrp_dumptable(struct sockaddr_in *client)
 
 	attrib = MVRP_db->attrib_list;
 	if (attrib == NULL) {
-		sprintf(msgbuf, "MVRP:Empty\n");
+		snprintf(msgbuf, MAX_MRPD_CMDSZ, "MVRP:Empty\n");
 	}
 
 	while (NULL != attrib) {
-		sprintf(variant, "V:I=%04x", attrib->attribute);
+		snprintf(variant, BUFSIZE, "V:I=%04x", attrib->attribute);
 
 		mrp_decode_state(&attrib->registrar, &attrib->applicant,
 				 mrp_state, sizeof(mrp_state));
 
-		sprintf(regsrc, "R=%02x%02x%02x%02x%02x%02x %s",
+		snprintf(regsrc, BUFSIZE, "R=%02x%02x%02x%02x%02x%02x %s",
 			attrib->registrar.macaddr[0],
 			attrib->registrar.macaddr[1],
 			attrib->registrar.macaddr[2],
@@ -1116,8 +1118,8 @@ int mvrp_dumptable(struct sockaddr_in *client)
 			attrib->registrar.macaddr[4],
 			attrib->registrar.macaddr[5], mrp_state);
 
-		sprintf(stage, "%s %s\n", variant, regsrc);
-		sprintf(msgbuf_wrptr, "%s", stage);
+		snprintf(stage, BUFSIZE, "%s %s\n", variant, regsrc);
+		snprintf(msgbuf_wrptr, MAX_MRPD_CMDSZ, "%s", stage);
 		msgbuf_wrptr += strnlen(stage, 128);
 		attrib = attrib->next;
 	}

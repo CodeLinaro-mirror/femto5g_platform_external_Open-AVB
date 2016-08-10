@@ -91,7 +91,7 @@ void openavbPrintbufPrintf(openavb_printbuf_t printbuf, const char *fmt, ...)
 		va_start(args, fmt);
 
 		char msg[OPENAVB_PRINTBUF_MAX_MSG_SIZE];
-		U32 len = vsprintf(msg, fmt, args);
+		U32 len = vsnprintf(msg, sizeof(msg), fmt, args);
 
 		if (printbuf->idx + len > printbuf->size) {
 			openavbPrintbufOutput(printbuf);

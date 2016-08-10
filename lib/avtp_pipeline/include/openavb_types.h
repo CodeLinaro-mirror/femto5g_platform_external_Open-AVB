@@ -36,6 +36,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #define AVB_TYPES_H 1
 
 #include "openavb_platform.h"
+#include "avb.h"
 
 typedef struct { // per IEEE 802.1Q-2011 Section 35.2.2.8.2
 	U8		addr[ETH_ALEN];

@@ -164,7 +164,7 @@ typedef struct {
 	// The number of frames of audio that we have received
 	U32 framesReceived;
 
-	U8 lastSequenceNumber
+	U8 lastSequenceNumber;
 } pvt_data_t;
 
 static void x_calculateSizes(media_q_t *pMediaQ)

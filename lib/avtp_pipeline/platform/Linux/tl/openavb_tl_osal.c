@@ -49,6 +49,12 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_mediaq.h"
 #include "openavb_tl.h"
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 #define	AVB_LOG_COMPONENT	"Talker / Listener"
 #include "openavb_log.h"
 
@@ -299,7 +305,7 @@ static int openavbTLCfgCallback(void *user, const char *tlSection, const char *n
 	else if (MATCH(name, "ifname")) {
 		if_info_t ifinfo;
 		if (openavbCheckInterface(value, &ifinfo)) {
-			strncpy(pCfg->ifname, value, IFNAMSIZ - 1);
+			strlcpy(pCfg->ifname, value, IFNAMSIZ);
 			valOK = TRUE;
 		}
 	}

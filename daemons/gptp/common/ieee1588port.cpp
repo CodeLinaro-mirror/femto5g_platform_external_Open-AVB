@@ -144,9 +144,10 @@ bool IEEE1588Port::init_port(int delay[4])
 				( "Failed to initialize hardware timestamper, "
 				  "falling back to software timestamping" );
 			_hw_timestamper = NULL;
+		} else {
+			_hw_timestamper->init_phy_delay(delay);
 		}
 	}
-	_hw_timestamper->init_phy_delay(delay);
 
 	pdelay_rx_lock = lock_factory->createLock(oslock_recursive);
 	port_tx_lock = lock_factory->createLock(oslock_recursive);
@@ -460,6 +461,10 @@ void IEEE1588Port::processEvent(Event e)
 						EBest = ports[j]->calculateERBest();
 					}
 				}
+			}
+
+			if (!EBest) {
+				break;
 			}
 
 			/* Check if we've changed */

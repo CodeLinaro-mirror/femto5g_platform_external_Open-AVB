@@ -42,6 +42,12 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_avtp.h"
 #include "openavb_listener.h"
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 // DEBUG Uncomment to turn on logging for just this module.
 //#define AVB_LOG_ON	1
 
@@ -65,13 +71,16 @@ void openavbEptClntNotifyLstnrOfSrpCb(int endpointHandle,
 
 	static const U8 emptyMAC[ETH_ALEN] = { 0, 0, 0, 0, 0, 0 };
 	tl_state_t *pTLState = TLHandleListGet(endpointHandle);
-	openavb_tl_cfg_t *pCfg = &pTLState->cfg;
-	listener_data_t *pListenerData = pTLState->pPvtListenerData;
+	openavb_tl_cfg_t *pCfg = NULL;
+	listener_data_t *pListenerData = NULL;
 
 	if (!pTLState) {
 		AVB_LOG_WARNING("Unable to get listener from endpoint handle.");
 		return;
 	}
+
+	pCfg = &pTLState->cfg;
+	pListenerData = pTLState->pPvtListenerData;
 
 	AVB_LOGF_DEBUG("%s streaming=%d, tlkrDecl=%d", __FUNCTION__, pTLState->bStreaming, tlkrDecl);
 
@@ -82,7 +91,7 @@ void openavbEptClntNotifyLstnrOfSrpCb(int endpointHandle,
 		bool rc = openavbEptClntAttachStream(pTLState->endpointHandle, streamID, openavbSrp_LDSt_Ready);
 		if (rc) {
 			// Save data provided by endpoint/SRP
-			strncpy(pListenerData->ifname, ifname, IFNAMSIZ);
+			strlcpy(pListenerData->ifname, ifname, IFNAMSIZ);
 			memcpy(&pListenerData->streamID, streamID, sizeof(AVBStreamID_t));
 			if (memcmp(destAddr, emptyMAC, ETH_ALEN) != 0) {
 				memcpy(&pListenerData->destAddr, destAddr, ETH_ALEN);

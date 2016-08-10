@@ -120,7 +120,7 @@ int msrp_count_type(int attrib_type)
 	if (MSRP_db) {
 		attrib = MSRP_db->attrib_list;
 		while (NULL != attrib) {
-			if (attrib_type == attrib->type) {
+			if ((uint32_t) attrib_type == attrib->type) {
 				count++;
 			}
 			attrib = attrib->next;
@@ -2707,6 +2707,8 @@ msrp_emit_listenvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 						   (64 +
 						    listen_declare_sz) *
 						   sizeof(int));
+				if (NULL == listen_declare)
+					goto oops;
 				listen_declare_sz += 64;
 			}
 
@@ -3140,6 +3142,7 @@ int msrp_send_notifications(struct msrp_attribute *attrib, int notify)
 	return 0;
 }
 
+#define BUFSIZE 128
 int msrp_dumptable(struct sockaddr_in *client)
 {
 	char *msgbuf;
@@ -3156,9 +3159,9 @@ int msrp_dumptable(struct sockaddr_in *client)
 
 	stage = variant = regsrc = NULL;
 
-	stage = (char *)malloc(128);
-	variant = (char *)malloc(128);
-	regsrc = (char *)malloc(128);
+	stage = (char *)malloc(BUFSIZE);
+	variant = (char *)malloc(BUFSIZE);
+	regsrc = (char *)malloc(BUFSIZE);
 
 	if ((NULL == stage) || (NULL == variant) || (NULL == regsrc))
 		goto free_msgbuf;
@@ -3169,12 +3172,12 @@ int msrp_dumptable(struct sockaddr_in *client)
 
 	attrib = MSRP_db->attrib_list;
 	if (attrib == NULL) {
-		sprintf(msgbuf, "MSRP:Empty\n");
+		snprintf(msgbuf, MAX_MRPD_CMDSZ, "MSRP:Empty\n");
 	}
 
 	while (NULL != attrib) {
 		if (MSRP_LISTENER_TYPE == attrib->type) {
-			sprintf(variant,
+			snprintf(variant, BUFSIZE,
 				"L:D=%d,S=%02x%02x%02x%02x%02x%02x%02x%02x",
 				attrib->substate,
 				attrib->attribute.talk_listen.StreamID[0],
@@ -3186,13 +3189,13 @@ int msrp_dumptable(struct sockaddr_in *client)
 				attrib->attribute.talk_listen.StreamID[6],
 				attrib->attribute.talk_listen.StreamID[7]);
 		} else if (MSRP_DOMAIN_TYPE == attrib->type) {
-			sprintf(variant, "D:C=%d,P=%d,V=%04x,N=%d",
+			snprintf(variant, BUFSIZE, "D:C=%d,P=%d,V=%04x,N=%d",
 				attrib->attribute.domain.SRclassID,
 				attrib->attribute.domain.SRclassPriority,
 				attrib->attribute.domain.SRclassVID,
 				attrib->attribute.domain.neighborSRclassPriority);
 		} else {
-			sprintf(variant, "T:S=%02x%02x%02x%02x%02x%02x%02x%02x"
+			snprintf(variant, BUFSIZE, "T:S=%02x%02x%02x%02x%02x%02x%02x%02x"
 				",A=%02x%02x%02x%02x%02x%02x"
 				",V=%04x"
 				",Z=%d"
@@ -3253,7 +3256,7 @@ int msrp_dumptable(struct sockaddr_in *client)
 		mrp_decode_state(&attrib->registrar, &attrib->applicant,
 				 mrp_state, sizeof(mrp_state));
 
-		sprintf(regsrc, "R=%02x%02x%02x%02x%02x%02x %s",
+		snprintf(regsrc, BUFSIZE, "R=%02x%02x%02x%02x%02x%02x %s",
 			attrib->registrar.macaddr[0],
 			attrib->registrar.macaddr[1],
 			attrib->registrar.macaddr[2],
@@ -3261,9 +3264,9 @@ int msrp_dumptable(struct sockaddr_in *client)
 			attrib->registrar.macaddr[4],
 			attrib->registrar.macaddr[5], mrp_state);
 
-		sprintf(stage, "%s %s\n", variant, regsrc);
+		snprintf(stage, BUFSIZE, "%s %s\n", variant, regsrc);
 
-		sprintf(msgbuf_wrptr, "%s", stage);
+		snprintf(msgbuf_wrptr, MAX_MRPD_CMDSZ, "%s", stage);
 		msgbuf_wrptr += strlen(stage);
 		attrib = attrib->next;
 	}
@@ -3547,7 +3550,7 @@ int msrp_recv_cmd(const char *buf, int buflen, struct sockaddr_in *client)
 	if (MSRP_db->enable_pruning_of_uninteresting_ids) {
 		if (mrp_client_count(MSRP_db->mrp_db.clients) > 1) {
 			mrp_client_delete(&(MSRP_db->mrp_db.clients), client);
-			mrpd_send_ctl_msg(client, "ERR pruning enabled too many clients\n", sizeof("ERR pruning enabled too many clients\n") + 1);
+			mrpd_send_ctl_msg(client, "ERR pruning enabled too many clients\n", sizeof("ERR pruning enabled too many clients\n"));
 			goto out;
 		}
 	}

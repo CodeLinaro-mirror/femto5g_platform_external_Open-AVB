@@ -398,10 +398,6 @@ bool openavbIntfClkRefRxCB(media_q_t *pMediaQ)
 				openavbMediaQTailUnlock(pMediaQ);
 			}
 
-			media_q_pub_map_clk_ref_info_t *pPubMapClkRefInfo =
-				(media_q_pub_map_clk_ref_info_t *)
-				pMediaQ->pPubMapInfo;
-
 			// Notify the clock observers (e.g. the audio talker)
 			// that the tick has occurred.
 			refClkSignalTick(timestamp, 1,

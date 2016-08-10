@@ -48,6 +48,12 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #define	AVB_LOG_COMPONENT	"Talker"
 #include "openavb_log.h"
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 /* Talker callback comes from endpoint, to indicate when listeners
  * come and go. We may need to start or stop the talker thread.
  */
@@ -64,12 +70,14 @@ void openavbEptClntNotifyTlkrOfSrpCb(int                      endpointHandle,
 	AVB_TRACE_ENTRY(AVB_TRACE_TL);
 
 	tl_state_t *pTLState = TLHandleListGet(endpointHandle);
-	talker_data_t *pTalkerData = pTLState->pPvtTalkerData;
+	talker_data_t *pTalkerData = NULL;
 
 	if (!pTLState) {
 		AVB_LOG_WARNING("Unable to get talker from endpoint handle.");
 		return;
 	}
+
+	pTalkerData = pTLState->pPvtTalkerData;
 
 	AVB_LOGF_DEBUG("%s streaming=%d, lsnrDecl=%d", __FUNCTION__, pTLState->bStreaming, lsnrDecl);
 
@@ -78,7 +86,7 @@ void openavbEptClntNotifyTlkrOfSrpCb(int                      endpointHandle,
 			|| lsnrDecl == openavbSrp_LDSt_Ready_Failed) {
 
 			// Save the data provided by endpoint/SRP
-			strncpy(pTalkerData->ifname, ifname, IFNAMSIZ);
+			strlcpy(pTalkerData->ifname, ifname, IFNAMSIZ);
 			memcpy(&pTalkerData->streamID, streamID, sizeof(AVBStreamID_t));
 			memcpy(&pTalkerData->destAddr, destAddr, ETH_ALEN);
 			pTalkerData->classRate = classRate;
@@ -92,7 +100,7 @@ void openavbEptClntNotifyTlkrOfSrpCb(int                      endpointHandle,
 		}
 		else if (lsnrDecl == openavbSrp_LDSt_Stream_Info) {
 			// Stream information is available does NOT mean listener is ready. Stream not started yet.
-			strncpy(pTalkerData->ifname, ifname, IFNAMSIZ);
+			strlcpy(pTalkerData->ifname, ifname, IFNAMSIZ);
 			memcpy(&pTalkerData->streamID, streamID, sizeof(AVBStreamID_t));
 			memcpy(&pTalkerData->destAddr, destAddr, ETH_ALEN);
 			pTalkerData->classRate = classRate;

@@ -44,6 +44,12 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_mediaq_pub.h"
 #include "openavb_intf_pub.h"
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 #define	AVB_LOG_COMPONENT	"Echo Interface"
 #include "openavb_log_pub.h" 
 
@@ -108,10 +114,15 @@ void openavbIntfEchoCfgCB(media_q_t *pMediaQ, const char *name, const char *valu
 			// Repeat the string if needed
 			if (pPvtData->echoStringRepeat > 1 && pPvtData->pEchoString) {
 				char *pEchoStringRepeat = calloc(1, (pPvtData->echoStringLen * pPvtData->echoStringRepeat) + 1); 
+				if (pEchoStringRepeat == NULL) {
+					AVB_LOG_ERROR("Out of memory.");
+					return;
+				}
 
 				int i1;
 				for (i1 = 0; i1 < pPvtData->echoStringRepeat; i1++) {
-					strcat(pEchoStringRepeat, pPvtData->pEchoString);
+					strlcat(pEchoStringRepeat, pPvtData->pEchoString,
+						  (pPvtData->echoStringLen * pPvtData->echoStringRepeat) + 1);
 				}
 
 				free(pPvtData->pEchoString);
@@ -189,16 +200,17 @@ bool openavbIntfEchoTxCB(media_q_t *pMediaQ)
 		if (pMediaQItem) {
 			if (pMediaQItem->itemSize >= pPvtData->increment ? pPvtData->echoStringLen + 16 : pPvtData->echoStringLen) {
 				if (pPvtData->increment) {
-					int len = sprintf(pMediaQItem->pPubData, "%s %u", pPvtData->pEchoString, pPvtData->Counter++);
+					int len = snprintf(pMediaQItem->pPubData, pMediaQItem->itemSize,
+							   "%s %u", pPvtData->pEchoString, pPvtData->Counter++);
 					pMediaQItem->dataLen = len;
 				}
 				else {
-					memcpy(pMediaQItem->pPubData, pPvtData->pEchoString, pPvtData->echoStringLen);
+					strlcpy(pMediaQItem->pPubData, pPvtData->pEchoString, pMediaQItem->itemSize);
 					pMediaQItem->dataLen = pPvtData->echoStringLen;
 				}
 			}
 			else {
-				memcpy(pMediaQItem->pPubData, pPvtData->pEchoString, pMediaQItem->itemSize);
+				strlcpy(pMediaQItem->pPubData, pPvtData->pEchoString, pMediaQItem->itemSize);
 				pMediaQItem->dataLen = pMediaQItem->itemSize;
 			}
 

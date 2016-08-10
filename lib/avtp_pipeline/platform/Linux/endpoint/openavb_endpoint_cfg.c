@@ -43,6 +43,12 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_rawsock.h"
 #include "ini.h"
 
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#define strlcat g_strlcat
+#endif
+
 #define	AVB_LOG_COMPONENT	"Endpoint"
 #include "openavb_log.h"
 
@@ -79,7 +85,7 @@ static int cfgCallback(void *user, const char *section, const char *name, const 
 		{
 			if_info_t ifinfo;
 			if (openavbCheckInterface(value, &ifinfo)) {
-				strncpy(pCfg->ifname, value, IFNAMSIZ - 1);
+				strlcpy(pCfg->ifname, value, IFNAMSIZ);
 				memcpy(pCfg->ifmac, &ifinfo.mac, ETH_ALEN);
 				pCfg->ifindex = ifinfo.index;
 				pCfg->mtu = ifinfo.mtu;
