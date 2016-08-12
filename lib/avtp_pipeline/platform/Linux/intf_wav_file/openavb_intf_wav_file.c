@@ -603,6 +603,8 @@ bool openavbIntfWavFileRxCB(media_q_t *pMediaQ)
                         numOfStoredDataBytes += written;
                         if (expectedNumberOfDataReceived == TRUE) {
                             fileReady = TRUE;
+                            fclose(pPvtData->pFile);
+                            pPvtData->pFile = NULL;
                             AVB_LOG_INFO("Wav file ready.");
                         }
                     }
@@ -610,6 +612,9 @@ bool openavbIntfWavFileRxCB(media_q_t *pMediaQ)
                 openavbMediaQTailPull(pMediaQ);
             }
             else {
+                if (pMediaQItem) {
+                    openavbMediaQTailPull(pMediaQ);
+                }
                 moreData = FALSE;
             }
         }
