@@ -101,12 +101,6 @@ bool startEndpoint(int mode, int ifindex, const char* ifname, unsigned mtu,
 	// Set endpoint configuration
 	memset(&x_cfg, 0, sizeof(openavb_endpoint_cfg_t));
 
-	if (endpointIniFile != NULL &&
-	    openavbReadConfig(endpointIniFile, &x_cfg) != 0) {
-		AVB_LOG_ERROR("Failed to read the endpoint configuration file");
-		goto error;
-	}
-
 	x_cfg.fqtss_mode = mode;
 	x_cfg.ifindex = ifindex;
 	if (ifname)
@@ -117,6 +111,12 @@ bool startEndpoint(int mode, int ifindex, const char* ifname, unsigned mtu,
 	x_cfg.mtu = mtu;
 	x_cfg.link_kbit = link_kbit;
 	x_cfg.nsr_kbit = nsr_kbit;
+
+	if (endpointIniFile != NULL &&
+	    openavbReadConfig(endpointIniFile, &x_cfg) != 0) {
+		AVB_LOG_ERROR("Failed to read the endpoint configuration file");
+		goto error;
+	}
 
 	endpointRunning = TRUE;
 	int err = pthread_create(&endpointServerHandle, NULL, endpointServerThread, NULL);

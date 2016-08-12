@@ -181,15 +181,12 @@ static int cfgCallback(void *user, const char *section, const char *name, const 
 	return 1; // OK
 }
 
-// Parse ini file, and create config data
+// Parse ini file, and create config data. pCfg will contain default values
+// passed by the caller.
 //
 int openavbReadConfig(const char *ini_file, openavb_endpoint_cfg_t *pCfg)
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_ENDPOINT);
-
-	// defaults - most are handled by setting everything to 0
-	memset(pCfg, 0, sizeof(openavb_endpoint_cfg_t));
-	pCfg->fqtss_mode = -1;
 
 	// If no ini file is passed in, simply return an error
 	if (ini_file == NULL) {
