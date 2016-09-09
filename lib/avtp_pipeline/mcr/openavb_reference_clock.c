@@ -134,7 +134,7 @@ void refClkSignalTick(U64 timestamp, U16 ticks, U32 interval,
 	static U32 counter = 0;
 	counter++;
 	if (counter % 300 == 0) {
-		AVB_LOGF_ERROR("clocktick: %llu", timestamp);
+		AVB_LOGF_INFO("clocktick: %llu", timestamp);
 	}
 #endif
 
