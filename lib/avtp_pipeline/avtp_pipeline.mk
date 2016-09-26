@@ -23,11 +23,11 @@ build/Makefile:
 	      -DAVB_FEATURE_GSTREAMER=$(AVB_FEATURE_GSTREAMER) \
 	      -DAVB_FEATURE_NEUTRINO=$(AVB_FEATURE_NEUTRINO) \
 	      -DCMAKE_FRAMEWORK_PATH=$(PKG_CONFIG_SYSROOT_DIR)/usr/include \
-	      -DCMAKE_LIBRARY_PATH=$(PKG_CONFIG_SYSROOT_DIR)/usr/lib \
+	      -DCMAKE_LIBRARY_PATH="$(PKG_CONFIG_SYSROOT_DIR)/usr/lib;$(PKG_CONFIG_SYSROOT_DIR)/usr/lib64" \
 	      -DLINUX_KERNEL_DIR=$(PKG_CONFIG_SYSROOT_DIR)/usr/src/kernel \
 	      -DCROSS_PREFIX=arm-oe-linux-gnueabi- \
 	      -DARCH=arm \
-	      -DGLIB_PKG_INCLUDE_DIRS="$(PKG_CONFIG_SYSROOT_DIR)/usr/include/glib-2.0;$(PKG_CONFIG_SYSROOT_DIR)/usr/lib/glib-2.0/include" \
+	      -DGLIB_PKG_INCLUDE_DIRS="$(PKG_CONFIG_SYSROOT_DIR)/usr/include/glib-2.0;$(PKG_CONFIG_SYSROOT_DIR)/usr/lib/glib-2.0/include;$(PKG_CONFIG_SYSROOT_DIR)/usr/lib64/glib-2.0/include" \
 	      -DGLIB_PKG_LIBRARIES=glib-2.0 \
 	      -DALSA_INCLUDE_DIRS=$(PKG_CONFIG_SYSROOT_DIR)/usr/include/alsa \
 	      -DALSA_LIBRARIES=asound \
