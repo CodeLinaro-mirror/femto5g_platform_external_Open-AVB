@@ -11,6 +11,10 @@ if (AVB_FEATURE_GSTREAMER)
 	set(GST_INTF intf_mpeg2ts_gst intf_mjpeg_gst intf_h264_gst)
 endif()
 
+if (AVB_FEATURE_INTF_ALSA2)
+	set (ALSA_INTF alsa_intf)
+endif()
+
 add_executable ( openavb_host openavb_host.c )
 target_link_libraries( openavb_host
 	map_ctrl
@@ -36,7 +40,7 @@ target_link_libraries( openavb_host
 	avbTl
 	${PLATFORM_LINK_LIBRARIES}
 	${ALSA_LIBRARIES}
-	alsa_intf
+	${ALSA_INTF}
 	${GSTRTP_PKG_LIBRARIES}
 	${GLIB_PKG_LIBRARIES}
 	${GST_PKG_LIBRARIES}
@@ -72,7 +76,7 @@ target_link_libraries( openavb_harness
 	avbTl
 	${PLATFORM_LINK_LIBRARIES}
 	${ALSA_LIBRARIES}
-	alsa_intf
+	${ALSA_INTF}
 	${GSTRTP_PKG_LIBRARIES}
 	${GLIB_PKG_LIBRARIES}
 	${GST_PKG_LIBRARIES}

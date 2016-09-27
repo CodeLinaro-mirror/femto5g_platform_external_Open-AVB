@@ -1555,4 +1555,3 @@ extern DLL_EXPORT bool openavbIntfAlsa2DualInitialize(media_q_t *pMediaQ, openav
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
 	return TRUE;
 }
-

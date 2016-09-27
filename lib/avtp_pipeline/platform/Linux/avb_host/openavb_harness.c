@@ -75,8 +75,10 @@ extern bool openavbIntfClkRefInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *p
 
 // Linux interface modules
 extern bool openavbIntfAlsaInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
+#ifdef AVB_FEATURE_INTF_ALSA2
 extern bool openavbIntfAlsa2Initialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 extern bool openavbIntfAlsa2DualInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
+#endif
 extern bool openavbIntfMjpegGstInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 extern bool openavbIntfMpeg2tsFileInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 extern bool openavbIntfMpeg2tsGstInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
@@ -207,8 +209,10 @@ int main(int argc, char *argv[])
 	registerStaticIntfModule(openavbIntfViewerInitialize);
 	registerStaticIntfModule(openavbIntfClkRefInitialize);
 	registerStaticIntfModule(openavbIntfAlsaInitialize);
+#ifdef AVB_FEATURE_INTF_ALSA2
 	registerStaticIntfModule(openavbIntfAlsa2Initialize);
 	registerStaticIntfModule(openavbIntfAlsa2DualInitialize);
+#endif
 #ifdef AVB_FEATURE_GSTREAMER
 	registerStaticIntfModule(openavbIntfMjpegGstInitialize);
 #endif
