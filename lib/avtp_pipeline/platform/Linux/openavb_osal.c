@@ -43,7 +43,9 @@ extern DLL_EXPORT bool osalAVBInitialize(const char* ifname,
 	// Unused parameter
 	(void) endpointIniFile;
 	avbLogInit();
-	osalAVBTimeInit();
+	if (!osalAVBTimeInit()) {
+		return FALSE;
+	}
 	openavbQmgrInitialize(FQTSS_MODE_HW_CLASS, 0, ifname, 0, 0, 0);
 	return TRUE;
 }
