@@ -31,7 +31,12 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #ifndef _EAVBTASKS_H
 #define _EAVBTASKS_H
 
+#include <limits.h>
+
 #define THREAD_STACK_SIZE 									65536
+#if THREAD_STACK_SIZE < PTHREAD_STACK_MIN
+#define THREAD_STACK_SIZE							PTHREAD_STACK_MIN
+#endif
 
 ///////////////////////////
 // Platform code Tasks values
