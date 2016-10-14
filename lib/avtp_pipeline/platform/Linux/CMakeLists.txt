@@ -111,6 +111,9 @@ endif ()
 if (AVB_FEATURE_NEUTRINO)
   set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DAVB_FEATURE_NEUTRINO=1" )
 endif ()
+if (AVB_FEATURE_INTF_ALSA2)
+	set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DAVB_FEATURE_INTF_ALSA2=1" )
+endif ()
 
 #Export Platform defines
 if ( PLATFORM_DEFINE )
