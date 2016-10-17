@@ -394,9 +394,11 @@ bool TicketingLock::lock( bool *got ) {
 		ret = false;
 		goto done;
 	}
-
+#ifdef ANDROID
+	if( yield ) sched_yield();
+#else
 	if( yield ) pthread_yield();
-
+#endif
  done:
 	return ret;
 }
@@ -612,7 +614,11 @@ LinuxThread::~LinuxThread() {
 
 LinuxSharedMemoryIPC::~LinuxSharedMemoryIPC() {
 	munmap(master_offset_buffer, SHM_SIZE);
+#ifdef ANDROID
+	close(shm_fd);
+#else
 	shm_unlink(SHM_NAME);
+#endif
 }
 
 bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
@@ -637,8 +643,11 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
 	if( grp == NULL ) {
 		XPTPD_ERROR( "Group %s not found, will try root (0) instead", group_name );
 	}
-
+#ifdef ANDROID
+	shm_fd = open( SHM_NAME, O_RDWR | O_CREAT, 0660 );
+#else
 	shm_fd = shm_open( SHM_NAME, O_RDWR | O_CREAT, 0660 );
+#endif
 	if( shm_fd == -1 ) {
 		XPTPD_ERROR( "shm_open(): %s", strerror(errno) );
 		goto exit_error;
@@ -677,7 +686,11 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
 	}
 	return true;
  exit_unlink:
+#ifdef ANDROID
+	close( shm_fd );
+#else
 	shm_unlink( SHM_NAME );
+#endif
  exit_error:
 	return false;
 }
@@ -713,7 +726,11 @@ bool LinuxSharedMemoryIPC::update
 void LinuxSharedMemoryIPC::stop() {
 	if( master_offset_buffer != NULL ) {
 		munmap( master_offset_buffer, SHM_SIZE );
-		shm_unlink( SHM_NAME );
+#ifdef ANDROID
+	close( shm_fd );
+#else
+	shm_unlink( SHM_NAME );
+#endif
 	}
 }
 

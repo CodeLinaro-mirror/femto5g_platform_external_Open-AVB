@@ -33,6 +33,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include <sys/ioctl.h>
 #include <linux/if_packet.h>
 #include <linux/filter.h>
+#include <linux/if_ether.h>
 
 #ifdef USE_GLIB
 #include <glib.h>

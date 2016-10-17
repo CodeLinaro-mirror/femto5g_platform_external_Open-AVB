@@ -350,7 +350,7 @@ bool openavbMapMjpegRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 
 			if (pMediaQItem->itemSize >= dataLen - TOTAL_HEADER_SIZE) {
 				memcpy(pMediaQItem->pPubData, pPayload, payloadLen);
-				pMediaQItem->dataLen = dataLen - TOTAL_HEADER_SIZE;
+				pMediaQItem->dataLen = payloadLen;
 			}
 			else {
 				AVB_LOG_ERROR("Data to large for media queue.");

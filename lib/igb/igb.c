@@ -53,6 +53,10 @@
 #include "e1000_82575.h"
 #include "igb_internal.h"
 
+#ifdef ANDROID
+#include <sys/endian.h>
+#endif
+
 #ifdef USE_GLIB
 #define strlcpy g_strlcpy
 #define strlcat g_strlcat

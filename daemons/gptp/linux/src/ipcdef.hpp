@@ -73,6 +73,9 @@ typedef struct {
 */
 
 #define SHM_SIZE (sizeof(gPtpTimeData) + sizeof(pthread_mutex_t)) 	/*!< Shared memory size*/
+#ifdef ANDROID
+#define SHM_NAME  "/dev/ptpshm"		/*!< Shared memory name*/
+#else
 #define SHM_NAME  "/ptp"		/*!< Shared memory name*/
-
+#endif
 #endif/*IPCDEF_HPP*/

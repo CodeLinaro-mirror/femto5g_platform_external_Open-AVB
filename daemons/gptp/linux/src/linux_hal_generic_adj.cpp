@@ -36,7 +36,11 @@
 #define _TIME_H  1
 #define _STRUCT_TIMEVAL 1
 #include <linux_hal_generic.hpp>
+#ifdef ANDROID
+#include <sys/syscall.h>
+#else
 #include <syscall.h>
+#endif
 #include <math.h>
 
 bool LinuxTimestamperGeneric::resetFrequencyAdjustment() {

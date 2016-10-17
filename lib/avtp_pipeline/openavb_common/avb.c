@@ -31,7 +31,11 @@
 
 #include <netinet/in.h>
 
+#ifdef ANDROID
+#include <linux/pci.h>
+#else
 #include <pci/pci.h>
+#endif
 
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -39,7 +43,6 @@
 #include <sys/stat.h>
 
 #include "avb.h"
-
 #ifdef USE_GLIB
 #include <glib.h>
 #define strlcpy g_strlcpy
@@ -48,6 +51,7 @@
 
 int pci_connect(device_t * igb_dev)
 {
+#ifndef ANDROID
 	char devpath[IGB_BIND_NAMESZ];
 	struct pci_access *pacc;
 	struct pci_dev *dev;
@@ -96,13 +100,17 @@ int pci_connect(device_t * igb_dev)
 	return ENXIO;
 
 out:	pci_cleanup(pacc);
-
+#endif
 	return 0;
 }
 
 int gptpinit(int *shm_fd, char **memory_offset_buffer)
 {
+#ifdef ANDROID
+	*shm_fd = open(SHM_NAME, O_RDWR, 0);
+#else
 	*shm_fd = shm_open(SHM_NAME, O_RDWR, 0);
+#endif
 	if (*shm_fd == -1) {
 		perror("shm_open()");
 		return false;
@@ -113,7 +121,11 @@ int gptpinit(int *shm_fd, char **memory_offset_buffer)
 	if (*memory_offset_buffer == (char *)-1) {
 		perror("mmap()");
 		*memory_offset_buffer = NULL;
+#ifdef ANDROID
+		close(*shm_fd);
+#else
 		shm_unlink(SHM_NAME);
+#endif
 		return false;
 	}
 	return true;

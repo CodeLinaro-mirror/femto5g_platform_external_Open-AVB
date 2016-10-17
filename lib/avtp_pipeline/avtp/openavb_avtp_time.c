@@ -44,7 +44,9 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 
 #define OPENAVB_AVTP_TIME_MAX_TS_DIFF (0x7FFFFFFF)
 
+#ifndef ANDROID
 #include "openavb_avtp_time_osal.c"
+#endif
 
 static U64 x_getNsTime(timespec_t *tmTime)
 {

@@ -37,6 +37,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include <pthread.h>
 #include <signal.h>
 #include <dlfcn.h>
+#include <linux/if_ether.h>
 #include "ini.h"
 
 #include "openavb_platform.h"
@@ -70,8 +71,12 @@ typedef struct {
 bool parse_mac(const char *str, cfg_mac_t *mac)
 {
 	memset(&mac->buffer, 0, sizeof(struct ether_addr));
-
+#ifdef ANDROID
+	mac->mac = ether_aton(str);
+	memcpy(&mac->buffer, mac->mac, ETH_ALEN);
+#else
 	mac->mac = ether_aton_r(str, &mac->buffer);
+#endif
 	if (mac->mac)
 		return TRUE;
 

@@ -45,7 +45,11 @@
 #include <fcntl.h>
 #include <linux/net_tstamp.h>
 #include <linux/ptp_clock.h>
+#ifdef ANDROID
+#include <sys/syscall.h>
+#else
 #include <syscall.h>
+#endif
 #include <limits.h>
 
 #define TX_PHY_TIME 184

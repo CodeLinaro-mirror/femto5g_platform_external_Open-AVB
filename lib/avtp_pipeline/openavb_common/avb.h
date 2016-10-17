@@ -31,7 +31,11 @@
 #define IGB_BIND_NAMESZ		24
 
 #define SHM_SIZE 4*8 + sizeof(pthread_mutex_t) /* 3 - 64 bit and 2 - 32 bits */
+#ifdef ANDROID
+#define SHM_NAME  "/dev/ptpshm"
+#else
 #define SHM_NAME  "/ptp"
+#endif
 
 #define MAX_SAMPLE_VALUE ((1U << ((sizeof(int32_t)*8)-1))-1)
 

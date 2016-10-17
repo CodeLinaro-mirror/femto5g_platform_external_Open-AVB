@@ -1,16 +1,16 @@
 /*************************************************************************************************************
 Copyright (c) 2012-2015, Symphony Teleca Corporation, a Harman International Industries, Incorporated company
 All rights reserved.
- 
+
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
- 
+
 1. Redistributions of source code must retain the above copyright notice, this
    list of conditions and the following disclaimer.
 2. Redistributions in binary form must reproduce the above copyright notice,
    this list of conditions and the following disclaimer in the documentation
    and/or other materials provided with the distribution.
- 
+
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS LISTED "AS IS" AND
 ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -21,10 +21,10 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- 
-Attributions: The inih library portion of the source code is licensed from 
-Brush Technology and Ben Hoyt - Copyright (c) 2009, Brush Technology and Copyright (c) 2009, Ben Hoyt. 
-Complete license and copyright information can be found at 
+
+Attributions: The inih library portion of the source code is licensed from
+Brush Technology and Ben Hoyt - Copyright (c) 2009, Brush Technology and Copyright (c) 2009, Ben Hoyt.
+Complete license and copyright information can be found at
 https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 *************************************************************************************************************/
 
@@ -67,6 +67,14 @@ extern bool openavbIntfToneGenInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *
 extern bool openavbIntfViewerInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 
 // Linux interface modules
+#ifdef ANDROID
+extern bool openavbIntfMpeg2tsFileInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
+extern bool openavbIntfWavFileInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
+extern bool openavbIntfMjpegFileInitialize(media_q_t * pMediaQ,openavb_intf_cb_t * pIntfCB);
+extern bool openavbIntfMjpegOpenglInitialize(media_q_t * pMediaQ,openavb_intf_cb_t * pIntfCB);
+extern bool openavbIntfTinyalsaInitialize(media_q_t * pMediaQ,openavb_intf_cb_t * pIntfCB);
+extern bool openavbIntfH264RtpFileInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
+#else
 extern bool openavbIntfAlsaInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 #ifdef AVB_FEATURE_INTF_ALSA2
 extern bool openavbIntfAlsa2Initialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
@@ -77,6 +85,7 @@ extern bool openavbIntfMpeg2tsFileInitialize(media_q_t *pMediaQ, openavb_intf_cb
 extern bool openavbIntfMpeg2tsGstInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 extern bool openavbIntfWavFileInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 extern bool openavbIntfH264RtpGstInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
+#endif
 
 /***********************************************
  * Signal handler - used to respond to signals.
@@ -106,6 +115,7 @@ void openavbTlHostUsage(char *programName)
 		"\n"
 		"Usage: %s [options] file...\n"
 		"  -I val     Use given (val) interface globally, can be overriden by giving the ifname= option to the config line.\n"
+		"  -e endpoint.ini.\n"
 		"\n"
 		"Examples:\n"
 		"  %s talker.ini\n"
@@ -130,6 +140,7 @@ int main(int argc, char *argv[])
 	int iniIdx = 0;
 	char *programName;
 	char *optIfnameGlobal = NULL;
+	char *endpointIniFile = NULL;
 
 	programName = strrchr(argv[0], '/');
 	programName = programName ? programName + 1 : argv[0];
@@ -145,11 +156,14 @@ int main(int argc, char *argv[])
 	// Process command line
 	bool optDone = FALSE;
 	while (!optDone) {
-		int opt = getopt(argc, argv, "hI:");
+		int opt = getopt(argc, argv, "hI:e:");
 		if (opt != EOF) {
 			switch (opt) {
 				case 'I':
 					optIfnameGlobal = strdup(optarg);
+					break;
+				case 'e':
+					endpointIniFile = strdup(optarg);
 					break;
 				case 'h':
 				default:
@@ -162,7 +176,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	osalAVBInitialize(optIfnameGlobal, NULL);
+	osalAVBInitialize(optIfnameGlobal,endpointIniFile);
 
 	iniIdx = optind;
 	U32 tlCount = argc - iniIdx;
@@ -210,6 +224,14 @@ int main(int argc, char *argv[])
 	registerStaticIntfModule(openavbIntfNullInitialize);
 	//registerStaticIntfModule(openavbIntfToneGenInitialize);
 	registerStaticIntfModule(openavbIntfViewerInitialize);
+#ifdef ANDROID
+	registerStaticIntfModule(openavbIntfMpeg2tsFileInitialize);
+	registerStaticIntfModule(openavbIntfWavFileInitialize);
+	registerStaticIntfModule(openavbIntfMjpegFileInitialize);
+	registerStaticIntfModule(openavbIntfTinyalsaInitialize);
+	registerStaticIntfModule(openavbIntfMjpegOpenglInitialize);
+	registerStaticIntfModule(openavbIntfH264RtpFileInitialize);
+#else
 	registerStaticIntfModule(openavbIntfAlsaInitialize);
 #ifdef AVB_FEATURE_INTF_ALSA2
 	registerStaticIntfModule(openavbIntfAlsa2Initialize);
@@ -226,7 +248,7 @@ int main(int argc, char *argv[])
 #ifdef AVB_FEATURE_GSTREAMER
 	registerStaticIntfModule(openavbIntfH264RtpGstInitialize);
 #endif
-
+#endif
 	tlHandleList = calloc(1, sizeof(tl_handle_t) * tlCount);
 	if (tlHandleList == NULL) {
 		AVB_LOG_ERROR("Out of memory");

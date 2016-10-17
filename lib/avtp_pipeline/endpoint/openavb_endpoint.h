@@ -42,8 +42,11 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 
 #define AVB_ENDPOINT_HANDLE_INVALID (-1)
 #define ENDPOINT_RECONNECT_SECONDS 	10
+#ifdef ANDROID
+#define AVB_ENDPOINT_UNIX_PATH 		"/dev/avb_endpoint"
+#else
 #define AVB_ENDPOINT_UNIX_PATH 		"/tmp/avb_endpoint"
-
+#endif
 typedef enum {
 	clientNone,
 	clientTalker,

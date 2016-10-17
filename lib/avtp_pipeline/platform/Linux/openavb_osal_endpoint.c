@@ -45,10 +45,16 @@ extern DLL_EXPORT bool osalAVBInitialize(const char* ifname,
 	if (!osalAVBTimeInit()) {
 		return FALSE;
 	}
+#ifdef ANDROID
+	if (!startEndpoint(/*FQTSS_MODE_HW_CLASS*/FQTSS_MODE_DISABLED, 0, ifname, 0, 0, 0,
+			   endpointIniFile)) {
+		return FALSE;
+#else
 	if (!startEndpoint(FQTSS_MODE_HW_CLASS, 0, ifname, 0, 0, 0,
 			   endpointIniFile)) {
 		return FALSE;
-	} else {
+#endif
+	}  else {
 		return TRUE;
 	}
 }

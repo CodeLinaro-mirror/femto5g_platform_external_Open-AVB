@@ -31,12 +31,13 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 /*
  * Rawsock implemenation which uses libpcap for receiving and transmitting packets.
 */
+#include <linux/if_ether.h>
 #include "pcap_rawsock.h"
 #include "simple_rawsock.h"
 #include "openavb_trace.h"
+#include "openavb_log.h"
 
 #define	AVB_LOG_COMPONENT	"Raw Socket"
-#include "openavb_log.h"
 
 // Open a rawsock for TX or RX
 void *pcapRawsockOpen(pcap_rawsock_t* rawsock, const char *ifname, bool rx_mode, bool tx_mode, U16 ethertype, U32 frame_size, U32 num_frames)
