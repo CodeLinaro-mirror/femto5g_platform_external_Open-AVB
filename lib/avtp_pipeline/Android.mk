@@ -35,6 +35,7 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH) \
 					$(LOCAL_PATH)/platform/platTCAL/GNU \
 					$(LOCAL_PATH)/util \
 					$(LOCAL_PATH)/../igb \
+					$(LOCAL_PATH)/../libmjpegavbsink \
 					$(LOCAL_PATH)/platform/x86_i210 \
 					$(LOCAL_PATH)/qmgr \
 					$(LOCAL_PATH)/srp \
@@ -113,6 +114,7 @@ LOCAL_STATIC_LIBRARIES += 	libpcap \
 
 LOCAL_SHARED_LIBRARIES += 	libtinyalsa \
 				liblog \
+				libmjpegavbsink \
 
 LOCAL_MODULE := openavb_harness
 

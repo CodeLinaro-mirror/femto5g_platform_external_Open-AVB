@@ -135,8 +135,12 @@ void openavbIntfMjpegFileCfgCB(media_q_t *pMediaQ, const char *name, const char 
 		pPvtData->call_rate = atoi(value);
 	}
 	else if(strcmp(name, "intf_nv_frame_rate") == 0) {
-		pPvtData->frame_time = 1000000000/ (U64)atoi(value);
-		AVB_LOGF_INFO("Frame_Time %d framePerSec %d\n", pPvtData->frame_time, atoi(value));
+        U32 val = (U32)atoi(value);
+        if (val != 0) {
+            pPvtData->frame_time = 1000000000/(U64)val;
+            printf("Frame_Time %" PRIu64 " framePerSec %d\n",
+                    pPvtData->frame_time, val);
+        }
 	}
 
 }
@@ -221,14 +225,41 @@ bool openavbIntfMjpegFileTxCB(media_q_t *pMediaQ)
 	static U32 cnt = 0;
 	avtp_time_t cur_time;
 	U8 *buf;
-	static int first = 0;
+	static int wait = 0;
 
 	//Transmit data --BEGIN--
 	media_q_item_t *pMediaQItem = openavbMediaQHeadLock(pMediaQ);
 	if (pMediaQItem) {
-		//TODO: PARSE THE FILE FOR APPROPRIATE READ_SIZE NUMBER OF BYTES
-		//ALSO NOTE IF YOU'VE REACHED EoI OR IT'S A NEW IMAGE
+        if (wait) {
+            openavbAvtpTimeSetToWallTime(&cur_time);
+            if(cur_time.timeNsec < next_tx_time){
+                cnt++;
+                return TRUE;
+            }
+            wait = 0;
+            cnt = 0;
+            //printf("cur time %lld next time %lld count %d\n", cur_time.timeNsec, next_tx_time, cnt);
+        }
 
+		//parse for FFD8 -> Start of Image marker
+		while(pPvtData->find_soi){
+			//make sure not to go out of bounds of the file
+			if (pPvtData->loc + 1 == pPvtData->statbuf.st_size) {
+				pPvtData->loc = 0;
+			}
+			if (pPvtData->fp[pPvtData->loc] == 0xFF && pPvtData->fp[pPvtData->loc+1] == 0xD8){
+				//found SoI
+				pPvtData->find_soi = FALSE;
+
+				// If FPS limited, calculate when the next frame should go out
+				if (pPvtData->frame_time != 0) {
+				    openavbAvtpTimeSetToWallTime(&cur_time);
+				    next_tx_time = cur_time.timeNsec + pPvtData->frame_time;
+				}
+				break;
+			}
+			pPvtData->loc++;
+		}
 		//copy over the a read_size amount of data, unless that'll hit eof, then copy up to eof
 		//afterwards check for the End of Image flag
 		if (pPvtData->loc + pPvtData->read_size >= pPvtData->statbuf.st_size) {
@@ -265,15 +296,16 @@ bool openavbIntfMjpegFileTxCB(media_q_t *pMediaQ)
 			// next time get avtp timestamp
 			pPvtData->get_avtp_timestamp = TRUE;
 			pPvtData->find_soi = TRUE;
-
-
+			if (pPvtData->frame_time != 0) {
+			    // If FPS limited, wait before sending next frame
+			    wait = 1;
+			}
 		}
 		else {
 			// it means this is a new bunch of fragments
 			// only first timestamp need to be taken
 			if (pPvtData->get_avtp_timestamp) {
 				openavbAvtpTimeSetToWallTime(pMediaQItem->pAvtpTime);
-				first = 1;
 				pPvtData->get_avtp_timestamp = FALSE;
 			}
 			((media_q_item_map_mjpeg_pub_data_t *)pMediaQItem->pPubMapData)->lastFragment = FALSE;

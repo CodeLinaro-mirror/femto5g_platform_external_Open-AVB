@@ -46,6 +46,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_mediaq_pub.h"
 #include "openavb_intf_pub.h"
 #include "openavb_map_mjpeg_pub.h"
+#include "libmjpegavbsink.h"
 
 #define	AVB_LOG_COMPONENT	"MJPEG OpenGL Interface"
 #include "openavb_log_pub.h"
@@ -301,7 +302,7 @@ void openavbIntfMjpegOpenglRxInitCB(media_q_t *pMediaQ)
 	}
 
 	if (!pPvtData->fd) {
-                //TODO need to intialize the sink libray to render the video
+		mjpeg_avb_sink_init();
 		pPvtData->fd = 1;
 	}
 }
@@ -334,7 +335,8 @@ bool openavbIntfMjpegOpenglRxCB(media_q_t *pMediaQ)
 			continue;
 		}
 
-		//TODO need to sink the media data to reder it on the screen
+		mjpeg_avb_sink_buf(pMediaQItem->pPubData, pMediaQItem->dataLen,
+				((media_q_item_map_mjpeg_pub_data_t *)pMediaQItem->pPubMapData)->lastFragment);
 
 		if (((media_q_item_map_mjpeg_pub_data_t *)pMediaQItem->pPubMapData)->lastFragment) {
 			pPvtData->get_avtp_timestamp = TRUE;
@@ -372,6 +374,10 @@ void openavbIntfMjpegOpenglEndCB(media_q_t *pMediaQ)
 		AVB_LOG_ERROR("Private interface module data not allocated.");
 		return;
 	}
+
+	mjpeg_avb_sink_end();
+	pPvtData->fd = 0;
+
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
 }
 
