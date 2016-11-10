@@ -22,6 +22,7 @@ build/Makefile:
 	cmake -DCMAKE_TOOLCHAIN_FILE=../platform/Linux/x86_i210_linux.cmake \
 	      -DAVB_FEATURE_ENDPOINT=$(AVB_FEATURE_ENDPOINT) \
 	      -DAVB_FEATURE_GSTREAMER=$(AVB_FEATURE_GSTREAMER) \
+	      -DGSTREAMER_1_0=$(GSTREAMER_1_0) \
 	      -DAVB_FEATURE_NEUTRINO=$(AVB_FEATURE_NEUTRINO) \
 	      -DAVB_FEATURE_INTF_ALSA2=$(AVB_FEATURE_INTF_ALSA2) \
 	      -DCMAKE_FRAMEWORK_PATH=$(PKG_CONFIG_SYSROOT_DIR)/usr/include \
@@ -30,7 +31,7 @@ build/Makefile:
 	      -DCROSS_PREFIX=arm-oe-linux-gnueabi- \
 	      -DARCH=arm \
 	      -DGLIB_PKG_INCLUDE_DIRS="$(PKG_CONFIG_SYSROOT_DIR)/usr/include/glib-2.0;$(PKG_CONFIG_SYSROOT_DIR)/usr/lib/glib-2.0/include;$(PKG_CONFIG_SYSROOT_DIR)/usr/lib64/glib-2.0/include" \
-	      -DGLIB_PKG_LIBRARIES=glib-2.0 \
+	      -DGLIB_PKG_LIBRARIES=glib-2.0 gobject-2.0 \
 	      -DALSA_INCLUDE_DIRS=$(PKG_CONFIG_SYSROOT_DIR)/usr/include/alsa \
 	      -DALSA_LIBRARIES=asound \
               ..
