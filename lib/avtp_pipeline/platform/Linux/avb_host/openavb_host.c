@@ -74,6 +74,7 @@ extern bool openavbIntfMjpegFileInitialize(media_q_t * pMediaQ,openavb_intf_cb_t
 extern bool openavbIntfMjpegOpenglInitialize(media_q_t * pMediaQ,openavb_intf_cb_t * pIntfCB);
 extern bool openavbIntfTinyalsaInitialize(media_q_t * pMediaQ,openavb_intf_cb_t * pIntfCB);
 extern bool openavbIntfH264RtpFileInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
+extern bool openavbIntfMpeg2tsStreamInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 #else
 extern bool openavbIntfAlsaInitialize(media_q_t *pMediaQ, openavb_intf_cb_t *pIntfCB);
 #ifdef AVB_FEATURE_INTF_ALSA2
@@ -231,6 +232,7 @@ int main(int argc, char *argv[])
 	registerStaticIntfModule(openavbIntfTinyalsaInitialize);
 	registerStaticIntfModule(openavbIntfMjpegOpenglInitialize);
 	registerStaticIntfModule(openavbIntfH264RtpFileInitialize);
+	registerStaticIntfModule(openavbIntfMpeg2tsStreamInitialize);
 #else
 	registerStaticIntfModule(openavbIntfAlsaInitialize);
 #ifdef AVB_FEATURE_INTF_ALSA2
