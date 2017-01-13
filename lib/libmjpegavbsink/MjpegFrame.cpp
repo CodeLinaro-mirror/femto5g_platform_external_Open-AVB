@@ -65,7 +65,7 @@ MjpegFrame::MjpegFrame(AvbMjpegSink* parent)
 }
 
 MjpegFrame::~MjpegFrame() {
-    delete mJpegData;
+    delete[] mJpegData;
 }
 
 void MjpegFrame::Reset() {
