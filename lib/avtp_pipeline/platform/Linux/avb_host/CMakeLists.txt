@@ -34,6 +34,8 @@ target_link_libraries( openavb_host
 	intf_viewer
 	intf_alsa
 	intf_mpeg2ts_file
+	intf_mjpeg_file
+	intf_h264_file
 	intf_wav_file
         intf_clk_ref
 	${GST_INTF}
@@ -70,6 +72,8 @@ target_link_libraries( openavb_harness
 	intf_viewer
 	intf_alsa
 	intf_mpeg2ts_file
+	intf_mjpeg_file
+	intf_h264_file
 	intf_wav_file
         intf_clk_ref
 	${GST_INTF}
