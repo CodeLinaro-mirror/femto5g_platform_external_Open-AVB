@@ -40,11 +40,10 @@ is open for contributions from other vendors.
 
 LICENSING AND CONTRIBUTION GUIDELINES
 ======================================
-To the extent possible, content is licensed under BSD licensing terms. Linux 
-kernel mode components are provided under a GPLv2 license. The specific license 
-information is included in the various directories to eliminate confusion. We 
-encourage you to review the ‘LICENSE’ file included in the head of the 
-various subdirectories for details.
+To the extent possible, content is licensed under BSD licensing terms. The
+specific license information is included in the various directories to eliminate
+confusion. We encourage you to review the ‘LICENSE’ file included in the
+head of the various subdirectories for details.
 
 Third party submissions are welcomed. Our intent for third party content 
 contributions is to enable derivative products with minimal licensing 

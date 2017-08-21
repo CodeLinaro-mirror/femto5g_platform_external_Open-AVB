@@ -5,10 +5,6 @@ descend = \
 help:
 	@echo 'Possible targets:'
 	@echo ''
-	@echo '  igb               - igb module'
-	@echo ''
-	@echo '  lib               - igb library'
-	@echo ''
 	@echo '  ntn               - neutrino library'
 	@echo ''
 	@echo '  daemons_all       - build all daemons (mrpd gptp maap)'
@@ -33,18 +29,6 @@ help:
 	@echo '    the respective build directory.'
 	@echo '  clean: a summary clean target to clean _all_ folders'
 	@echo ''
-
-igb: FORCE
-	$(call descend,kmod/$@)
-
-igb_clean:
-	$(call descend,kmod/igb/,clean)
-
-lib: FORCE
-	$(call descend,lib/igb)
-
-lib_clean:
-	$(call descend,lib/igb/,clean)
 
 ntn: FORCE
 	$(call descend,lib/neutrino)
@@ -75,14 +59,12 @@ daemons_all: mrpd maap gptp
 daemons_all_clean: mrpd_clean gptp_clean maap_clean
 
 simple_talker:
-	$(MAKE) lib
 	$(call descend,examples/$@)
 
 simple_talker_clean:
 	$(call descend,examples/simple_talker/,clean)
 
 simple_listener:
-	$(MAKE) lib
 	$(call descend,examples/$@)
 
 simple_listener_clean:
@@ -95,33 +77,30 @@ mrp_client_clean:
 	$(call descend,examples/mrp_client/,clean)
 
 jackd-talker:
-	$(MAKE) lib
 	$(call descend,examples/$@)
 
 jackd-talker_clean:
 	$(call descend,examples/jackd-talker/,clean)
 
 jackd-listener:
-	$(MAKE) lib
 	$(call descend,examples/$@)
 
 jackd-listener_clean:
 	$(call descend,examples/jackd-listener/,clean)
 
 live_stream:
-	$(MAKE) lib
 	$(call descend,examples/$@)
 
 live_stream_clean:
 	$(call descend,examples/live_stream/,clean)
 
-avtp_pipeline: lib ntn
+avtp_pipeline: ntn
 	$(MAKE) -s -C lib/avtp_pipeline -f avtp_pipeline.mk
 
 avtp_pipeline_clean:
 	$(MAKE) -s -C lib/avtp_pipeline -f avtp_pipeline.mk clean
 
-avtp_pipeline_doc: lib ntn
+avtp_pipeline_doc: ntn
 	$(MAKE) -s -C lib/avtp_pipeline -f avtp_pipeline.mk doc
 
 examples_all: simple_talker simple_listener mrp_client live_stream jackd-talker \
