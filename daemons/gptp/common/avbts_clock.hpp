@@ -49,6 +49,18 @@
 #define UPPER_FREQ_LIMIT  250.0		/*!< Upper frequency limit */
 #define LOWER_FREQ_LIMIT -250.0		/*!< Lower frequency limit */
 
+#define US_PER_SEC 1000000
+#define PPM_OFFSET_TO_RATIO(ppm) ((ppm) / ((FrequencyRatio)US_PER_SEC) + 1)
+
+/* This is the threshold in ns for which frequency adjustments will be made */
+#define PHASE_ERROR_THRESHOLD (10000000)
+
+/* This is the maximum count of phase error, outside of the threshold before
+   adjustment is performed */
+#define PHASE_ERROR_MAX_COUNT (6)
+
+#define NEGATIVE_TIME_JUMP 0.0
+
 /**
  * Provides the clock quality abstraction.
  * Represents the quality of the clock
@@ -106,6 +118,7 @@ private:
 	bool _syntonize;
 	bool _new_syntonization_set_point;
 	float _ppm;
+	int _phase_error_violation;
 
 	IEEE1588Port *port_list[MAX_PORTS];
 	
@@ -479,6 +492,22 @@ public:
    */
   void newSyntonizationSetPoint() {
 	  _new_syntonization_set_point = true;
+  }
+
+  /**
+   * @brief  Restart PDelays on all ports
+   * @return void
+   */
+ void restartPDelayAll() {
+	  int number_ports, i, j = 0;
+	  IEEE1588Port **ports;
+
+	  getPortList( number_ports, ports );
+
+	  for( i = 0; i < number_ports; ++i ) {
+		  while( ports[j] == NULL ) ++j;
+		  ports[j]->restartPDelay();
+	  }
   }
 
   /**

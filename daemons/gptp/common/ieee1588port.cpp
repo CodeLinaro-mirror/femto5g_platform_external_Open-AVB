@@ -130,6 +130,7 @@ IEEE1588Port::IEEE1588Port
 
 	pdelay_count = 0;
 	sync_count = 0;
+	_peer_offset_init = false;
 }
 
 bool IEEE1588Port::init_port(int delay[4])
