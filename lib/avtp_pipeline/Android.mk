@@ -6,7 +6,9 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_CFLAGS := -Wall -Wextra -Wno-parentheses -ggdb -D_GNU_SOURCE -Wunreachable-code -DAVB_FEATURE_FQTSS
+LOCAL_CFLAGS := -Wall -Wextra -Wno-parentheses -ggdb -D_GNU_SOURCE -Wunreachable-code
+LOCAL_CFLAGS += -DAVB_FEATURE_FQTSS=1
+LOCAL_CFLAGS += -DAVB_FEATURE_ENDPOINT=1
 
 LOCAL_LDFLAGS += -Wl,--export-dynamic
 

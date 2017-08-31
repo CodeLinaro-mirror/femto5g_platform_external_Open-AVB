@@ -68,9 +68,15 @@ extern int domain_class_b_id;
 extern int domain_class_b_priority;
 extern u_int16_t domain_class_b_vid;
 
+#if AVB_FEATURE_ENDPOINT
+// In endpoint builds, these symbols are defined in openavb_endpoint_osal.c
 extern void mrp_attach_cb(unsigned char streamid[8], int subtype);
 extern void mrp_register_cb(unsigned char streamid[8], int declType, unsigned char destaddr[6], unsigned int max_frame_size, unsigned int max_interval_frames, uint16_t vid, unsigned int latency);
-
+#else
+// In non-endpoint builds mrp is not used, so just define empty functions
+void mrp_attach_cb(unsigned char streamid[8], int subtype) { };
+void mrp_register_cb(unsigned char streamid[8], int declType, unsigned char destaddr[6], unsigned int max_frame_size, unsigned int max_interval_frames, uint16_t vid, unsigned int latency) { };
+#endif
 
 /* functions */
 
