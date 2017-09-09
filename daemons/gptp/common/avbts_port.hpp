@@ -572,6 +572,14 @@ class IEEE1588Port {
 	}
 
 	/**
+	 * @brief  Restart PDelay
+	 * @return void
+	 */
+	void restartPDelay() {
+		_peer_offset_init = false;
+	}
+
+	/**
 	 * @brief  Gets port identity
 	 * @param  identity [out] Reference to PortIdentity
 	 * @return void

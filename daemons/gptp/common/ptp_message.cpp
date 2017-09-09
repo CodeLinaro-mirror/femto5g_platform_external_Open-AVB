@@ -897,7 +897,7 @@ void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 	FrequencyRatio local_clock_adjustment;
 	FrequencyRatio local_system_freq_offset;
 	FrequencyRatio master_local_freq_offset;
-	int correction;
+	uint64_t correction;
 
 	XPTPD_INFO("Processing a follow-up message");
 
@@ -938,25 +938,30 @@ void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 	}
 
 	master_local_freq_offset  =  tlv.getRateOffset();
-	master_local_freq_offset /= 2ULL << 41;
+	master_local_freq_offset /= 1ULL << 41;
 	master_local_freq_offset += 1.0;
 	master_local_freq_offset /= port->getPeerRateOffset();
 
-	correctionField = (uint64_t)
-		((correctionField >> 16)/master_local_freq_offset);
-	correction = (int) (delay + correctionField);
-	
+	correctionField /= 1 << 16;
+	correction = (int64_t)((delay * master_local_freq_offset) + correctionField );
+
 	if( correction > 0 )
 	  TIMESTAMP_ADD_NS( preciseOriginTimestamp, correction );
 	else TIMESTAMP_SUB_NS( preciseOriginTimestamp, -correction );
+
+	local_clock_adjustment = port->getClock()->calcMasterLocalClockRateDifference(
+			preciseOriginTimestamp, sync_arrival);
+
+	if( local_clock_adjustment == NEGATIVE_TIME_JUMP ) {
+		XPTPD_ERROR("Sync follow up indicates negative time jump - skip");
+		goto done;
+	}
+
 	scalar_offset  = TIMESTAMP_TO_NS( sync_arrival );
 	scalar_offset -= TIMESTAMP_TO_NS( preciseOriginTimestamp );
 
-	XPTPD_INFO
-		("Followup Correction Field: %Ld,%lu", correctionField >> 16,
-		 delay);
-	XPTPD_INFO
-		("FollowUp Scalar = %lld", scalar_offset);
+	XPTPD_INFO("FollowUp Correction Field: %Ld,%lu -- Scalar = %lld",
+			correctionField, delay, scalar_offset);
 
 	/* Otherwise synchronize clock with approximate time from Sync message */
 	uint32_t local_clock, nominal_clock_rate;
@@ -977,11 +982,6 @@ void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 		 "Device Time: %u,%u",
 	     system_time.seconds_ls, system_time.nanoseconds,
 	     device_time.seconds_ls, device_time.nanoseconds);
-
-	local_clock_adjustment =
-	  port->getClock()->
-	  calcMasterLocalClockRateDifference
-	  ( preciseOriginTimestamp, sync_arrival );
 
 	if( port->getPortState() != PTP_MASTER ) {
 		port->incSyncCount();
@@ -1427,8 +1427,7 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 		 remote_req_rx_timestamp.nanoseconds);
 
 	// Adjust turn-around time for peer to local clock rate difference
-	if 
-		( port->getPeerRateOffset() > .998 &&
+	if( port->getPeerRateOffset() > .998 &&
 		  port->getPeerRateOffset() < 1.002 ) {
 		turn_around = (int64_t) (turn_around * port->getPeerRateOffset());
 	}
@@ -1448,17 +1447,28 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 
 	{
 		uint64_t mine_elapsed;
-	    uint64_t theirs_elapsed;
-	    Timestamp prev_peer_ts_mine;
-	    Timestamp prev_peer_ts_theirs;
-	    FrequencyRatio rate_offset;
-	    if( port->getPeerOffset( prev_peer_ts_mine, prev_peer_ts_theirs )) {
-			mine_elapsed =  TIMESTAMP_TO_NS(request_tx_timestamp)-TIMESTAMP_TO_NS(prev_peer_ts_mine);
-			theirs_elapsed = TIMESTAMP_TO_NS(remote_req_rx_timestamp)-TIMESTAMP_TO_NS(prev_peer_ts_theirs);
+		uint64_t theirs_elapsed;
+		Timestamp prev_peer_ts_mine;
+		Timestamp prev_peer_ts_theirs;
+		FrequencyRatio rate_offset;
+		if( port->getPeerOffset( prev_peer_ts_mine, prev_peer_ts_theirs )) {
+			FrequencyRatio upper_ratio_limit, lower_ratio_limit;
+			upper_ratio_limit = PPM_OFFSET_TO_RATIO(UPPER_FREQ_LIMIT);
+			lower_ratio_limit = PPM_OFFSET_TO_RATIO(LOWER_FREQ_LIMIT);
+
+			mine_elapsed = TIMESTAMP_TO_NS(request_tx_timestamp) -
+					TIMESTAMP_TO_NS(prev_peer_ts_mine);
+
+			theirs_elapsed = TIMESTAMP_TO_NS(remote_req_rx_timestamp) -
+					TIMESTAMP_TO_NS(prev_peer_ts_theirs);
 			theirs_elapsed -= port->getLinkDelay();
 			theirs_elapsed += link_delay < 0 ? 0 : link_delay;
+
 			rate_offset =  ((FrequencyRatio) mine_elapsed)/theirs_elapsed;
-			port->setPeerRateOffset(rate_offset);
+			if( rate_offset < upper_ratio_limit && rate_offset > lower_ratio_limit ) {
+				port->setPeerRateOffset(rate_offset);
+			}
+
 			port->setAsCapable( true );
 		}
 	}

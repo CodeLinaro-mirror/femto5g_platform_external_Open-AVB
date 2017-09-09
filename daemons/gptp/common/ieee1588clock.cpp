@@ -44,6 +44,7 @@
 #include <stdlib.h>
 
 #include <string.h>
+#include <math.h>
 
 std::string ClockIdentity::getIdentityString()
 {
@@ -98,6 +99,8 @@ IEEE1588Clock::IEEE1588Clock
 	_syntonize = syntonize;
 	_new_syntonization_set_point = false;
 	_ppm = 0;
+
+	_phase_error_violation = 0;
 
 	_master_local_freq_offset_init = false;
 	_local_system_freq_offset_init = false;
@@ -326,13 +329,25 @@ FrequencyRatio IEEE1588Clock::calcMasterLocalClockRateDifference( Timestamp mast
 
 	inter_sync_time =
 		TIMESTAMP_TO_NS(sync_time) - TIMESTAMP_TO_NS(_prev_sync_time);
-	inter_master_time =
-		TIMESTAMP_TO_NS(master_time) -  TIMESTAMP_TO_NS(_prev_master_time);
+	/*inter_master_time =
+		TIMESTAMP_TO_NS(master_time) -  TIMESTAMP_TO_NS(_prev_master_time);*/
+	uint64_t master_time_ns = TIMESTAMP_TO_NS(master_time);
+	uint64_t prev_master_time_ns = TIMESTAMP_TO_NS(_prev_master_time);
+
+	inter_master_time = master_time_ns - prev_master_time_ns;
 
 	if( inter_sync_time != 0 ) {
 		ppt_offset = ((FrequencyRatio)inter_master_time)/inter_sync_time;
 	} else {
 		ppt_offset = 1.0;
+	}
+
+	if( master_time_ns < prev_master_time_ns ) {
+		XPTPD_ERROR("Negative time jump detected - inter_master_time: %lld, inter_sync_time: %lld, icorrect ppt_offset: %Lf",
+					   inter_master_time, inter_sync_time, ppt_offset);
+		_master_local_freq_offset_init = false;
+
+		return NEGATIVE_TIME_JUMP;
 	}
 
 	_prev_sync_time = sync_time;
@@ -360,8 +375,9 @@ void IEEE1588Clock::setMasterOffset
 	}
 
 	if( _syntonize ) {
-		if( _new_syntonization_set_point ) {
+		if( _new_syntonization_set_point || (_phase_error_violation > PHASE_ERROR_MAX_COUNT) ) {
 			_new_syntonization_set_point = false;
+			_phase_error_violation = 0;
 			if( _timestamper ) {
 				/* Make sure that there are no transmit operations
 				   in progress */
@@ -369,16 +385,28 @@ void IEEE1588Clock::setMasterOffset
 				_timestamper->HWTimestamper_adjclockphase
 					( -master_local_offset );
 				_master_local_freq_offset_init = false;
+				restartPDelayAll();
 				putTxLockAll();
 				master_local_offset = 0;
 			}
 		}
 		// Adjust for frequency offset
 		long double phase_error = (long double) -master_local_offset;
-		_ppm += (float) (INTEGRAL*phase_error +
-			 PROPORTIONAL*((master_local_freq_offset-1.0)*1000000));
-		if( _ppm < LOWER_FREQ_LIMIT ) _ppm = LOWER_FREQ_LIMIT;
-		if( _ppm > UPPER_FREQ_LIMIT ) _ppm = UPPER_FREQ_LIMIT;
+
+		if( fabsl(phase_error) > PHASE_ERROR_THRESHOLD ) {
+			++_phase_error_violation;
+		} else {
+			_phase_error_violation = 0;
+			_ppm += (float) (INTEGRAL*phase_error +
+					PROPORTIONAL * ((master_local_freq_offset - 1.0) * 1000000));
+		}
+
+		if( _ppm < LOWER_FREQ_LIMIT ) {
+			_ppm = LOWER_FREQ_LIMIT;
+		}
+		if( _ppm > UPPER_FREQ_LIMIT ) {
+			_ppm = UPPER_FREQ_LIMIT;
+		}
 		if( _timestamper ) {
 			if( !_timestamper->HWTimestamper_adjclockrate( _ppm )) {
 				XPTPD_ERROR( "Failed to adjust clock rate" );
