@@ -17,6 +17,10 @@ ifeq ($(call is-platform-sdk-version-at-least,25),true)
 LOCAL_CFLAGS += -DUSE_SK_CODEC
 endif
 
+ifeq ($(call is-platform-sdk-version-at-least,27),true)
+LOCAL_CFLAGS += -DNO_SK_LOCK
+endif
+
 LOCAL_CFLAGS += -Wall -Werror -Wunused -Wunreachable-code
 
 LOCAL_SHARED_LIBRARIES := \

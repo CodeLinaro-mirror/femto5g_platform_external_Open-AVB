@@ -269,7 +269,9 @@ nsecs_t GlSink::PostToDisplay(MjpegFrame* frame) {
     const SkBitmap& bitmap = frame->GetDecodedBitmap();
 
     // prepare for blending
+#ifndef NO_SK_LOCK
     bitmap.lockPixels();
+#endif
     const int w = mTexture.w = bitmap.width();
     const int h = mTexture.h = bitmap.height();
     void* p = bitmap.getPixels();
