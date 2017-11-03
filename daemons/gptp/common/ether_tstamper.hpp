@@ -31,37 +31,43 @@
 
 ******************************************************************************/
 
-#ifndef PTP_TYPES_HPP
-#define PTP_TYPES_HPP
+#ifndef ETHER_TSTAMPER_HPP
+#define ETHER_TSTAMPER_HPP
 
-/**@file*/
+#include <common_tstamper.hpp>
 
-#if defined(__clang__) &&  defined(__x86_64__)
-// Clang/llvm has incompatible long double (fp128) for x86_64.
-typedef double FrequencyRatio;		/*!< Frequency Ratio */
-#else
-typedef long double FrequencyRatio;	/*!< Frequency Ratio */
-#endif
+class EtherTimestamper : public CommonTimestamper
+{
+public:
+	/**
+	 * @brief  Gets the tx timestamp from hardware
+	 * @param  identity PTP port identity
+	 * @param  PTPMessageId Message ID
+	 * @param  timestamp [out] Timestamp value
+	 * @param  clock_value [out] Clock value
+	 * @param  last Signalizes that it is the last timestamp to get. When TRUE, releases the lock when its done.
+	 * @return GPTP_EC_SUCCESS if no error, GPTP_EC_FAILURE if error and GPTP_EC_EAGAIN to try again.
+	 */
+	virtual int HWTimestamper_txtimestamp
+	( PortIdentity * identity, PTPMessageId messageId,
+	  Timestamp &timestamp, unsigned &clock_value, bool last ) = 0;
 
-#define ETHER_ADDR_OCTETS	6		/*!< Number of octets in a link layer address*/
-#define IP_ADDR_OCTETS		4		/*!< Number of octets in a ip address*/
-#define PTP_ETHERTYPE 0x88F7		/*!< PTP ethertype */
-#define AVTP_ETHERTYPE 0x22F0		/*!< AVTP ethertype used for Test Status Message */
+	/**
+	 * @brief  Get rx timestamp
+	 * @param  identity PTP port identity
+	 * @param  messageId Message ID
+	 * @param  timestamp [out] Timestamp value
+	 * @param  clock_value [out] Clock value
+	 * @param  last Signalizes that it is the last timestamp to get. When TRUE, releases the lock when its done.
+	 * @return GPTP_EC_SUCCESS if no error, GPTP_EC_FAILURE if error and GPTP_EC_EAGAIN to try again.
+	 */
+	virtual int HWTimestamper_rxtimestamp(PortIdentity * identity,
+			PTPMessageId messageId,
+			Timestamp & timestamp,
+			unsigned &clock_value,
+			bool last) = 0;
 
-#define PTP_CLOCK_IDENTITY_LENGTH 8	/*!< Size of a clock identifier stored in the ClockIndentity class, described at IEEE 802.1AS-2011 Clause 8.5.2.4*/
+	virtual ~EtherTimestamper() {}
+};
 
-/**
- * @brief PortState enumeration
- */
-typedef enum {
-	PTP_MASTER = 7,		//!< Port is PTP Master
-	PTP_PRE_MASTER,		//!< Port is not PTP Master yet.
-	PTP_SLAVE,			//!< Port is PTP Slave
-	PTP_UNCALIBRATED,	//!< Port is uncalibrated.
-	PTP_DISABLED,		//!< Port is not PTP enabled. All messages are ignored when in this state.
-	PTP_FAULTY,			//!< Port is in a faulty state. Recovery is implementation specific.
-	PTP_INITIALIZING,	//!< Port's initial state.
-	PTP_LISTENING		//!< Port is in a PTP listening state. Currently not in use.
-} PortState;
-
-#endif/*PTP_TYPES_HPP*/
+#endif/*ETHER_TSTAMPER_HPP*/

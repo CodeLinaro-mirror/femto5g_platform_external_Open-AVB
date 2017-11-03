@@ -35,6 +35,7 @@
 #define PLATFORM_HPP
 
 #include <stdint.h>
+#include <time.h>
 
 /**@file*/
 
@@ -77,5 +78,36 @@ uint16_t PLAT_ntohs( uint16_t s );
  * @return Long value on host byte order
  */
 uint32_t PLAT_ntohl( uint32_t l );
+
+/**
+ * @brief  Converts a 64-bit word from host to network order
+ * @param  x Value to be converted
+ * @return Converted value
+ */
+uint64_t PLAT_htonll(uint64_t x);
+
+/**
+ * @brief  Converts a 64 bit word from network to host order
+ * @param  x Value to be converted
+ * @return Converted value
+ */
+uint64_t PLAT_ntohll(uint64_t x);
+
+#ifndef _LINUX_TIMEX_H
+/*
+ * linux_hal_generic_adj.cpp includes linux/timex.h, which precludes definition
+ * of time_h, so we can't make this function available there or we will get an
+ * error about time_t not having a type.
+ */
+
+/**
+ * @brief  Converts a time_t structure into a tm structure
+ * @param[in]  inTime  The time_t to be converted
+ * @param[out] outTm   The tm to store the converted value in
+ * @return  An error code
+ */
+int PLAT_localtime(const time_t * inTime, struct tm * outTm);
+#endif
+
 
 #endif
