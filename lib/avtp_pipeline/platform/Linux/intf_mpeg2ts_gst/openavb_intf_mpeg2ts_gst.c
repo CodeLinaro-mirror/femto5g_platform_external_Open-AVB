@@ -96,7 +96,8 @@ void openavbIntfMpeg2tsGstCfgCB(media_q_t *pMediaQ, const char *name, const char
 		{
 			if (pPvtData->pPipelineStr)
 				free(pPvtData->pPipelineStr);
-			pPvtData->pPipelineStr = strdup(value);
+			if (value)
+				pPvtData->pPipelineStr = strdup(value);
 			valueOK = (value != NULL && strlen(value) > 0);
 		}
 		else if (strcmp(name, "intf_nv_ignore_timestamp") == 0)

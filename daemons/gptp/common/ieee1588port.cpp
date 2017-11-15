@@ -577,7 +577,8 @@ void IEEE1588Port::processEvent(Event e)
 				uint8_t LastEBestClockIdentity[PTP_CLOCK_IDENTITY_LENGTH];
 				clock->getLastEBestIdentity().
 				getIdentityString( LastEBestClockIdentity );
-				EBest->getGrandmasterIdentity( EBestClockIdentity );
+				if (EBest)
+					EBest->getGrandmasterIdentity( EBestClockIdentity );
 				if( memcmp( EBestClockIdentity, LastEBestClockIdentity,
 				    PTP_CLOCK_IDENTITY_LENGTH ) != 0 )
 				{
@@ -590,7 +591,7 @@ void IEEE1588Port::processEvent(Event e)
 				}
 			}
 
-			if( clock->isBetterThan( EBest )) {
+			if( EBest && clock->isBetterThan( EBest )) {
 				// We're Grandmaster, set grandmaster info to me
 				ClockIdentity clock_identity;
 				unsigned char priority1;
@@ -614,7 +615,7 @@ void IEEE1588Port::processEvent(Event e)
 				    || ports[j]->port_state == PTP_FAULTY) {
 				continue;
 				}
-				if (clock->isBetterThan(EBest)) {
+				if (EBest && clock->isBetterThan(EBest)) {
 					// We are the GrandMaster, all ports are master
 					EBest = NULL;	// EBest == NULL : we were grandmaster
 					ports[j]->recommendState(PTP_MASTER,

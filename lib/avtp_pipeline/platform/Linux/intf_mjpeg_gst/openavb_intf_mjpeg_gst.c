@@ -438,7 +438,7 @@ bool openavbIntfMjpegGstRxCB(media_q_t *pMediaQ)
 		}
 		GstAlBuf *rxBuf = gst_al_alloc_rtp_buffer(pMediaQItem->dataLen, 0,0);
 
-		if (!rxBuf)
+		if (!rxBuf || !GST_AL_BUF_DATA(rxBuf))
 		{
 			AVB_LOG_ERROR("gst_rtp_buffer_allocate failed!");
 			openavbMediaQTailUnlock(pMediaQ);
@@ -554,6 +554,11 @@ extern DLL_EXPORT bool openavbIntfMjpegGstInitialize(media_q_t *pMediaQ, openavb
 	}
 
 	pMediaQ->pPvtIntfInfo = calloc(1, sizeof(pvt_data_t));		// Memory freed by the media queue when the media queue is destroyed.
+	if (!pMediaQ->pPvtIntfInfo) {
+		AVB_LOG_DEBUG("mjpeg-gst GstInitialize: Can't allocate pMediaQ->pPvtIntfInfo!");
+		AVB_TRACE_EXIT(AVB_TRACE_INTF);
+		return FALSE;
+	}
 
 	pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
 
