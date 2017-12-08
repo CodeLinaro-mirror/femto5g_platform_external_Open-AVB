@@ -17,3 +17,16 @@ LOCAL_SHARED_LIBRARIES := libopenavb \
         libtinyalsa
 
 include $(BUILD_SHARED_LIBRARY)
+include $(CLEAR_VARS)
+LOCAL_MODULE_CLASS := DATA
+LOCAL_MODULE := tinyalsa_talker.ini
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/avb
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE_CLASS := DATA
+LOCAL_MODULE := tinyalsa_listener.ini
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/avb
+include $(BUILD_PREBUILT)

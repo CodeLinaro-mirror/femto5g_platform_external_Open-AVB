@@ -129,6 +129,13 @@ LOCAL_SHARED_LIBRARIES += \
 LOCAL_MODULE := openavb_harness
 
 include $(BUILD_EXECUTABLE)
+include $(CLEAR_VARS)
+LOCAL_MODULE_CLASS := DATA
+LOCAL_MODULE := endpoint/endpoint.ini
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/avb
+include $(BUILD_PREBUILT)
+
 
 ###########################################
 # include all mapping and interface modules

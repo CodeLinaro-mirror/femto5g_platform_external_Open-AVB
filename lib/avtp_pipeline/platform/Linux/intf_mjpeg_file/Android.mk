@@ -12,3 +12,16 @@ LOCAL_MODULE := libopenavb_intf_mjpeg_file
 LOCAL_SHARED_LIBRARIES := libopenavb libopenavb_map_mjpeg
 
 include $(BUILD_SHARED_LIBRARY)
+include $(CLEAR_VARS)
+LOCAL_MODULE_CLASS := DATA
+LOCAL_MODULE := mjpeg_file_talker.ini
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/avb
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE_CLASS := DATA
+LOCAL_MODULE := mjpeg_file_listener.ini
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/avb
+include $(BUILD_PREBUILT)
