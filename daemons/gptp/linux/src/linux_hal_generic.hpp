@@ -1,31 +1,31 @@
 /******************************************************************************
 
-  Copyright (c) 2012, Intel Corporation 
+  Copyright (c) 2012, Intel Corporation
   All rights reserved.
-  
-  Redistribution and use in source and binary forms, with or without 
+
+  Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
-  
-   1. Redistributions of source code must retain the above copyright notice, 
+
+   1. Redistributions of source code must retain the above copyright notice,
       this list of conditions and the following disclaimer.
-  
-   2. Redistributions in binary form must reproduce the above copyright 
-      notice, this list of conditions and the following disclaimer in the 
+
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
       documentation and/or other materials provided with the distribution.
-  
-   3. Neither the name of the Intel Corporation nor the names of its 
-      contributors may be used to endorse or promote products derived from 
+
+   3. Neither the name of the Intel Corporation nor the names of its
+      contributors may be used to endorse or promote products derived from
       this software without specific prior written permission.
-  
+
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
-  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
-  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
-  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
-  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
-  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
@@ -40,7 +40,7 @@
 
 struct LinuxTimestamperGenericPrivate;
 /**
- * Povides LinuxTimestamperGeneric a private type
+ * @brief Provides LinuxTimestamperGeneric a private type
  */
 typedef struct LinuxTimestamperGenericPrivate * LinuxTimestamperGenericPrivate_t;
 
@@ -50,7 +50,7 @@ typedef struct LinuxTimestamperIGBPrivate * LinuxTimestamperIGBPrivate_t;
 #endif
 
 /**
- * Linux timestamper generic interface
+ * @brief Linux timestamper generic interface
  */
 class LinuxTimestamperGeneric : public LinuxTimestamper {
 private:
@@ -62,16 +62,19 @@ private:
 	bool cross_stamp_good;
 	std::list<Timestamp> rxTimestampList;
 	LinuxNetworkInterfaceList iface_list;
+#ifdef PTP_HW_CROSSTSTAMP
+	bool precise_timestamp_enabled;
+#endif
 
 	TicketingLock *net_lock;
-	
+
 #ifdef WITH_IGBLIB
 	LinuxTimestamperIGBPrivate_t igb_private;
 #endif
-	
+
 public:
 	/**
-	 * Default constructor. Initializes internal variables
+	 * @brief Default constructor. Initializes internal variables
 	 */
 	LinuxTimestamperGeneric();
 
@@ -88,7 +91,7 @@ public:
 	 * the struct timex
 	 * @return TRUE if ok, FALSE if error.
 	 */
-	bool Adjust( void *tmx );
+	bool Adjust( void *tmx ) const;
 
 	/**
 	 * @brief  Initializes the Hardware timestamp interface
@@ -98,6 +101,12 @@ public:
 	 */
 	virtual bool HWTimestamper_init
 	( InterfaceLabel *iface_label, OSNetworkInterface *iface );
+
+	/**
+	 * @brief  Reset the Hardware timestamp interface
+	 * @return void
+	 */
+	virtual void HWTimestamper_reset();
 
 	/**
 	 * @brief  Inserts a new timestamp to the beginning of the
@@ -128,41 +137,41 @@ public:
 	 * @return TRUE if got the time successfully, FALSE otherwise
 	 */
 	virtual bool HWTimestamper_gettime
-	( Timestamp *system_time, Timestamp *device_time, uint32_t *local_clock,
-	  uint32_t *nominal_clock_rate );
+	( Timestamp *system_time, Timestamp *device_time,
+	  uint32_t *local_clock, uint32_t *nominal_clock_rate ) const;
 
 	/**
 	 * @brief  Gets the TX timestamp from hardware interface
 	 * @param  identity PTP port identity
-	 * @param  sequenceId Sequence ID
+	 * @param  PTPMessageId Message ID
 	 * @param  timestamp [out] Timestamp value
 	 * @param  clock_value [out] Clock value
-	 * @param  last Signalizes that it is the last timestamp to get. When TRUE, releases the lock when its done. 
-	 * @return 0 no error, -1 error, -72 try again.
+	 * @param  last Signalizes that it is the last timestamp to get. When TRUE, releases the lock when its done.
+	 * @return GPTP_EC_SUCCESS if no error, GPTP_EC_FAILURE if error and GPTP_EC_EAGAIN to try again.
 	 */
 	virtual int HWTimestamper_txtimestamp
-	( PortIdentity *identity, uint16_t sequenceId, Timestamp &timestamp,
+	( PortIdentity *identity, PTPMessageId messageId, Timestamp &timestamp,
 	  unsigned &clock_value, bool last );
 
 	/**
 	 * @brief  Gets the RX timestamp from the hardware interface. This
 	 * Currently the RX timestamp is retrieved at LinuxNetworkInterface::nrecv method.
 	 * @param  identity PTP port identity
-	 * @param  sequenceId Sequence ID
+	 * @param  PTPMessageId Message ID
 	 * @param  timestamp [out] Timestamp value
 	 * @param  clock_value [out] Clock value
-	 * @param  last Signalizes that it is the last timestamp to get. When TRUE, releases the lock when its done. 
-	 * @return 0 no error, -1 error, -72 try again.
+	 * @param  last Signalizes that it is the last timestamp to get. When TRUE, releases the lock when its done.
+     * @return GPTP_EC_SUCCESS if no error, GPTP_EC_FAILURE if error and GPTP_EC_EAGAIN to try again.
 	 */
 	virtual int HWTimestamper_rxtimestamp
-	( PortIdentity *identity, uint16_t sequenceId, Timestamp &timestamp,
+	( PortIdentity *identity, PTPMessageId messageId, Timestamp &timestamp,
 	  unsigned &clock_value, bool last ) {
 		/* This shouldn't happen. Ever. */
-		if( rxTimestampList.empty() ) return -72;
+		if( rxTimestampList.empty() ) return GPTP_EC_EAGAIN;
 		timestamp = rxTimestampList.back();
 		rxTimestampList.pop_back();
-		
-		return 0;
+
+		return GPTP_EC_SUCCESS;
 	}
 
 	/**
@@ -171,13 +180,13 @@ public:
 	 * @return TRUE if success, FALSE if error.
 	 */
 	virtual bool HWTimestamper_adjclockphase( int64_t phase_adjust );
-	
+
 	/**
 	 * @brief  Adjusts the frequency
 	 * @param  freq_offset Frequency adjustment
 	 * @return TRUE in case of sucess, FALSE if error.
 	 */
-	virtual bool HWTimestamper_adjclockrate( float freq_offset );
+	virtual bool HWTimestamper_adjclockrate( float freq_offset ) const;
 
 #ifdef WITH_IGBLIB
 	bool HWTimestamper_PPS_start( );
@@ -185,7 +194,7 @@ public:
 #endif
 
 	/**
-	 * deletes LinuxTimestamperGeneric object
+	 * @brief deletes LinuxTimestamperGeneric object
 	 */
 	virtual ~LinuxTimestamperGeneric();
 };

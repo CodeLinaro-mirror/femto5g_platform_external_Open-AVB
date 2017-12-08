@@ -6,16 +6,16 @@
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
 
-   1. Redistributions of source code must retain the above copyright notice,
-      this list of conditions and the following disclaimer.
+  1. Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
 
-   2. Redistributions in binary form must reproduce the above copyright
-      notice, this list of conditions and the following disclaimer in the
-      documentation and/or other materials provided with the distribution.
+  2. Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
 
-   3. Neither the name of the Intel Corporation nor the names of its
-      contributors may be used to endorse or promote products derived from
-      this software without specific prior written permission.
+  3. Neither the name of the Intel Corporation nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
 
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -29,18 +29,24 @@
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
-******************************************************************************/
+ ******************************************************************************/
 
 #include "ieee1588.hpp"
 #include "avbts_clock.hpp"
 #include "avbts_osnet.hpp"
 #include "avbts_oslock.hpp"
+#include "avbts_persist.hpp"
+#include "gptp_cfg.hpp"
+
 #ifdef ARCH_INTELCE
 #include "linux_hal_intelce.hpp"
 #else
 #include "linux_hal_generic.hpp"
 #endif
+
+#include "linux_hal_persist_file.hpp"
 #include <ctype.h>
+#include <inttypes.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -48,50 +54,82 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <string.h>
+
+#ifdef SYSTEMD_WATCHDOG
+#include <watchdog.hpp>
+#endif
+
 #define PHY_DELAY_GB_TX_I20 184 //1G delay
 #define PHY_DELAY_GB_RX_I20 382 //1G delay
 #define PHY_DELAY_MB_TX_I20 1044//100M delay
 #define PHY_DELAY_MB_RX_I20 2133//100M delay
 
+void gPTPPersistWriteCB(char *bufPtr, uint32_t bufSize);
 
 void print_usage( char *arg0 ) {
-     fprintf( stderr,
-             "%s <network interface> [-S] [-P] [-M <filename>] "
-            "[-A <count>] [-G <group>] [-R <priority 1>] "
-            "[-D <gb_tx_delay,gb_rx_delay,mb_tx_delay,mb_rx_delay>] "
-            "[-T] [-L] [-E] [-GM] [-INITSYNC <value>] [-OPERSYNC <value>] "
-            "[-INITPDELAY <value>] [-OPERPDELAY <value>] "
-            "[-F <path to gptp_cfg.ini file>] "
-            "\n",
-             arg0 );
-     fprintf
-         ( stderr,
-          "\t-S start syntonization\n"
-          "\t-P pulse per second\n"
-          "\t-M <filename> save/restore state\n"
-          "\t-A <count> initial accelerated sync count\n"
-          "\t-G <group> group id for shared memory\n"
-          "\t-R <priority 1> priority 1 value\n"
-          "\t-D Phy Delay <gb_tx_delay,gb_rx_delay,mb_tx_delay,mb_rx_delay>\n"
-          "\t-T force master (ignored when Automotive Profile set)\n"
-          "\t-L force slave (ignored when Automotive Profile set)\n"
-          "\t-E enable test mode (as defined in AVnu automotive profile)\n"
-          "\t-V enable AVnu Automotive Profile\n"
-          "\t-GM set grandmaster for Automotive Profile\n"
-          "\t-INITSYNC <value> initial sync interval (Log base 2. 0 = 1 second)\n"
-          "\t-OPERSYNC <value> operational sync interval (Log base 2. 0 = 1 second)\n"
-          "\t-INITPDELAY <value> initial pdelay interval (Log base 2. 0 = 1 second)\n"
-          "\t-OPERPDELAY <value> operational pdelay interval (Log base 2. 0 = 1 sec)\n"
-          "\t-F <path-to-ini-file>\n"
-         );
- }
+	fprintf( stderr,
+			"%s <network interface> [-S] [-P] [-M <filename>] "
+			"[-G <group>] [-R <priority 1>] "
+			"[-D <gb_tx_delay,gb_rx_delay,mb_tx_delay,mb_rx_delay>] "
+			"[-T] [-L] [-E] [-GM] [-INITSYNC <value>] [-OPERSYNC <value>] "
+			"[-INITPDELAY <value>] [-OPERPDELAY <value>] "
+			"[-F <path to gptp_cfg.ini file>] "
+			"\n",
+			arg0 );
+	fprintf
+		( stderr,
+		  "\t-S start syntonization\n"
+		  "\t-P pulse per second\n"
+		  "\t-M <filename> save/restore state\n"
+		  "\t-G <group> group id for shared memory\n"
+		  "\t-R <priority 1> priority 1 value\n"
+		  "\t-D Phy Delay <gb_tx_delay,gb_rx_delay,mb_tx_delay,mb_rx_delay>\n"
+		  "\t-T force master (ignored when Automotive Profile set)\n"
+		  "\t-L force slave (ignored when Automotive Profile set)\n"
+		  "\t-E enable test mode (as defined in AVnu automotive profile)\n"
+		  "\t-V enable AVnu Automotive Profile\n"
+		  "\t-GM set grandmaster for Automotive Profile\n"
+		  "\t-INITSYNC <value> initial sync interval (Log base 2. 0 = 1 second)\n"
+		  "\t-OPERSYNC <value> operational sync interval (Log base 2. 0 = 1 second)\n"
+		  "\t-INITPDELAY <value> initial pdelay interval (Log base 2. 0 = 1 second)\n"
+		  "\t-OPERPDELAY <value> operational pdelay interval (Log base 2. 0 = 1 sec)\n"
+		  "\t-F <path-to-ini-file>\n"
+		);
+}
+
+int watchdog_setup(OSThreadFactory *thread_factory)
+{
+#ifdef SYSTEMD_WATCHDOG
+	SystemdWatchdogHandler *watchdog = new SystemdWatchdogHandler();
+	OSThread *watchdog_thread = thread_factory->createThread();
+	int watchdog_result;
+	long unsigned int watchdog_interval;
+	watchdog_interval = watchdog->getSystemdWatchdogInterval(&watchdog_result);
+	if (watchdog_result) {
+		GPTP_LOG_INFO("Watchtog interval read from service file: %lu us", watchdog_interval);
+		watchdog->update_interval = watchdog_interval / 2;
+		GPTP_LOG_STATUS("Starting watchdog handler (Update every: %lu us)", watchdog->update_interval);
+		watchdog_thread->start(watchdogUpdateThreadFunction, watchdog);
+		return 0;
+	} else if (watchdog_result < 0) {
+		GPTP_LOG_ERROR("Watchdog settings read error.");
+		return -1;
+	} else {
+		GPTP_LOG_STATUS("Watchdog disabled");
+		return 0;
+	}
+#else
+	return 0;
+#endif
+}
 
 static IEEE1588Clock *pClock = NULL;
-static IEEE1588Port *pPort = NULL;
+static EtherPort *pPort = NULL;
 
 int main(int argc, char **argv)
 {
-	IEEE1588PortInit_t portInit;
+	PortInit_t portInit;
 	sigset_t set;
 	InterfaceName *ifname;
 	int sig;
@@ -100,30 +138,52 @@ int main(int argc, char **argv)
 	int i;
 	bool pps = false;
 	uint8_t priority1 = 248;
+	uint8_t priority2 = 248;
+	uint8_t clockClass = 248;
 	bool override_portstate = false;
-	PortState port_state = (PortState) 0;
-
-	int restorefd = -1;
-	int8_t interval = 0;
-	void *restoredata = ((void *) -1);
+	PortState port_state = PTP_SLAVE;
+	char *restoredata = NULL;
 	char *restoredataptr = NULL;
 	off_t restoredatalength = 0;
 	off_t restoredatacount = 0;
 	bool restorefailed = false;
 	LinuxIPCArg *ipc_arg = NULL;
+	bool use_config_file = false;
+	char config_file_path[512];
+	memset(config_file_path, 0, 512);
 
-	int accelerated_sync_count = 0;
+	GPTPPersist *pGPTPPersist = NULL;
+	LinuxThreadFactory *thread_factory = new LinuxThreadFactory();
+
+	// Block SIGUSR1
+	{
+		sigset_t block;
+		sigemptyset( &block );
+		sigaddset( &block, SIGUSR1 );
+		if( pthread_sigmask( SIG_BLOCK, &block, NULL ) != 0 ) {
+			GPTP_LOG_ERROR("Failed to block SIGUSR1");
+			return -1;
+		}
+	}
+
+	GPTP_LOG_REGISTER();
+	GPTP_LOG_INFO("gPTP starting");
+	if (watchdog_setup(thread_factory) != 0) {
+		GPTP_LOG_ERROR("Watchdog handler setup error");
+		return -1;
+	}
+	phy_delay_map_t ether_phy_delay;
+	bool input_delay=false;
 
 	portInit.clock = NULL;
 	portInit.index = 0;
-	portInit.forceSlave = false;
-	portInit.accelerated_sync_count = 0;
 	portInit.timestamper = NULL;
-	portInit.offset = 0;
 	portInit.net_label = NULL;
 	portInit.automotive_profile = false;
 	portInit.isGM = false;
+	portInit.asCapable = false;
 	portInit.testMode = false;
+	portInit.linkUp = false;
 	portInit.initialLogSyncInterval = LOG2_INTERVAL_INVALID;
 	portInit.initialLogPdelayReqInterval = LOG2_INTERVAL_INVALID;
 	portInit.operLogPdelayReqInterval = LOG2_INTERVAL_INVALID;
@@ -132,28 +192,17 @@ int main(int argc, char **argv)
 	portInit.thread_factory = NULL;
 	portInit.timer_factory = NULL;
 	portInit.lock_factory = NULL;
-
-
-	// Block SIGUSR1
-	{
-		sigset_t block;
-		sigemptyset( &block );
-		sigaddset( &block, SIGUSR1 );
-		if( pthread_sigmask( SIG_BLOCK, &block, NULL ) != 0 ) {
-			fprintf( stderr, "Failed to block SIGUSR1\n" );
-			return -1;
-		}
-	}
-
-	int phy_delay[4]={0,0,0,0};
-	bool input_delay=false;
-
+	portInit.announceReceiptTimeout = 3;
+	portInit.syncReceiptTimeout = 3;
+	portInit.syncReceiptThreshold =
+		CommonPort::DEFAULT_SYNC_RECEIPT_THRESH;
+	portInit.neighborPropDelayThreshold =
+		CommonPort::NEIGHBOR_PROP_DELAY_THRESH;
 
 	LinuxNetworkInterfaceFactory *default_factory =
 		new LinuxNetworkInterfaceFactory;
 	OSNetworkInterfaceFactory::registerFactory
 		(factory_name_t("default"), default_factory);
-	LinuxThreadFactory *thread_factory = new LinuxThreadFactory();
 	LinuxTimerQueueFactory *timerq_factory = new LinuxTimerQueueFactory();
 	LinuxLockFactory *lock_factory = new LinuxLockFactory();
 	LinuxTimerFactory *timer_factory = new LinuxTimerFactory();
@@ -169,51 +218,92 @@ int main(int argc, char **argv)
 
 	/* Process optional arguments */
 	for( i = 2; i < argc; ++i ) {
+
 		if( argv[i][0] == '-' ) {
-			if( toupper( argv[i][1] ) == 'S' ) {
+			if( strcmp(argv[i] + 1,  "S") == 0 ) {
 				// Get syntonize directive from command line
-				// 1 is to start syntonization and set hardware timer.
-				// 0 is to not start syntonization or set hardware timer.
-				if (i + 1 < argc && isdigit(argv[i + 1][0])) {
-					syntonize = (atoi(argv[++i]) != 0);
-				} else {
-					syntonize = true;
-				}
+				syntonize = true;
 			}
-			else if( toupper( argv[i][1] ) == 'T' ) {
+			else if( strcmp(argv[i] + 1,  "T" ) == 0 ) {
 				override_portstate = true;
 				port_state = PTP_MASTER;
 			}
-			else if( toupper( argv[i][1] ) == 'L' ) {
+			else if( strcmp(argv[i] + 1,  "L" ) == 0 ) {
 				override_portstate = true;
 				port_state = PTP_SLAVE;
 			}
-			else if( toupper( argv[i][1] ) == 'M' ) {
+			else if( strcmp(argv[i] + 1,  "M" )  == 0 ) {
 				// Open file
 				if( i+1 < argc ) {
-					restorefd = open
-						( argv[i+1], O_RDWR|O_CREAT, S_IRUSR|S_IWUSR ); ++i;
-					if( restorefd == -1 ) printf
-						( "Failed to open restore file\n" );
-				} else {
-					printf( "Restore file must be specified on "
+					pGPTPPersist = makeLinuxGPTPPersistFile();
+					if (pGPTPPersist) {
+						pGPTPPersist->initStorage(argv[i + 1]);
+				  }
+				}
+				else {
+					GPTP_LOG_ERROR( "Restore file must be specified on "
 							"command line\n" );
 				}
 			}
-			else if( toupper( argv[i][1] ) == 'A' ) {
-				if( i+1 < argc ) {
-					accelerated_sync_count = atoi( argv[++i] );
-				} else {
-					printf( "Accelerated sync count must be specified on the "
-							"command line with A option\n" );
-				}
-			}
-			else if( toupper( argv[i][1] ) == 'G' && toupper( argv[i][2] ) != 'M') {
+			else if( strcmp(argv[i] + 1,  "G") == 0 ) {
 				if( i+1 < argc ) {
 					ipc_arg = new LinuxIPCArg(argv[++i]);
 				} else {
-					printf( "Must specify group name on the command line\n" );
+					GPTP_LOG_ERROR( "Must specify group name on the command line\n" );
 				}
+			}
+			else if( strcmp(argv[i] + 1,  "P") == 0 ) {
+				pps = true;
+			}
+			else if( strcmp(argv[i] + 1,  "H") == 0 ) {
+				print_usage( argv[0] );
+				GPTP_LOG_UNREGISTER();
+				return 0;
+			}
+			else if( strcmp(argv[i] + 1,  "R") == 0 ) {
+				if( i+1 >= argc ) {
+					GPTP_LOG_ERROR( "Priority 1 value must be specified on "
+							"command line, using default value\n" );
+				} else {
+					unsigned long tmp = strtoul( argv[i+1], NULL, 0 ); ++i;
+					if( tmp == 0 ) {
+						GPTP_LOG_ERROR( "Invalid priority 1 value, using "
+								"default value\n" );
+					} else {
+						priority1 = (uint8_t) tmp;
+					}
+				}
+			}
+			else if (strcmp(argv[i] + 1, "D") == 0) {
+				int phy_delay[4];
+				input_delay=true;
+				int delay_count=0;
+				char *saveptr;
+				char *cli_inp_delay = strtok_r(argv[i+1],",",&saveptr);
+				while (cli_inp_delay != NULL)
+				{
+					if(delay_count>3)
+					{
+						GPTP_LOG_ERROR("Too many values\n");
+						print_usage( argv[0] );
+						GPTP_LOG_UNREGISTER();
+						return 0;
+					}
+					phy_delay[delay_count]=atoi(cli_inp_delay);
+					delay_count++;
+					cli_inp_delay = strtok_r(NULL,",",&saveptr);
+				}
+				if (delay_count != 4)
+				{
+					GPTP_LOG_ERROR("All four delay values must be specified\n");
+					print_usage( argv[0] );
+					GPTP_LOG_UNREGISTER();
+					return 0;
+				}
+				ether_phy_delay[LINKSPEED_1G].set_delay
+					( phy_delay[0], phy_delay[1] );
+				ether_phy_delay[LINKSPEED_100MB].set_delay
+					( phy_delay[2], phy_delay[3] );
 			}
 			else if (strcmp(argv[i] + 1, "V") == 0) {
 				portInit.automotive_profile = true;
@@ -236,49 +326,13 @@ int main(int argc, char **argv)
 			else if (strcmp(argv[i] + 1, "OPERPDELAY") == 0) {
 				portInit.operLogPdelayReqInterval = atoi(argv[++i]);
 			}
-			else if( toupper( argv[i][1] ) == 'P' ) {
-				pps = true;
-			}
-			else if( toupper( argv[i][1] ) == 'H' ) {
-				print_usage( argv[0] );
-				return 0;
-			}
-			else if( toupper( argv[i][1] ) == 'R' ) {
-				if( i+1 >= argc ) {
-					printf( "Priority 1 value must be specified on "
-							"command line, using default value\n" );
+			else if (strcmp(argv[i] + 1, "F") == 0)
+			{
+				if( i+1 < argc ) {
+					use_config_file = true;
+					strncpy(config_file_path, argv[i+1], sizeof(config_file_path));
 				} else {
-					unsigned long tmp = strtoul( argv[i+1], NULL, 0 ); ++i;
-					if( tmp == 0 ) {
-						printf( "Invalid priority 1 value, using "
-								"default value\n" );
-					} else {
-						priority1 = (uint8_t) tmp;
-					}
-				}
-			}
-			else if(toupper(argv[i][1]) == 'D'){
-				input_delay=true;
-				int delay_count=0;
-				char *saveptr;
-				char *cli_inp_delay = strtok_r(argv[i+1],",",&saveptr);
-				while (cli_inp_delay != NULL)
-				{
-					if(delay_count>3)
-					{
-						printf("Too many values\n");
-						print_usage( argv[0] );
-						return 0;
-					}
-					phy_delay[delay_count]=atoi(cli_inp_delay);
-					delay_count++;
-					cli_inp_delay = strtok_r(NULL,",",&saveptr);
-				}
-				if (delay_count != 4)
-				{
-					printf("All four delay values must be specified\n");
-					print_usage( argv[0] );
-					return 0;
+					GPTP_LOG_ERROR("config file must be specified.\n");
 				}
 			}
 		}
@@ -286,93 +340,149 @@ int main(int argc, char **argv)
 
 	if (!input_delay)
 	{
-		phy_delay[0] = PHY_DELAY_GB_TX_I20;
-		phy_delay[1] = PHY_DELAY_GB_RX_I20;
-		phy_delay[2] = PHY_DELAY_MB_TX_I20;
-		phy_delay[3] = PHY_DELAY_MB_RX_I20;
+		ether_phy_delay[LINKSPEED_1G].set_delay
+			( PHY_DELAY_GB_TX_I20, PHY_DELAY_GB_RX_I20 );
+		ether_phy_delay[LINKSPEED_100MB].set_delay
+			( PHY_DELAY_MB_TX_I20, PHY_DELAY_MB_RX_I20 );
 	}
+	portInit.phy_delay = &ether_phy_delay;
 
 	if( !ipc->init( ipc_arg ) ) {
-	  delete ipc;
-	  ipc = NULL;
+		delete ipc;
+		ipc = NULL;
 	}
 	if( ipc_arg != NULL ) delete ipc_arg;
 
-	if( restorefd != -1 ) {
-		// MMAP file
-		struct stat stat0;
-		if( fstat( restorefd, &stat0 ) == -1 ) {
-			printf( "Failed to stat restore file, %s\n", strerror( errno ));
-			restoredatalength = 0;
-		} else {
-			restoredatalength = stat0.st_size;
-			if( restoredatalength != 0 ) {
-				if(( restoredata = mmap( NULL, restoredatalength,
-										 PROT_READ | PROT_WRITE, MAP_SHARED,
-										 restorefd, 0 )) == ((void *)-1) ) {
-					printf( "Failed to mmap restore file, %s\n",
-							strerror( errno ));
-				} else {
-					restoredatacount = restoredatalength;
-					restoredataptr = (char *) restoredata;
-				}
-			}
-		}
+	if( pGPTPPersist ) {
+		uint32_t bufSize = 0;
+		if (!pGPTPPersist->readStorage(&restoredata, &bufSize))
+			GPTP_LOG_ERROR("Failed to stat restore file");
+		restoredatalength = bufSize;
+		restoredatacount = restoredatalength;
+		restoredataptr = (char *)restoredata;
 	}
 
-	if (argc < 2)
-		return -1;
-	ifname = new InterfaceName(argv[1], strlen(argv[1]));
-
 #ifdef ARCH_INTELCE
-	HWTimestamper *timestamper = new LinuxTimestamperIntelCE();
+	EtherTimestamper *timestamper = new LinuxTimestamperIntelCE();
 #else
-	HWTimestamper *timestamper = new LinuxTimestamperGeneric();
+	EtherTimestamper *timestamper = new LinuxTimestamperGeneric();
 #endif
 
 	sigemptyset(&set);
 	sigaddset(&set, SIGINT);
 	sigaddset( &set, SIGTERM );
+	sigaddset(&set, SIGHUP);
+	sigaddset(&set, SIGUSR2);
 	if (pthread_sigmask(SIG_BLOCK, &set, NULL) != 0) {
 		perror("pthread_sigmask()");
+		GPTP_LOG_UNREGISTER();
 		return -1;
 	}
-	pClock = new IEEE1588Clock( false, syntonize, priority1, timestamper,
-                                timerq_factory, ipc, lock_factory );
 
-	if( restoredataptr != NULL ) {
-	  if( !restorefailed )
-	    restorefailed =
-	      !pClock->restoreSerializedState( restoredataptr,
-					      &restoredatacount );
-	  restoredataptr = ((char *)restoredata) +
-	    (restoredatalength - restoredatacount);
-	}
 	// TODO: The setting of values into temporary variables should be changed to
 	// just set directly into the portInit struct.
-	portInit.clock = pClock;
+	//portInit.clock = pClock;
 	portInit.index = 1;
-	portInit.forceSlave = false;
-	portInit.accelerated_sync_count = accelerated_sync_count;
 	portInit.timestamper = timestamper;
-	portInit.offset = 0;
 	portInit.net_label = ifname;
 	portInit.condition_factory = condition_factory;
 	portInit.thread_factory = thread_factory;
 	portInit.timer_factory = timer_factory;
 	portInit.lock_factory = lock_factory;
 
-	pPort = new IEEE1588Port(&portInit);
-	if (!pPort->init_port(phy_delay)) {
-	printf("failed to initialize port \n");
-	return -1;
+	if(use_config_file)
+	{
+		GptpIniParser iniParser(config_file_path);
+
+		if (iniParser.parserError() < 0) {
+			GPTP_LOG_ERROR("Cant parse ini file. Aborting file reading.");
+		}
+		else
+		{
+			GPTP_LOG_INFO("priority1 = %d", iniParser.getPriority1());
+			GPTP_LOG_INFO("announceReceiptTimeout: %d", iniParser.getAnnounceReceiptTimeout());
+			GPTP_LOG_INFO("syncReceiptTimeout: %d", iniParser.getSyncReceiptTimeout());
+			iniParser.print_phy_delay();
+			GPTP_LOG_INFO("neighborPropDelayThresh: %ld", iniParser.getNeighborPropDelayThresh());
+			GPTP_LOG_INFO("syncReceiptThreshold: %d", iniParser.getSyncReceiptThresh());
+			GPTP_LOG_INFO("initialLogSyncInterval: %d", iniParser.getInitialLogSyncInterval());
+			GPTP_LOG_INFO("initialLogPdelayReqInterval: %d", iniParser.getInitialLogPdelayReqInterval());
+			priority1 =  iniParser.getPriority1();
+			priority2 =  iniParser.getPriority2();
+			clockClass = iniParser.getclockClass();
+			port_state = iniParser.getPortState();
+			if(port_state == PTP_MASTER) {
+				override_portstate = true;
+				GPTP_LOG_INFO("Configuring port state to master\n");
+			}
+			else {
+				override_portstate = true;
+				GPTP_LOG_INFO("Configuring port state to Slave\n");
+			}
+			portInit.syncReceiptTimeout = iniParser.getSyncReceiptTimeout();
+			portInit.announceReceiptTimeout = iniParser.getAnnounceReceiptTimeout();
+			portInit.operLogSyncInterval = iniParser.getOperLogSyncInterval();
+			portInit.operLogPdelayReqInterval = iniParser.getOperLogPdelayReqInterval();
+			portInit.automotive_profile = iniParser.getAutomotiveProfile();
+			portInit.isGM = iniParser.getIsGM();
+			portInit.asCapable = iniParser.getAsCapable();
+			GPTP_LOG_INFO("automotive profile %s isGM %s\n",((portInit.automotive_profile)? "True" :"False"),((portInit.isGM)? "True": "False"));
+			GPTP_LOG_INFO("priority1 %d and priority2 %d clockClass %d srt %d art %d\n",priority1,priority2,clockClass, portInit.syncReceiptTimeout,  portInit.announceReceiptTimeout);
+
+			/* If using config file, set the neighborPropDelayThresh.
+			 * Otherwise it will use its default value (800ns) */
+			portInit.neighborPropDelayThreshold =
+				iniParser.getNeighborPropDelayThresh();
+
+			/* If using config file, set the syncReceiptThreshold, otherwise
+			 * it will use the default value (SYNC_RECEIPT_THRESH)
+			 */
+			portInit.syncReceiptThreshold =
+				iniParser.getSyncReceiptThresh();
+			/* If using config file, set the initialLogSyncInterval.
+			 * Otherwise it will use its default value -5 */
+			portInit.initialLogSyncInterval =
+				iniParser.getInitialLogSyncInterval();
+			/* If using config file, set the initialLogPdelayReqInterval.
+			 * Otherwise it will use its default value 0 */
+			portInit.initialLogPdelayReqInterval =
+				iniParser.getInitialLogPdelayReqInterval();
+
+			/*Only overwrites phy_delay default values if not input_delay switch enabled*/
+			if(!input_delay)
+			{
+				ether_phy_delay = iniParser.getPhyDelay();
+			}
+		}
+
+	}
+	pClock = new IEEE1588Clock
+		( false, syntonize, priority1, priority2, clockClass, timerq_factory, ipc,
+		  lock_factory );
+
+	if( restoredataptr != NULL ) {
+		if( !restorefailed )
+			restorefailed =
+				!pClock->restoreSerializedState( restoredataptr, &restoredatacount );
+		restoredataptr = ((char *)restoredata) + (restoredatalength - restoredatacount);
+	}
+	portInit.clock = pClock;
+
+	pPort = new EtherPort(&portInit);
+
+	if (!pPort->init_port()) {
+		GPTP_LOG_ERROR("failed to initialize port");
+		GPTP_LOG_UNREGISTER();
+		return -1;
 	}
 
 	if( restoredataptr != NULL ) {
-		if( !restorefailed ) restorefailed =
-			!pPort->restoreSerializedState( restoredataptr, &restoredatacount );
-			restoredataptr = ((char *)restoredata) +
-			(restoredatalength - restoredatacount);
+		if( !restorefailed ) {
+			restorefailed = !pPort->restoreSerializedState( restoredataptr, &restoredatacount );
+			GPTP_LOG_INFO("Persistent port data restored: asCapable:%d, port_state:%d, one_way_delay:%lld",
+						  pPort->getAsCapable(), pPort->getPortState(), pPort->getLinkDelay());
+		}
+		restoredataptr = ((char *)restoredata) + (restoredatalength - restoredatacount);
 	}
 
 	if (portInit.automotive_profile) {
@@ -391,75 +501,78 @@ int main(int argc, char **argv)
 
 	// Start PPS if requested
 	if( pps ) {
-	  if( !timestamper->HWTimestamper_PPS_start()) {
-	    printf( "Failed to start pulse per second I/O\n" );
-	  }
+		if( !timestamper->HWTimestamper_PPS_start()) {
+			GPTP_LOG_ERROR("Failed to start pulse per second I/O");
+		}
+	}
+
+	// Configure persistent write
+	if (pGPTPPersist) {
+		off_t len = 0;
+		restoredatacount = 0;
+		pClock->serializeState(NULL, &len);
+		restoredatacount += len;
+		pPort->serializeState(NULL, &len);
+		restoredatacount += len;
+		pGPTPPersist->setWriteSize((uint32_t)restoredatacount);
+		pGPTPPersist->registerWriteCB(gPTPPersistWriteCB);
 	}
 
 	pPort->processEvent(POWERUP);
 
 	do {
-	if (sigwait(&set, &sig) != 0) {
-		perror("sigwait()");
-		return -1;
+		sig = 0;
+
+		if (sigwait(&set, &sig) != 0) {
+			perror("sigwait()");
+			GPTP_LOG_UNREGISTER();
+			return -1;
+		}
+
+		if (sig == SIGHUP) {
+			if (pGPTPPersist) {
+			  // If port is either master or slave, save clock and then port state
+			  if (pPort->getPortState() == PTP_MASTER || pPort->getPortState() == PTP_SLAVE) {
+				pGPTPPersist->triggerWriteStorage();
+			  }
+			}
+		}
+
+		if (sig == SIGUSR2) {
+			pPort->logIEEEPortCounters();
+		}
+	} while (sig == SIGHUP || sig == SIGUSR2);
+
+	GPTP_LOG_ERROR("Exiting on %d", sig);
+
+	if (pGPTPPersist) {
+		pGPTPPersist->closeStorage();
 	}
-
-	if (sig == SIGHUP) {
-	// If port is either master or slave, save clock and then port state
-	if( restorefd != -1 ) {
-	  if( pPort->getPortState() == PTP_MASTER ||
-	      pPort->getPortState() == PTP_SLAVE ) {
-	    printf( "Signal received to write restore data\n" );
-	    off_t len;
-	    restoredatacount = 0;
-	    pClock->serializeState( NULL, &len );
-	    restoredatacount += len;
-	    pPort->serializeState( NULL, &len );
-	    restoredatacount += len;
-
-	    if( restoredatacount > restoredatalength ) {
-	      ftruncate( restorefd, restoredatacount );
-	      if( restoredata != ((void *) -1)) {
-		restoredata =
-		  mremap( restoredata, restoredatalength, restoredatacount,
-			  MREMAP_MAYMOVE );
-	      } else {
-		restoredata =
-		  mmap( NULL, restoredatacount, PROT_READ | PROT_WRITE,
-			MAP_SHARED, restorefd, 0 );
-	      }
-	      if( restoredata == ((void *) -1 )) goto remap_failed;
-	      restoredatalength = restoredatacount;
-	    }
-
-	    restoredataptr = (char *) restoredata;
-	    pClock->serializeState( restoredataptr, &restoredatacount );
-	    restoredataptr = ((char *)restoredata) +
-	      (restoredatalength - restoredatacount);
-	    pPort->serializeState( restoredataptr, &restoredatacount );
-	    restoredataptr = ((char *)restoredata) +
-	      (restoredatalength - restoredatacount);
-	  remap_failed:
-	    ;;
-	  }
-
-
-	  if( restoredata != ((void *) -1 ))
-	    munmap( restoredata, restoredatalength );
-	}
-	}
-	} while(sig == SIGHUP);
-
-	fprintf(stderr, "Exiting on %d\n", sig);
 
 	// Stop PPS if previously started
 	if( pps ) {
-	    if( !timestamper->HWTimestamper_PPS_stop()) {
-		printf( "Failed to stop pulse per second I/O\n" );
-	    }
+		if( !timestamper->HWTimestamper_PPS_stop()) {
+			GPTP_LOG_ERROR("Failed to stop pulse per second I/O");
+		}
 	}
 
 	if( ipc ) delete ipc;
 
+	GPTP_LOG_UNREGISTER();
 	return 0;
+}
+
+void gPTPPersistWriteCB(char *bufPtr, uint32_t bufSize)
+{
+	off_t restoredatalength = bufSize;
+	off_t restoredatacount = restoredatalength;
+	char *restoredataptr = NULL;
+
+	GPTP_LOG_INFO("Signal received to write restore data");
+
+	restoredataptr = (char *)bufPtr;
+	pClock->serializeState(restoredataptr, &restoredatacount);
+	restoredataptr = ((char *)bufPtr) + (restoredatalength - restoredatacount);
+	pPort->serializeState(restoredataptr, &restoredatacount);
+	restoredataptr = ((char *)bufPtr) + (restoredatalength - restoredatacount);
 }

@@ -36,7 +36,7 @@
 
 #include <stdint.h>
 #include <ieee1588.hpp>
-#include <avbts_port.hpp>
+#include <common_port.hpp>
 #include <avbts_ostimerq.hpp>
 #include <avbts_osipc.hpp>
 
@@ -44,25 +44,29 @@
 
 #define EVENT_TIMER_GRANULARITY 5000000		/*!< Event timer granularity*/
 
-#define INTEGRAL 0.0024				/*!< PI controller integral factor*/
+/* These 4 macros are used only when Syntonize mode is enabled */
+#define INTEGRAL 0.0003				/*!< PI controller integral factor*/
 #define PROPORTIONAL 1.0			/*!< PI controller proportional factor*/
 #define UPPER_FREQ_LIMIT  250.0		/*!< Upper frequency limit */
 #define LOWER_FREQ_LIMIT -250.0		/*!< Lower frequency limit */
 
-#define US_PER_SEC 1000000
+#define UPPER_LIMIT_PPM 250
+#define LOWER_LIMIT_PPM -250
 #define PPM_OFFSET_TO_RATIO(ppm) ((ppm) / ((FrequencyRatio)US_PER_SEC) + 1)
 
 /* This is the threshold in ns for which frequency adjustments will be made */
-#define PHASE_ERROR_THRESHOLD (10000000)
+#define PHASE_ERROR_THRESHOLD (1000000000)
 
 /* This is the maximum count of phase error, outside of the threshold before
    adjustment is performed */
 #define PHASE_ERROR_MAX_COUNT (6)
 
+/* Value returned by calcMasterLocalClockRateDifference() to indicate
+   detection of negative time jump in follow_up message */
 #define NEGATIVE_TIME_JUMP 0.0
 
 /**
- * Provides the clock quality abstraction.
+ * @brief Provides the clock quality abstraction.
  * Represents the quality of the clock
  * Defined at IEEE 802.1AS-2011
  * Clause 6.3.3.8
@@ -84,14 +88,14 @@ struct ClockQuality {
 };
 
 /**
- * Provides the 1588 clock interface
+ * @brief Provides the 1588 clock interface
  */
 class IEEE1588Clock {
 private:
 	ClockIdentity clock_identity;
 	ClockQuality clock_quality;
-	unsigned char priority1;
-	unsigned char priority2;
+	uint8_t priority1;
+	uint8_t priority2;
 	bool initializable;
 	bool is_boundary_clock;
 	bool two_step_clock;
@@ -120,7 +124,7 @@ private:
 	float _ppm;
 	int _phase_error_violation;
 
-	IEEE1588Port *port_list[MAX_PORTS];
+	CommonPort *port_list[MAX_PORTS];
 
 	static Timestamp start_time;
 	Timestamp last_sync_time;
@@ -133,8 +137,6 @@ private:
 	Timestamp _prev_local_time;
 	Timestamp _prev_system_time;
 
-	HWTimestamper *_timestamper;
-
 	OS_IPC *ipc;
 
 	OSTimerQueue *timerq;
@@ -143,23 +145,54 @@ private:
 	FrequencyRatio _master_local_freq_offset;
 	FrequencyRatio _local_system_freq_offset;
 
+    /**
+     * @brief fup info stores information of the last time
+     * the base time has changed. When that happens
+     * the information from fup_status is copied over
+     * fup_info. The follow-up sendPort method is
+     * supposed to get the information from fup_info
+     * prior to sending a message out.
+     */
+    FollowUpTLV *fup_info;
 
-	OSLock *timerq_lock;
+    /**
+     * @brief fup status has the instantaneous info
+     */
+    FollowUpTLV *fup_status;
+
+    OSLock *timerq_lock;
+
+	/**
+	 * @brief  Add a new event to the timer queue
+	 * @param  target EtherPort target
+	 * @param  e Event to be added
+	 * @param  time_ns Time in nanoseconds
+	 */
+	void addEventTimer
+	( CommonPort *target, Event e,
+	  unsigned long long time_ns );
+
+	/**
+	 * @brief  Deletes an event from the timer queue
+	 * @param  target Target port to remove the event from
+	 * @param  e Event to be removed
+	 * @return void
+	 */
+	void deleteEventTimer( CommonPort *target, Event e );
 public:
   /**
    * @brief Instantiates a IEEE 1588 Clock
    * @param forceOrdinarySlave Forces it to be an ordinary slave
    * @param syntonize if TRUE, clock will syntonize to the master clock
-   * @param priority1 It is used in the execution of BCMA. See IEEE 802.1AS Clause 10.3
-   * @param timestamper [in] Provides an object for hardware timestamp
+   * @param priority1 It is used in the execution of BCMA. See IEEE 802.1AS-2011 Clause 10.3
    * @param timerq_factory [in] Provides a factory object for creating timer queues (managing events)
    * @param ipc [in] Inter process communication object
    * @param lock_factory [in] Provides a factory object for creating locking a locking mechanism
    */
   IEEE1588Clock
 	  (bool forceOrdinarySlave, bool syntonize, uint8_t priority1,
-	   HWTimestamper *timestamper, OSTimerQueueFactory * timerq_factory,
-	   OS_IPC * ipc, OSLockFactory *lock_factory );
+	   uint8_t priority2, uint8_t clockClass ,OSTimerQueueFactory * timerq_factory, OS_IPC * ipc,
+	   OSLockFactory *lock_factory );
 
   /*
    * Destroys the IEEE 1588 clock entity
@@ -257,18 +290,10 @@ public:
 
   /**
    * @brief  Sets a new GM clock ID
-   * @param  id New id
+   * @param  id New id and port number
    * @return void
    */
-  void setGrandmasterClockIdentity(ClockIdentity id, uint16_t portNumber);
-
-  void setGrandmasterClockIdentity(ClockIdentity id) {
-      if (id != grandmaster_clock_identity) {
-          XPTPD_INFO("New Grandmaster \"%s\" (previous \"%s\")\n", id.getIdentityString().c_str(), grandmaster_clock_identity.getIdentityString().c_str());
-          grandmaster_clock_identity = id;
-      }
-  }
-
+  void setGrandmasterClockIdentity(ClockIdentity id, uint16_t portNumber);	
 
   /**
    * @brief  Gets grandmaster clock quality object
@@ -296,7 +321,7 @@ public:
   }
 
   /**
-   * @brief  Gets grandmaster priority1 attribute (IEEE 802.1AS clause 10.5.3.2.2)
+   * @brief  Gets grandmaster priority1 attribute (IEEE 802.1AS-2011 Clause 10.5.3.2.2)
    * @return Grandmaster priority1
    */
   unsigned char getGrandmasterPriority1(void) {
@@ -304,7 +329,7 @@ public:
   }
 
   /**
-   * @brief  Gets grandmaster priotity2 attribute (IEEE 802.1AS clause 10.5.3.2.4)
+   * @brief  Gets grandmaster priotity2 attribute (IEEE 802.1AS-2011 Clause 10.5.3.2.4)
    * @return Grandmaster priority2
    */
   unsigned char getGrandmasterPriority2(void) {
@@ -312,7 +337,7 @@ public:
   }
 
   /**
-   * @brief  Sets grandmaster's priority1 attribute (IEEE 802.1AS clause 10.5.3.2.2)
+   * @brief  Sets grandmaster's priority1 attribute (IEEE 802.1AS-2011 Clause 10.5.3.2.2)
    * @param  priority1 value to be set
    * @return void
    */
@@ -321,7 +346,7 @@ public:
   }
 
   /**
-   * @brief  Sets grandmaster's priority2 attribute (IEEE 802.1AS clause 10.5.3.2.4)
+   * @brief  Sets grandmaster's priority2 attribute (IEEE 802.1AS-2011 Clause 10.5.3.2.4)
    * @param  priority2 Value to be set
    * @return void
    */
@@ -330,7 +355,7 @@ public:
   }
 
   /**
-   * @brief  Gets master steps removed (IEEE 802.1AS clause 10.3.3)
+   * @brief  Gets master steps removed (IEEE 802.1AS-2011 Clause 10.3.3)
    * @return steps removed value
    */
   uint16_t getMasterStepsRemoved(void) {
@@ -338,7 +363,7 @@ public:
   }
 
   /**
-   * @brief  Gets the currentUtcOffset attribute (IEEE 802.1AS clause 10.3.8.9)
+   * @brief  Gets the currentUtcOffset attribute (IEEE 802.1AS-2011 Clause 10.3.8.9)
    * @return currentUtcOffset
    */
   uint16_t getCurrentUtcOffset(void) {
@@ -354,7 +379,7 @@ public:
   }
 
   /**
-   * @brief  Gets IEEE1588Clock priority1 value (IEEE 802.1AS clause 8.6.2.1)
+   * @brief  Gets IEEE1588Clock priority1 value (IEEE 802.1AS-2011 Clause 8.6.2.1)
    * @return Priority1 value
    */
   unsigned char getPriority1(void) {
@@ -362,7 +387,7 @@ public:
   }
 
   /**
-   * @brief  Gets IEEE1588Clock priority2 attribute (IEEE 802.1AS clause 8.6.2.5)
+   * @brief  Gets IEEE1588Clock priority2 attribute (IEEE 802.1AS-2011 Clause 8.6.2.5)
    * @return Priority2 value
    */
   unsigned char getPriority2(void) {
@@ -379,22 +404,77 @@ public:
   }
 
   /**
+   * @brief  Sets the follow up info internal object. The fup_info object contains
+   * the last updated information when the frequency or phase have changed
+   * @param  fup Pointer to the FolloUpTLV object.
+   * @return void
+   */
+  void setFUPInfo(FollowUpTLV *fup)
+  {
+      fup_info = fup;
+  }
+
+  /**
+   * @brief  Gets the fup_info pointer
+   * @return fup_info pointer
+   */
+  FollowUpTLV *getFUPInfo(void)
+  {
+      return fup_info;
+  }
+
+  /**
+   * @brief  Sets the follow up status internal object. The fup_status object contains
+   * information about the current frequency/phase aqcuired through the received
+   * follow up messages
+   * @param  fup Pointer to the FollowUpTLV object
+   * @return void
+   */
+  void setFUPStatus(FollowUpTLV *fup)
+  {
+      fup_status = fup;
+  }
+
+  /**
+   * @brief  Gets the fup_status pointer
+   * @return fup_status pointer
+   */
+  FollowUpTLV *getFUPStatus(void)
+  {
+      return fup_status;
+  }
+
+  /**
+   * @brief Updates the follow up info internal object with the current clock source time
+   * status values. This method should be called whenever the clockSource entity time
+   * base changes (IEEE 802.1AS-2011 Clause 9.2)
+   * @return void
+   */
+  void updateFUPInfo(void)
+  {
+      fup_info->incrementGMTimeBaseIndicator();
+      fup_info->setScaledLastGmFreqChange(fup_status->getScaledLastGmFreqChange());
+      fup_info->setScaledLastGmPhaseChange(fup_status->getScaledLastGmPhaseChange());
+  }
+
+  /**
    * @brief  Registers a new IEEE1588 port
    * @param  port  [in] IEEE1588port instance
    * @param  index Port's index
    * @return void
    */
-  void registerPort(IEEE1588Port * port, uint16_t index) {
+	void registerPort( CommonPort *port, uint16_t index )
+	{
 	  /* Validate parameter */
-	  if (index <= 0) {
-		  return;
-	  }
-
+      if (index <= 0) {
+         return;
+      }
+	
 	  if (index < MAX_PORTS) {
 		  port_list[index - 1] = port;
 	  }
 	  ++number_ports;
-  }
+	}
 
   /**
    * @brief  Gets the current port list instance
@@ -402,7 +482,7 @@ public:
    * @param  ports [out] Pointer to the port list
    * @return
    */
-  void getPortList(int &count, IEEE1588Port ** &ports) {
+  void getPortList(int &count, CommonPort ** &ports) {
 	  ports = this->port_list;
 	  count = number_ports;
 	  return;
@@ -415,31 +495,14 @@ public:
   static Timestamp getSystemTime(void);
 
   /**
-   * @brief  Add a new event to the timer queue
-   * @param  target IEEE1588Port target
-   * @param  e Event to be added
-   * @param  time_ns Time in nanoseconds
-   */
-  void addEventTimer
-	  ( IEEE1588Port * target, Event e, unsigned long long time_ns );
-
-  /**
-   * @brief  Deletes an event from the timer queue
-   * @param  target Target port to remove the event from
-   * @param  e Event to be removed
-   * @return void
-   */
-  void deleteEventTimer(IEEE1588Port * target, Event e);
-
-  /**
    * @brief  Adds an event to the timer queue using a lock
-   * @param  target IEEE1588Port target
+   * @param  target EtherPort target
    * @param  e Event to be added
-   * @param  time_ns current time in nanoseconds
+   * @param  time_ns event time in nanoseconds
    * @return void
    */
   void addEventTimerLocked
-	  ( IEEE1588Port * target, Event e, unsigned long long time_ns );
+  ( CommonPort *target, Event e, unsigned long long time_ns );
 
   /**
    * @brief  Deletes and event from the timer queue using a lock
@@ -447,7 +510,7 @@ public:
    * @param  e Event to be deleted
    * @return
    */
-  void deleteEventTimerLocked(IEEE1588Port * target, Event e);
+  void deleteEventTimerLocked( CommonPort *target, Event e );
 
   /**
    * @brief  Calculates the master to local clock rate difference
@@ -466,6 +529,7 @@ public:
    */
   FrequencyRatio calcLocalSystemClockRateDifference
 	  ( Timestamp local_time, Timestamp system_time );
+
   /**
    * @brief  Sets the master offset, sintonyze and adjusts the frequency offset
    * @param  master_local_offset Master to local phase offset
@@ -479,17 +543,12 @@ public:
    * @param  port_state PortState instance
    * @param  asCapable asCapable flag
    */
-   void setMasterOffset
-      ( int64_t master_local_offset, Timestamp local_time,
-        FrequencyRatio master_local_freq_offset,
-        int64_t local_system_offset,
-        Timestamp system_time,
-        FrequencyRatio local_system_freq_offset,
-        unsigned sync_count,
-        unsigned pdelay_count,
-        PortState port_state,
-        bool asCapable );
-
+  void setMasterOffset
+  ( CommonPort *port, int64_t master_local_offset,
+    Timestamp local_time, FrequencyRatio master_local_freq_offset,
+    int64_t local_system_offset, Timestamp system_time,
+    FrequencyRatio local_system_freq_offset, unsigned sync_count,
+    unsigned pdelay_count, PortState port_state, bool asCapable );
 
   /**
    * @brief  Get the IEEE1588Clock identity value
@@ -511,9 +570,9 @@ public:
    * @brief  Restart PDelays on all ports
    * @return void
    */
- void restartPDelayAll() {
+  void restartPDelayAll() {
 	  int number_ports, i, j = 0;
-	  IEEE1588Port **ports;
+	  CommonPort **ports;
 
 	  getPortList( number_ports, ports );
 
@@ -529,7 +588,7 @@ public:
    */
   int getTxLockAll() {
 	  int number_ports, i, j = 0;
-	  IEEE1588Port **ports;
+	  CommonPort **ports;
 
 	  getPortList( number_ports, ports );
 
@@ -549,7 +608,7 @@ public:
    */
   int putTxLockAll() {
 	  int number_ports, i, j = 0;
-	  IEEE1588Port **ports;
+	  CommonPort **ports;
 
 	  getPortList( number_ports, ports );
 
