@@ -1829,9 +1829,9 @@ void PTPMessageSignalling::processMessage( EtherPort *port )
 	GPTP_LOG_STATUS("Signalling Sync Interval: %d", tlv.getTimeSyncInterval());
 	GPTP_LOG_STATUS("Signalling Announce Interval: %d", tlv.getAnnounceInterval());
 
-	char linkDelayInterval = tlv.getLinkDelayInterval();
-	char timeSyncInterval = tlv.getTimeSyncInterval();
-	char announceInterval = tlv.getAnnounceInterval();
+	int8_t linkDelayInterval = tlv.getLinkDelayInterval();
+	int8_t timeSyncInterval = tlv.getTimeSyncInterval();
+	int8_t announceInterval = tlv.getAnnounceInterval();
 
 	if (linkDelayInterval == PTPMessageSignalling::sigMsgInterval_Initial) {
 		port->setInitPDelayInterval();
