@@ -265,6 +265,17 @@ void openavbIntfH264RtpFileRxInitCB(media_q_t *pMediaQ)
 		return;
 	}
 
+	struct stat stats;
+	if (!pPvtData->file_name) {
+		AVB_LOG_ERROR("Output file name not provided in ini");
+		AVB_TRACE_EXIT(AVB_TRACE_INTF);
+	}
+	else if (stat(pPvtData->file_name, &stats) == 0) {
+		AVB_LOGF_ERROR("Will not open output file: %s  file exists", pPvtData->file_name);
+		AVB_TRACE_EXIT(AVB_TRACE_INTF);
+		return;
+	}
+
 	pPvtData->loc = 0;
 	pPvtData->fd = open(pPvtData->file_name, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
         AVB_LOGF_INFO("#############file descripor for the opened file is %d\n", pPvtData->fd);
@@ -318,8 +329,9 @@ bool openavbIntfH264RtpFileRxCB(media_q_t *pMediaQ)
 		pPvtData->loc += pMediaQItem->dataLen;
 
 		if ( ((media_q_item_map_h264_pub_data_t *)pMediaQItem->pPubMapData)->lastPacket ) {
-
-			write(pPvtData->fd, pPvtData->rec_frame, pPvtData->loc);
+			if (pPvtData->fd) {
+				write(pPvtData->fd, pPvtData->rec_frame, pPvtData->loc);
+			}
 			pPvtData->loc = 0;
 		}
 

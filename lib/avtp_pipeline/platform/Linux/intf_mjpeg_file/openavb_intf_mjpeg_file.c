@@ -353,6 +353,17 @@ void openavbIntfMjpegFileRxInitCB(media_q_t *pMediaQ)
 		return;
 	}
 
+	struct stat stats;
+	if (!pPvtData->file_name) {
+		AVB_LOG_ERROR("Output file name not provided in ini");
+		AVB_TRACE_EXIT(AVB_TRACE_INTF);
+	}
+	else if (stat(pPvtData->file_name, &stats) == 0) {
+		AVB_LOGF_ERROR("Will not open output file: %s  file exists", pPvtData->file_name);
+		AVB_TRACE_EXIT(AVB_TRACE_INTF);
+		return;
+	}
+
 	pPvtData->loc = 0;
 	pPvtData->fd = open(pPvtData->file_name, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	if(pPvtData->fd == -1) {
@@ -395,7 +406,9 @@ bool openavbIntfMjpegFileRxCB(media_q_t *pMediaQ)
 		if ( ((media_q_item_map_mjpeg_pub_data_t *)pMediaQItem->pPubMapData)->lastFragment ) {
 			pPvtData->get_avtp_timestamp = TRUE;
 			//Found End of Image, write frame to the file
-			write(pPvtData->fd, pPvtData->rec_frame, pPvtData->loc);
+			if (pPvtData->fd) {
+				write(pPvtData->fd, pPvtData->rec_frame, pPvtData->loc);
+			}
 			pPvtData->loc = 0;
 			//in the case of a deocder, pass it up the timestamp as well
 		}

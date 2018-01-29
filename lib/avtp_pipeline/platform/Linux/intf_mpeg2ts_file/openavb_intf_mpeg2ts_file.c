@@ -37,6 +37,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include "openavb_types_pub.h"
 #include "openavb_trace_pub.h"
 #include "openavb_mediaq_pub.h"
@@ -574,11 +575,17 @@ void openavbIntfMpeg2tsFileRxInitCB(media_q_t *pMediaQ)
 			return;
 		}
 
+		struct stat stats;
 		if (!pPvtData->pFileName) {
-			AVB_LOG_INFO("Using stdout");
-			pPvtData->pFileName = strdup("stdout");
-			pPvtData->pFile = stdout;
+			AVB_LOG_ERROR("Output file name not provided in ini");
+			AVB_TRACE_EXIT(AVB_TRACE_INTF);
 		}
+		else if (stat(pPvtData->pFileName, &stats) == 0) {
+			AVB_LOGF_ERROR("Will not open output file: %s  file exists", pPvtData->pFileName);
+			AVB_TRACE_EXIT(AVB_TRACE_INTF);
+			return;
+		}
+
 		else {
 			pPvtData->pFile = fopen(pPvtData->pFileName, "wb");
 			if (!pPvtData->pFile) {
