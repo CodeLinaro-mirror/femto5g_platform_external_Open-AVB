@@ -461,6 +461,20 @@ bool openavbIntfWavFileTxCB(media_q_t *pMediaQ)
 			pMediaQItem = NULL;
 		}
 
+		if (!pPvtData->pFile) {
+			// input already closed
+			AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
+			return FALSE;
+		}
+
+		if (feof(pPvtData->pFile) && pPvtData->repeatData == 0) {
+			AVB_LOGF_INFO("EOF, closing input file: %s", pPvtData->pFile);
+			fclose(pPvtData->pFile);
+			pPvtData->pFile = NULL;
+			AVB_TRACE_EXIT(AVB_TRACE_INTF_DETAIL);
+			return FALSE;
+		}
+
 		if (pPvtData->intervalCounter++ % pPubMapUncmpAudioInfo->packingFactor != 0)
 			return TRUE;
 
