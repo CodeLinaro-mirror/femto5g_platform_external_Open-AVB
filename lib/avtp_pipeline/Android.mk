@@ -131,8 +131,8 @@ LOCAL_MODULE := openavb_harness
 include $(BUILD_EXECUTABLE)
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := DATA
-LOCAL_MODULE := endpoint/endpoint.ini
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE := endpoint.ini
+LOCAL_SRC_FILES := endpoint/$(LOCAL_MODULE)
 LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/avb
 include $(BUILD_PREBUILT)
 
