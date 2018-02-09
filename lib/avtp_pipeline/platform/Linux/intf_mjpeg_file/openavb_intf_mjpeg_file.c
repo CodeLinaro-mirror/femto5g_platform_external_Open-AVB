@@ -228,7 +228,6 @@ bool openavbIntfMjpegFileTxCB(media_q_t *pMediaQ)
 	bool eoi = FALSE;
 	U32 read_size;
 	U32 i = 0;
-	U32 paySize = 0;
 	static U64 next_tx_time;
 	static U32 cnt = 0;
 	avtp_time_t cur_time;

@@ -982,7 +982,6 @@ bool LinuxSharedMemoryIPC::update(
 
 bool LinuxSharedMemoryIPC::updateGmId(ClockIdentity& id, uint16_t portNumber) {
        int buf_offset = 0;
-       pid_t process_id = getpid();
        char *shm_buffer = master_offset_buffer;
        gPtpTimeData *ptimedata;
        if( shm_buffer != NULL ) {

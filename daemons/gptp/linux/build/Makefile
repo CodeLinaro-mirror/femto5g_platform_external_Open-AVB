@@ -30,7 +30,7 @@
 
 ALTERNATE_LINUX_INCPATH=$(HOME)/header/include/
 
-CFLAGS_G = -Wall -g -Wnon-virtual-dtor -fsigned-char -I. -I../../common -I../src \
+CFLAGS_G = -Wall -g -fsigned-char -I. -I../../common -I../src \
 	-I$(ALTERNATE_LINUX_INCPATH) -DUSE_GLIB `pkg-config --cflags glib-2.0`
 
 # Check to see if PTP cross-timestamping is supported in hardware/driver

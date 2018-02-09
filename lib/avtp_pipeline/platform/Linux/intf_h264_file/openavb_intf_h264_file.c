@@ -132,21 +132,6 @@ void openavbIntfH264RtpFileGenInitCB(media_q_t *pMediaQ)
 
 }
 
-static int openavbMediaQGetItemSize(media_q_t *pMediaQ)
-{
-	int itemSize = 0;
-	media_q_item_t *pMediaQItem = openavbMediaQHeadLock(pMediaQ);
-	if (pMediaQItem) {
-		itemSize = pMediaQItem->itemSize;
-		openavbMediaQHeadUnlock(pMediaQ);
-	}
-	else {
-		AVB_LOG_ERROR("pMediaQ item NULL in getMediaQItemSize");
-	}
-
-	return itemSize;
-}
-
 // a talker. Any talker initialization can be done in this function.
 void openavbIntfH264RtpFileTxInitCB(media_q_t *pMediaQ)
 {

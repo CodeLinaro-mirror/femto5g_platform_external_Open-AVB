@@ -37,7 +37,10 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_trace.h"
 #include "openavb_log.h"
 
+#ifdef AVB_LOG_COMPONENT
+#undef AVB_LOG_COMPONENT
 #define	AVB_LOG_COMPONENT	"Raw Socket"
+#endif
 
 // Open a rawsock for TX or RX
 void *pcapRawsockOpen(pcap_rawsock_t* rawsock, const char *ifname, bool rx_mode, bool tx_mode, U16 ethertype, U32 frame_size, U32 num_frames)

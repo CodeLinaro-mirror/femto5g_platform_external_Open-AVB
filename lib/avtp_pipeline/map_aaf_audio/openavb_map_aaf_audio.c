@@ -866,7 +866,7 @@ void openavbMapAVTPAudioEndCB(media_q_t *pMediaQ)
 		}
 
 		if (pPvtData->audioMcr != AVB_MCR_NONE) {
-			HAL_CLOSE_MCR_V2();
+			;
 		}
 
 		pPvtData->mediaQItemSyncTS = FALSE;
