@@ -330,7 +330,7 @@ int main(int argc, char **argv)
 			{
 				if( i+1 < argc ) {
 					use_config_file = true;
-					strncpy(config_file_path, argv[i+1], sizeof(config_file_path));
+					strlcpy(config_file_path, argv[i+1], sizeof(config_file_path));
 				} else {
 					GPTP_LOG_ERROR("config file must be specified.\n");
 				}

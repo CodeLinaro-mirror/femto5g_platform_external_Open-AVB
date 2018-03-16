@@ -169,7 +169,7 @@ void* AvbMpegStreamthread(void *arg)
 
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path,MPEG2TS_SOCKET_PATH, sizeof(addr.sun_path)-2);
+    strlcpy(addr.sun_path,MPEG2TS_SOCKET_PATH, sizeof(addr.sun_path)-2);
     unlink(MPEG2TS_SOCKET_PATH);
 
     if (bind(sockfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
@@ -290,7 +290,7 @@ extern "C" {
 
         memset(&addr, 0, sizeof(addr));
         addr.sun_family = AF_UNIX;
-        strncpy(addr.sun_path, MPEG2TS_SOCKET_PATH, sizeof(addr.sun_path)-1);
+        strlcpy(addr.sun_path, MPEG2TS_SOCKET_PATH, sizeof(addr.sun_path)-1);
         if (connect(sockfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
                 ALOGE("connect error");
                 return -1;
