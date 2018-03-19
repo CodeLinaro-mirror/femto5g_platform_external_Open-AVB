@@ -77,13 +77,18 @@ void *pcapRawsockOpen(pcap_rawsock_t* rawsock, const char *ifname, bool rx_mode,
 		return NULL;
 	}
 
-	char errbuf[PCAP_ERRBUF_SIZE];
+	char errbuf[PCAP_ERRBUF_SIZE] = {0};
 	rawsock->handle = pcap_open_live(ifname, rawsock->base.frameSize, 1, 1, errbuf);
 	if (!rawsock->handle) {
 		AVB_LOGF_ERROR("Cannot open device %s: %s", ifname, errbuf);
 		free(rawsock);
 		AVB_TRACE_EXIT(AVB_TRACE_RAWSOCK);
 		return NULL;
+	}
+
+	int ret = pcap_setnonblock(rawsock->handle, 1, errbuf);
+	if (ret != 0) {
+		AVB_LOGF_ERROR("Failed to set pcap_setnonblock = %d (%s)", ret, &errbuf);
 	}
 
 	// fill virtual functions table
