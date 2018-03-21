@@ -117,12 +117,13 @@ public:
 
 	bool triggerWriteStorage(void)
 	{
-		if (!writeCB) {
-			GPTP_LOG_ERROR("Persistent write callback not registered");
-			return false;
-		}
 
 		bool result = false;
+		if (!writeCB) {
+			GPTP_LOG_ERROR("Persistent write callback not registered");
+			return result;
+		}
+
 		if (memoryDataLength > storedDataLength) {
 			int ret = ftruncate(persistFD, memoryDataLength);
 			if (ret != 0) {

@@ -264,6 +264,11 @@ extern DLL_EXPORT bool openavbIntfMjpegOpenglInitialize(media_q_t *pMediaQ, open
 	pMediaQ->pPvtIntfInfo = calloc(1, sizeof(pvt_data_t));
 
 	pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
+	if(!pPvtData){
+		AVB_LOG_DEBUG("mjpeg Initialize: no memory allocation");
+		AVB_TRACE_EXIT(AVB_TRACE_INTF);
+		return FALSE;
+	}
 
 	pPvtData->get_avtp_timestamp = TRUE;
 

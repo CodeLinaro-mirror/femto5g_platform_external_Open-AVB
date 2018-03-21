@@ -332,6 +332,9 @@ void *halPollingThreadFn(void *pv) {
     }
 
     uint8_t* buff = (uint8_t*) malloc(SOCKET_BUFFER_SIZE);
+    if(!buff){
+        return NULL;
+    }
     // keep polling until avb stream is stopped
     while (pPvtData->pollingThreadRunning) {
         // read new data
