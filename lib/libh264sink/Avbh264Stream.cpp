@@ -35,6 +35,7 @@
 #include <media/stagefright/MediaCodec.h>
 #include <media/stagefright/MediaCodecList.h>
 #include <media/stagefright/MediaDefs.h>
+#include <cutils/properties.h> // for property_get/set
 #ifdef USE_MEDIA_CODEC_BUFFER
 #include <media/MediaCodecBuffer.h>
 #endif
@@ -57,6 +58,8 @@ using namespace android;
 #define INITIAL_BUFFER_SIZE   100000
 #define BUFFER_SIZE_INCREMENT 100000
 #define MAX_BUFFER_SIZE      7077888 // Sized to match MediaCodec input buffer
+
+#define PROP_ARBITRARYBYTES "vendor.vidc.dec.debug.arbitrarybytes.mode"
 
 class AvbH264Sink;
 
@@ -304,12 +307,30 @@ public:
           mStopStream(false),
           mSawOutputEOS(false),
           mNextDqUsec(0),
-          mFrameDurationUsec(0) {
+          mFrameDurationUsec(0),
+          prev_arbitrarybytes(-1) {
+       char propVal[PROPERTY_VALUE_MAX] = {0};
+       int currentVal;
        if (vs->frameRate > 0) {
            mFrameDurationUsec = (s2ns(1) / vs->frameRate) / 1000;
        }
+       // Get current value for vendor.vidc.dec.debug.arbitrarybytes.mode
+       property_get(PROP_ARBITRARYBYTES, propVal, "0");
+       currentVal = atoi(propVal);
+       // Enable arbitrary bytes if it isn't already enabled
+       if (currentVal != 1) {
+           prev_arbitrarybytes = currentVal;
+           property_set(PROP_ARBITRARYBYTES, "1");
+       }
     };
-    virtual ~AvbH264Sink() { };
+    virtual ~AvbH264Sink() {
+        // reset prop to previous value if we changed it
+        if (prev_arbitrarybytes != -1) {
+            char propVal[PROPERTY_VALUE_MAX] = {0};
+            snprintf(propVal, PROPERTY_VALUE_MAX, "%d", prev_arbitrarybytes);
+            property_set(PROP_ARBITRARYBYTES, propVal);
+        }
+    };
     int DataSink(uint8_t *pBuf, int size);
     int Run();
     int Stop();
@@ -325,6 +346,7 @@ private:
     bool mSawOutputEOS;
     int64_t mNextDqUsec;
     int64_t mFrameDurationUsec;
+    int prev_arbitrarybytes;
 };
 
 /**
