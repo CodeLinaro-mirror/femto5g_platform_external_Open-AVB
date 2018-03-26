@@ -53,7 +53,7 @@ static char* find_char_or_comment(const char* s, char c)
 /* Version of strncpy that ensures dest (size bytes) is null-terminated. */
 static char* strncpy0(char* dest, const char* src, size_t size)
 {
-    strlcpy(dest, src, size);
+    snprintf(dest, size, "%s", src);
     return dest;
 }
 
