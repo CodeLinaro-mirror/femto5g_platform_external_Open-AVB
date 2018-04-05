@@ -7,7 +7,7 @@ LOCAL_SRC_FILES:=         \
 
 LOCAL_SHARED_LIBRARIES := \
         libstagefright liblog libutils libbinder libgui \
-        libstagefright_foundation libmedia libcutils
+        libstagefright_foundation libmedia libcutils libui
 
 LOCAL_C_INCLUDES:= \
         $(LOCAL_PATH) \
@@ -16,7 +16,10 @@ LOCAL_C_INCLUDES:= \
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_C_INCLUDES)
 
 LOCAL_CFLAGS += -Wall -Werror -Wunused -Wunreachable-code
-#LOCAL_CLANG := true
+
+ifeq ($(PLATFORM_VERSION), P)
+LOCAL_CFLAGS += -DSURFACE_NO_GLOBAL_TRANSACTION -DOMX_SPLIT
+endif
 
 #LOCAL_MODULE_TAGS := optional
 

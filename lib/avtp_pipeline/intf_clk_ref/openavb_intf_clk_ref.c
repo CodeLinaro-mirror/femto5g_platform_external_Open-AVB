@@ -129,15 +129,6 @@ static inline bool timestamp_buff_is_full(pvt_data_t *pPvtData)
 		(pPvtData->timestampBufferSize - 1);
 }
 
-static inline bool timestamp_buff_is_empty(pvt_data_t *pPvtData)
-{
-	if (pPvtData == NULL) {
-		AVB_LOG_ERROR("pPvtData is NULL");
-	}
-
-	return timestamp_buff_count(pPvtData) == 0;
-}
-
 // clockTickCallback is called whenever the clock tick occurs.
 // Record the tick into the private data.
 static void clockTickCallback(void *context, U64 timestamp,
@@ -254,7 +245,7 @@ bool writeTimestampsToMediaQ(media_q_t *pMediaQ)
 
 			// Write the timestamp (plus the delay)
 			// to the media Q item
-			*(U64 *)(pMediaQItem->pPubData +
+			*(U64 *)((uint8_t*)pMediaQItem->pPubData +
 				 pMediaQItem->dataLen) =
 				pPvtData->timestampBuffer[
 				pPvtData->timestampReadIdx] +
@@ -375,7 +366,7 @@ bool openavbIntfClkRefRxCB(media_q_t *pMediaQ)
 		if (pMediaQItem) {
 			// Read the next timestamp. This is the timestamp
 			// that has just elapsed.
-			U64 timestamp = *(U64 *)(pMediaQItem->pPubData +
+			U64 timestamp = *(U64 *)((uint8_t*)pMediaQItem->pPubData +
 						 pMediaQItem->readIdx);
 			pMediaQItem->readIdx += CRF_TIMESTAMP_SIZE;
 
@@ -393,7 +384,7 @@ bool openavbIntfClkRefRxCB(media_q_t *pMediaQ)
 			} else {
 				openavbAvtpTimeSetToU64Timestamp(
 					pMediaQItem->pAvtpTime, *(U64 *)
-					(pMediaQItem->pPubData +
+					((uint8_t*)pMediaQItem->pPubData +
 					 pMediaQItem->readIdx));
 				openavbMediaQTailUnlock(pMediaQ);
 			}

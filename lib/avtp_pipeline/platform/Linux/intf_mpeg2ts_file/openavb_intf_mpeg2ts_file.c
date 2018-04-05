@@ -103,7 +103,7 @@ typedef struct {
 
 double openavbIntfMpeg2tsFileComputeDuration(pvt_data_t* pPvtData, unsigned char* pkts, unsigned int length);
 
-int pidTableFindOrCreatePid(struct PIDStatus *table, const unsigned int pid)
+int pidTableFindOrCreatePid(struct PIDStatus *table, const int pid)
 {
 	int idx = -1;
 	int i = 0;
@@ -261,7 +261,7 @@ static unsigned int openavbComputeFileBitrate(char *fileName, media_q_t *pMediaQ
 				unsigned short pcrExt = ((pkt[10]&0x01)<<8) | pkt[11];
 				fClock += pcrExt/F27_MHZ;
 
-				unsigned pid = ((pkt[1]&0x1F)<<8) | pkt[2];
+				int pid = ((pkt[1]&0x1F)<<8) | pkt[2];
 				int idx = pidTableFindOrCreatePid(fPIDStatusTable, pid);
 				if (idx == -1) {
 					AVB_LOG_ERROR("PID status table is full.");
@@ -577,7 +577,6 @@ void openavbIntfMpeg2tsFileRxInitCB(media_q_t *pMediaQ)
 			return;
 		}
 
-		struct stat stats;
 		if (!pPvtData->pFileName) {
 			AVB_LOG_ERROR("Output file name not provided in ini");
 			AVB_TRACE_EXIT(AVB_TRACE_INTF);

@@ -260,7 +260,6 @@ void openavbIntfH264RtpFileRxInitCB(media_q_t *pMediaQ)
 		return;
 	}
 
-	struct stat stats;
 	if (!pPvtData->file_name) {
 		AVB_LOG_ERROR("Output file name not provided in ini");
 		AVB_TRACE_EXIT(AVB_TRACE_INTF);

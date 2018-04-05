@@ -21,16 +21,26 @@ ifeq ($(call is-platform-sdk-version-at-least,27),true)
 LOCAL_CFLAGS += -DNO_SK_LOCK
 endif
 
+ifeq ($(PLATFORM_VERSION), P)
+LOCAL_CFLAGS += -DSKIA_MAKE_FROM_DATA -DSURFACE_NO_GLOBAL_TRANSACTION
+endif
+
 LOCAL_CFLAGS += -Wall -Werror -Wunused -Wunreachable-code
 
 LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libutils \
-    libskia \
     libEGL \
     libGLESv1_CM \
     libgui \
     liblog
+
+ifeq ($(PLATFORM_VERSION), P)
+#workaround to link to libskia
+LOCAL_SHARED_LIBRARIES += libhwui libui
+else
+LOCAL_SHARED_LIBRARIES += libskia
+endif
 
 LOCAL_MODULE:= libmjpegavbsink
 

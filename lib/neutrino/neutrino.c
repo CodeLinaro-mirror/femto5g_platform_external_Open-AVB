@@ -109,7 +109,6 @@ static unsigned int get_hi_credit(float bw, int connected_speed, int class)
 static unsigned int get_low_credit(float bw, int connected_speed, int class)
 {
 	int low_credit = 0;
-	typedef unsigned long long u64;
 	float idle_slope;
 	float send_slope;
 	unsigned int multiplier = 1;

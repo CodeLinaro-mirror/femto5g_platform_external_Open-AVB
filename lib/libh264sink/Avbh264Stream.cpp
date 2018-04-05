@@ -31,7 +31,6 @@
 #include <media/stagefright/foundation/ABuffer.h>
 #include <media/stagefright/foundation/ALooper.h>
 #include <media/stagefright/foundation/AMessage.h>
-#include <media/stagefright/DataSource.h>
 #include <media/stagefright/MediaCodec.h>
 #include <media/stagefright/MediaCodecList.h>
 #include <media/stagefright/MediaDefs.h>
@@ -278,10 +277,17 @@ Display::Display() {
     CHECK(mControl != NULL);
     CHECK(mControl->isValid());
 
+#ifdef SURFACE_NO_GLOBAL_TRANSACTION
+    SurfaceComposerClient::Transaction t;
+    t.setLayer(mControl, INT_MAX);
+    t.show(mControl);
+    t.apply();
+#else
     SurfaceComposerClient::openGlobalTransaction();
     CHECK_EQ(mControl->setLayer(INT_MAX), (status_t)OK);
     CHECK_EQ(mControl->show(), (status_t)OK);
     SurfaceComposerClient::closeGlobalTransaction();
+#endif
 
     mSurface = mControl->getSurface();
     CHECK(mSurface != NULL);

@@ -503,7 +503,6 @@ void openavbIntfTinyalsaTxInitCB(media_q_t *pMediaQ)
 		pPvtData->config.start_threshold = 0;
 		pPvtData->config.stop_threshold = 0;
 		pPvtData->config.silence_threshold = 0;
-		pPvtData->config.format = pPvtData->audioBitDepth;
 		switch (pPvtData->audioBitDepth) {
 			case AVB_AUDIO_BIT_DEPTH_16BIT:
 				pPvtData->config.format = PCM_FORMAT_S16_LE;
@@ -623,7 +622,7 @@ static bool readAudio(pvt_data_t *pPvtData, uint8_t *buffer, U32 buflen)
 	// the remainder the next time this function is called.
 	if (pPvtData->framesToRecoverClock < 0) {
 		frames_repeated = -1 * pPvtData->framesToRecoverClock;
-		if ((pPvtData->audioBufferStartIdx / pPvtData->frameSizeBytes) <
+		if ((int)(pPvtData->audioBufferStartIdx / pPvtData->frameSizeBytes) <
 		    frames_repeated) {
 			frames_repeated = pPvtData->audioBufferStartIdx /
 				pPvtData->frameSizeBytes;
@@ -768,7 +767,6 @@ void openavbIntfTinyalsaRxInitCB(media_q_t *pMediaQ)
 		pPvtData->config.start_threshold = 0;
 		pPvtData->config.stop_threshold = 0;
 		pPvtData->config.silence_threshold = 0;
-		pPvtData->config.format = pPvtData->audioBitDepth;
 		switch(pPvtData->audioBitDepth) {
 			case AVB_AUDIO_BIT_DEPTH_16BIT:
 				pPvtData->config.format = PCM_FORMAT_S16_LE;
@@ -891,6 +889,7 @@ void openavbIntfTinyalsaEndCB(media_q_t *pMediaQ)
 void openavbIntfTinyalsaGenEndCB(media_q_t *pMediaQ)
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_INTF);
+	(void) pMediaQ;
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
 }
 

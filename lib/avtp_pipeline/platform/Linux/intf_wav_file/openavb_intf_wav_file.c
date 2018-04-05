@@ -490,7 +490,7 @@ bool openavbIntfWavFileTxCB(media_q_t *pMediaQ)
 
 				if (bytesRead < pPubMapUncmpAudioInfo->itemSize) {
 					// Pad reminder of item with anything we didn't read because of end of file.
-					memset(pMediaQItem->pPubData + bytesRead, 0x00, pPubMapUncmpAudioInfo->itemSize - bytesRead);
+					memset((uint8_t*)pMediaQItem->pPubData + bytesRead, 0x00, pPubMapUncmpAudioInfo->itemSize - bytesRead);
 
 					// Repeat wav file. Seek to start of data for our only supported wav file format.
 					if (pPvtData->repeatData) {
@@ -533,7 +533,6 @@ void openavbIntfWavFileRxInitCB(media_q_t *pMediaQ)
 
     if (pMediaQ) {
         pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
-        struct stat buf;
         if (!pPvtData) {
             AVB_LOG_ERROR("Private interface module data not allocated.");
             return;

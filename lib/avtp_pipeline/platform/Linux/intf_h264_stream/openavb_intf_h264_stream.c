@@ -146,23 +146,6 @@ void openavbIntfH264StreamGenInitCB(media_q_t *pMediaQ)
 
 }
 
-static int openavbMediaQGetItemSize(media_q_t *pMediaQ)
-{
-	int itemSize = 0;
-	media_q_item_t *pMediaQItem = openavbMediaQHeadLock(pMediaQ);
-	if (pMediaQItem) {
-		itemSize = pMediaQItem->itemSize;
-		openavbMediaQHeadUnlock(pMediaQ);
-	}
-	else {
-		AVB_LOG_ERROR("pMediaQ item NULL in getMediaQItemSize");
-	}
-
-	return itemSize;
-}
-
-
-
 // A call to this callback indicates that this interface module will be
 // a listener. Any listener initialization can be done in this function.
 void openavbIntfH264StreamRxInitCB(media_q_t *pMediaQ)
@@ -196,8 +179,6 @@ bool openavbIntfH264StreamRxCB(media_q_t *pMediaQ)
 		AVB_LOG_ERROR("Private interface module data not allocated.");
 		return FALSE;
 	}
-
-	int err = 0;
 
 	while (1) {
 		media_q_item_t *pMediaQItem = openavbMediaQTailLock(pMediaQ, pPvtData->ignoreTimestamp);
@@ -242,6 +223,7 @@ void openavbIntfH264StreamEndCB(media_q_t *pMediaQ)
 void openavbIntfH264StreamGenEndCB(media_q_t *pMediaQ)
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_INTF);
+	(void) pMediaQ;
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
 }
 

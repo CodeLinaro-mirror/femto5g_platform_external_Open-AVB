@@ -29,12 +29,18 @@
 #include <media/IMediaHTTPService.h>
 #include <media/IStreamSource.h>
 #include <media/mediaplayer.h>
-#include <media/stagefright/foundation/ADebug.h>
-#include <media/stagefright/foundation/AMessage.h>
+#ifdef OMX_SPLIT
+#include <media/DataSource.h>
+#include <media/MediaExtractor.h>
+#include <media/MediaSource.h>
+#else
 #include <media/stagefright/DataSource.h>
-#include <media/stagefright/MPEG2TSWriter.h>
 #include <media/stagefright/MediaExtractor.h>
 #include <media/stagefright/MediaSource.h>
+#endif
+#include <media/stagefright/foundation/ADebug.h>
+#include <media/stagefright/foundation/AMessage.h>
+#include <media/stagefright/MPEG2TSWriter.h>
 #include <media/stagefright/MetaData.h>
 
 #include <binder/IServiceManager.h>
@@ -216,10 +222,17 @@ void* AvbMpegStreamthread(void *arg)
     CHECK(control != NULL);
     CHECK(control->isValid());
 
+#ifdef SURFACE_NO_GLOBAL_TRANSACTION
+    SurfaceComposerClient::Transaction t;
+    t.setLayer(control, INT_MAX);
+    t.show(control);
+    t.apply();
+#else
     SurfaceComposerClient::openGlobalTransaction();
     CHECK_EQ(control->setLayer(INT_MAX), (status_t)OK);
     CHECK_EQ(control->show(), (status_t)OK);
     SurfaceComposerClient::closeGlobalTransaction();
+#endif
 
     sp<Surface> surface = control->getSurface();
     CHECK(surface != NULL);

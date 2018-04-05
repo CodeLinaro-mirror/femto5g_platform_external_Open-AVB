@@ -139,13 +139,13 @@ U32 openavbTimestampEvalTimestamp(openavb_timestamp_eval_t tsEval, U32 ts)
 			tsEval->tsTtlCalc += tsEval->tsRateInterval;
 			tsEval->tsTtlReal += tsEval->tsInterval;
 
-			tsEval->tsJitter = abs(tsEval->tsRateInterval - tsEval->tsInterval);
+			tsEval->tsJitter = abs((int32_t)((int64_t)tsEval->tsRateInterval - (int64_t)tsEval->tsInterval));
 			if (tsEval->tsJitter > tsEval->tsMaxJitter) {
 				tsEval->tsMaxJitter = tsEval->tsJitter;
 			}
 			tsEval->tsAccumJitter += tsEval->tsJitter;
 
-			tsEval->tsDrift = abs(tsEval->tsTtlCalc - tsEval->tsTtlReal);
+			tsEval->tsDrift = abs((int32_t)((int64_t)tsEval->tsTtlCalc - (int64_t)tsEval->tsTtlReal));
 
 			// Reporting
 			if (tsEval->reportInterval) {

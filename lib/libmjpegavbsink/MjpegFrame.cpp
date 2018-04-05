@@ -110,7 +110,11 @@ bool MjpegFrame::threadLoop() {
 #ifdef USE_SK_CODEC
     // For newer versions of skia library use SkCodec to decode jpeg data
     sk_sp<SkData> skData = SkData::MakeWithoutCopy(mJpegData, mJpegDataLen);
+    #ifdef SKIA_MAKE_FROM_DATA
+    std::unique_ptr<SkCodec> skCodec(SkCodec::MakeFromData(skData));
+    #else
     std::unique_ptr<SkCodec> skCodec(SkCodec::NewFromData(skData));
+    #endif
 
     SkImageInfo info = skCodec->getInfo().makeColorType(kN32_SkColorType);
     if (!mBitmap.tryAllocPixels(info)) {

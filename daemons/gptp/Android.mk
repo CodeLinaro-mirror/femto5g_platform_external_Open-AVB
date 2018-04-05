@@ -2,7 +2,7 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_CFLAGS := -DWITHOUT_IFADDRS -Wno-unused-parameter -frtti
+LOCAL_CFLAGS := -DWITHOUT_IFADDRS -Wno-unused-parameter -frtti -Wno-unused-private-field
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/common \
                     $(LOCAL_PATH)/linux/src
