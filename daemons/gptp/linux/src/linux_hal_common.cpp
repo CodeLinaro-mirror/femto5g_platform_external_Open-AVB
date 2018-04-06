@@ -445,26 +445,33 @@ void *LinuxTimerQueueHandler( void *arg ) {
 		LinuxTimerQueueMap_t::iterator iter;
 		sigaddset( &waitfor, SIGUSR1 );
 		if( sigtimedwait( &waitfor, &info, &timeout ) == -1 ) {
-			if( errno == EAGAIN ) continue;
-			else break;
+			if( errno == EAGAIN ) {
+				continue;
+			} else {
+				GPTP_LOG_ERROR("LinuxTimerQueueHandler sigtimedwait failed - %s",
+						strerror(errno));
+				continue;
+			}
 		}
 		if( timerq->lock->lock() != oslock_ok ) {
-			break;
+			GPTP_LOG_ERROR("LinuxTimerQueueHandler timerq lock failed");
+			continue;
 		}
 
 		iter = timerq->timerQueueMap.find(info.si_value.sival_int);
 		if( iter != timerq->timerQueueMap.end() ) {
-		    struct LinuxTimerQueueActionArg *arg = iter->second;
+		    struct LinuxTimerQueueActionArg *action_arg = iter->second;
 			timerq->timerQueueMap.erase(iter);
-			timerq->LinuxTimerQueueAction( arg );
-			if( arg->rm ) {
-				delete arg->inner_arg;
+			timerq->LinuxTimerQueueAction( action_arg );
+			if( action_arg->rm ) {
+				delete action_arg->inner_arg;
 			}
-			timer_delete(arg->timer_handle);
-			delete arg;
+			timer_delete(action_arg->timer_handle);
+			delete action_arg;
 		}
 		if( timerq->lock->unlock() != oslock_ok ) {
-			break;
+			GPTP_LOG_ERROR("LinuxTimerQueueHandler timerq unlock failed");
+			continue;
 		}
 	}
 
