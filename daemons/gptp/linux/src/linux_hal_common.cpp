@@ -869,6 +869,7 @@ LinuxSharedMemoryIPC::~LinuxSharedMemoryIPC() {
 	munmap(master_offset_buffer, SHM_SIZE);
 #ifdef ANDROID
     close(shm_fd);
+    unlink( SHM_NAME );
 #else
     shm_unlink(SHM_NAME);
 #endif
@@ -943,6 +944,7 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
  exit_unlink:
 #ifdef ANDROID
     close( shm_fd );
+    unlink( SHM_NAME );
 #else
     shm_unlink( SHM_NAME );
 #endif
@@ -1068,6 +1070,7 @@ void LinuxSharedMemoryIPC::stop() {
 		munmap( master_offset_buffer, SHM_SIZE );
 #ifdef ANDROID
     	close(shm_fd);
+        unlink( SHM_NAME );
 #else
     	shm_unlink(SHM_NAME);
 #endif
