@@ -13,6 +13,8 @@ LOCAL_SHARED_LIBRARIES := libopenavb \
         libopenavb_map_aaf_audio \
         libopenavb_map_uncmp_audio
 
+LOCAL_REQUIRED_MODULES := wav_file_talker.ini wav_file_listener.ini
+
 include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := DATA

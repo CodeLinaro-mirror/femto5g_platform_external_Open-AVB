@@ -130,8 +130,13 @@ LOCAL_SHARED_LIBRARIES += \
             libopenavb_map_uncmp_audio
 
 LOCAL_MODULE := openavb_harness
+LOCAL_REQUIRED_MODULES := endpoint.ini
 
 include $(BUILD_EXECUTABLE)
+
+###########################################
+# endpoint configuration
+###########################################
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := DATA
 LOCAL_MODULE := endpoint.ini

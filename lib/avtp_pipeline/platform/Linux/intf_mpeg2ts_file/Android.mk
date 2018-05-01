@@ -13,6 +13,8 @@ LOCAL_MODULE := libopenavb_intf_mpeg2ts_file
 
 LOCAL_SHARED_LIBRARIES := libopenavb libopenavb_map_mpeg2ts
 
+LOCAL_REQUIRED_MODULES := mpeg2ts_file_talker.ini mpeg2ts_file_listener.ini
+
 include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := DATA

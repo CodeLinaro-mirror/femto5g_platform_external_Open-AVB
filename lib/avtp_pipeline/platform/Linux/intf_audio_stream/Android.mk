@@ -14,6 +14,11 @@ LOCAL_SHARED_LIBRARIES := libopenavb \
         libopenavb_map_uncmp_audio \
         libcutils
 
+LOCAL_REQUIRED_MODULES := \
+   audio_stream_talker.ini \
+   audio_stream_listener.ini \
+   audio.eavb.default
+
 include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := DATA

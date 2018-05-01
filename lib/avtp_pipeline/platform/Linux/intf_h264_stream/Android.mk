@@ -11,6 +11,8 @@ LOCAL_MODULE := libopenavb_intf_h264_stream
 
 LOCAL_SHARED_LIBRARIES := libopenavb libopenavb_map_h264 libh264sink
 
+LOCAL_REQUIRED_MODULES := h264_stream_listener.ini
+
 include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := DATA
