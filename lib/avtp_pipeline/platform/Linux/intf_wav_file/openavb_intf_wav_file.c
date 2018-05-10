@@ -618,6 +618,7 @@ bool openavbIntfWavFileRxCB(media_q_t *pMediaQ)
                         convertEndianness((uint8_t *)pMediaQItem->pPubData, pMediaQItem->dataLen, pPubMapUncmpAudioInfo->itemSampleSizeBytes);
                     }
                     written = fwrite(pMediaQItem->pPubData, 1, pMediaQItem->dataLen, pPvtData->pFile);
+                    fflush(pPvtData->pFile);
                     if (written != pMediaQItem->dataLen) {
                         int e = ferror(pPvtData->pFile);
                         AVB_LOGF_ERROR("Error writing file: %s, %s", pPvtData->pFileName, strerror(e));
