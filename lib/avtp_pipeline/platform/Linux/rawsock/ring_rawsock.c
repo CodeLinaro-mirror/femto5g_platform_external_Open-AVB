@@ -63,7 +63,7 @@ void* ringRawsockOpen(ring_rawsock_t *rawsock, const char *ifname, bool rx_mode,
 	}
 
 	// Get the size of the headers in the ring
-	unsigned len = sizeof(val);
+	socklen_t len = sizeof(val);
 	if (getsockopt(rawsock->sock, SOL_PACKET, PACKET_HDRLEN, &val, &len) < 0) {
 		AVB_LOGF_ERROR("Creating rawsock; get PACKET_HDRLEN: %s", strerror(errno));
 		ringRawsockClose(rawsock);

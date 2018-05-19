@@ -116,7 +116,7 @@ typedef struct {
 
 double openavbIntfMpeg2tsStreamComputeDuration(pvt_data_t* pPvtData, unsigned char* pkts, unsigned int length);
 
-int pidTableFindOrCreatePid1(struct PIDStatus *table, const unsigned int pid)
+int pidTableFindOrCreatePid1(struct PIDStatus *table, const int pid)
 {
 	int idx = -1;
 	int i = 0;
@@ -222,7 +222,7 @@ static void sync_scan(FILE* input)
 }
 
 #define TS_PACKETS 1
-static unsigned int openavbComputeStreamBitrate(char *fileName, media_q_t *pMediaQ)
+static unsigned int openavbComputeStreamBitrate(char *fileName)
 {
 	double max_bitrate = 0;
 	FILE *input = fopen(fileName, "rb");
@@ -274,7 +274,7 @@ static unsigned int openavbComputeStreamBitrate(char *fileName, media_q_t *pMedi
 				unsigned short pcrExt = ((pkt[10]&0x01)<<8) | pkt[11];
 				fClock += pcrExt/F27_MHZ;
 
-				unsigned pid = ((pkt[1]&0x1F)<<8) | pkt[2];
+				int pid = ((pkt[1]&0x1F)<<8) | pkt[2];
 				int idx = pidTableFindOrCreatePid1(fPIDStatusTable, pid);
 				if (idx == -1) {
 					AVB_LOG_ERROR("PID status table is full.");
@@ -320,6 +320,7 @@ end:
 void openavbIntfMpeg2tsStreamGenInitCB(media_q_t *pMediaQ)
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_INTF);
+	(void) pMediaQ;
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
 }
 
@@ -327,7 +328,7 @@ unsigned int openavbIntMpeg2tsGetSrcBitrate1(media_q_t *pMediaQ)
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_INTF);
 	if (((pvt_data_t *)pMediaQ->pPvtIntfInfo)->enableBitrateTracking)
-		((pvt_data_t *)pMediaQ->pPvtIntfInfo)->maxBitrate = openavbComputeStreamBitrate(((pvt_data_t*)pMediaQ->pPvtIntfInfo)->pFileName, pMediaQ);
+		((pvt_data_t *)pMediaQ->pPvtIntfInfo)->maxBitrate = openavbComputeStreamBitrate(((pvt_data_t*)pMediaQ->pPvtIntfInfo)->pFileName);
 	else
 		((pvt_data_t *)pMediaQ->pPvtIntfInfo)->maxBitrate = 0;
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
@@ -478,13 +479,12 @@ bool openavbIntfMpeg2tsStreamRxCB(media_q_t *pMediaQ)
 			pos = 0 ;
 			if (pMediaQItem) {
 				while (pMediaQItem->dataLen > 0) {
-					written = write(pPvtData->streamsockfd,(pMediaQItem->pPubData + pos),pMediaQItem->dataLen);
-                                        if (written <= 0) {
-                                                AVB_LOG_ERROR("writing data in socket file descriptor is failed closing sockfd");
-                                                close(pPvtData->streamsockfd);
-                                                return FALSE;
-
-                                        }
+					written = write(pPvtData->streamsockfd,(((uint8_t*)pMediaQItem->pPubData) + pos),pMediaQItem->dataLen);
+					if (written <= 0) {
+						AVB_LOG_ERROR("writing data in socket file descriptor is failed closing sockfd");
+						close(pPvtData->streamsockfd);
+						return FALSE;
+					}
 					else {
 						pos += written;
 						pMediaQItem->dataLen -= written;

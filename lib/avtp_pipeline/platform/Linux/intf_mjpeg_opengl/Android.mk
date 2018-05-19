@@ -11,6 +11,8 @@ LOCAL_MODULE := libopenavb_intf_mjpeg_opengl
 
 LOCAL_SHARED_LIBRARIES := libopenavb libopenavb_map_mjpeg libmjpegavbsink
 
+LOCAL_REQUIRED_MODULES := mjpeg_opengl_listener.ini
+
 include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := DATA

@@ -6,9 +6,10 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_CFLAGS := -Wall -Wextra -Wno-parentheses -ggdb -D_GNU_SOURCE -Wunreachable-code
+LOCAL_CFLAGS := -Wall -Wextra -Wno-parentheses -ggdb -Wno-sign-compare -Wno-unused-parameter
 LOCAL_CFLAGS += -DAVB_FEATURE_FQTSS=1
 LOCAL_CFLAGS += -DAVB_FEATURE_ENDPOINT=1
+LOCAL_CFLAGS += -DAVB_FEATURE_NEUTRINO=1
 
 LOCAL_LDFLAGS += -Wl,--export-dynamic
 
@@ -32,7 +33,8 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH) \
             $(LOCAL_PATH)/srp \
             $(LOCAL_PATH)/rawsock \
             $(LOCAL_PATH)/../../daemons/mrpd \
-            $(LOCAL_PATH)/../../daemons/common
+            $(LOCAL_PATH)/../../daemons/common \
+            $(LOCAL_PATH)/../neutrino
 
 
 LOCAL_SRC_FILES := \
@@ -57,7 +59,8 @@ LOCAL_SRC_FILES := \
             tl/openavb_talker.c \
             tl/openavb_talker_endpoint.c \
             tl/openavb_tl.c \
-            tl/openavb_tl_endpoint.c
+            tl/openavb_tl_endpoint.c \
+            ../neutrino/neutrino.c
 
 # raw socket
 LOCAL_SRC_FILES += \
@@ -99,6 +102,8 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)
 
 LOCAL_SRC_FILES := platform/Linux/avb_host/openavb_host.c
 
+LOCAL_CFLAGS := -Wno-sign-compare -Wno-unused-parameter
+
 LOCAL_SHARED_LIBRARIES += \
             libopenavb \
             libopenavb_intf_audio_stream \
@@ -106,12 +111,9 @@ LOCAL_SHARED_LIBRARIES += \
             libopenavb_intf_ctrl \
             libopenavb_intf_echo \
             libopenavb_intf_h264_file \
-            libopenavb_intf_h264_stream \
             libopenavb_intf_logger \
             libopenavb_intf_mjpeg_file \
-            libopenavb_intf_mjpeg_opengl \
             libopenavb_intf_mpeg2ts_file \
-            libopenavb_intf_mpeg2ts_stream \
             libopenavb_intf_null \
             libopenavb_intf_tinyalsa \
             libopenavb_intf_tonegen \
@@ -128,8 +130,13 @@ LOCAL_SHARED_LIBRARIES += \
             libopenavb_map_uncmp_audio
 
 LOCAL_MODULE := openavb_harness
+LOCAL_REQUIRED_MODULES := endpoint.ini
 
 include $(BUILD_EXECUTABLE)
+
+###########################################
+# endpoint configuration
+###########################################
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := DATA
 LOCAL_MODULE := endpoint.ini

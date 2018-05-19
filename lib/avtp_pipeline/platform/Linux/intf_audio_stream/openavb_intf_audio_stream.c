@@ -149,9 +149,7 @@ static int accept_server_socket(int sfd) {
 }
 
 static int skt_connect(const char* path, size_t buffer_sz) {
-    int ret;
     int skt_fd;
-    int len;
 
     AVB_LOGF_INFO("connect to %s (sz %zu)", path, buffer_sz);
 
@@ -621,7 +619,6 @@ void openavbIntfAudioStreamRxInitCB(media_q_t *pMediaQ) {
 
     if (pMediaQ) {
         pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
-        struct stat buf;
         if (!pPvtData) {
             AVB_LOG_ERROR("Private interface module data not allocated.");
             return;
@@ -700,7 +697,7 @@ void openavbIntfAudioStreamEndCB(media_q_t *pMediaQ) {
         }
 
         if (pPvtData->pServerSocket) {
-            close(pPvtData->pServerSocket);
+            skt_disconnect(pPvtData->pServerSocket);
             pPvtData->pServerSocket = 0;
         }
 

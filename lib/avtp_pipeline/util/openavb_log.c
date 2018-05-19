@@ -222,7 +222,6 @@ extern void DLL_EXPORT avbLogInit(void)
 		loggingThreadRunning = true;
 		THREAD_CREATE(loggingThread, loggingThread, NULL, loggingThreadFn, NULL);
 		THREAD_CHECK_ERROR(loggingThread, "Thread / task creation failed", errResult);
-		if (errResult);		// Already reported
 	}
 }
 

@@ -132,14 +132,21 @@ status_t GlSink::readyToRun() {
         dinfo.w = temp;
     }
     Rect destRect(dinfo.w, dinfo.h);
-    mSession->setDisplayProjection(dtoken, orient, destRect, destRect);
-    // create the native surface
     sp<SurfaceControl> control = session()->createSurface(String8("AvbMjpegSink"),
             dinfo.w, dinfo.h, PIXEL_FORMAT_RGB_565);
 
+#ifdef SURFACE_NO_GLOBAL_TRANSACTION
+    SurfaceComposerClient::Transaction t;
+    t.setDisplayProjection(dtoken, orient, destRect, destRect);
+    t.setLayer(control, 0x40000000);
+    t.show(control);
+    t.apply();
+#else
+    mSession->setDisplayProjection(dtoken, orient, destRect, destRect);
     SurfaceComposerClient::openGlobalTransaction();
     control->setLayer(0x40000000);
     SurfaceComposerClient::closeGlobalTransaction();
+#endif
 
     sp<Surface> s = control->getSurface();
 

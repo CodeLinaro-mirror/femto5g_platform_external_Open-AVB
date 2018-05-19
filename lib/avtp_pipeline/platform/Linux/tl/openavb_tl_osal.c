@@ -275,8 +275,7 @@ static int openavbTLCfgCallback(void *user, const char *tlSection, const char *n
 		errno = 0;
 		pCfg->max_stale = strtol(value, &pEnd, 10);
 		if (*pEnd == '\0' && errno == 0
-			&& pCfg->max_stale >= 0
-			&& pCfg->max_stale <= INT32_MAX)
+			&& pCfg->max_stale <= UINT32_MAX)
 			valOK = TRUE;
 	}
 	else if (MATCH(name, "raw_tx_buffers")) {

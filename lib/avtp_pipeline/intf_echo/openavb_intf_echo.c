@@ -119,7 +119,7 @@ void openavbIntfEchoCfgCB(media_q_t *pMediaQ, const char *name, const char *valu
 					return;
 				}
 
-				int i1;
+				uint32_t i1;
 				for (i1 = 0; i1 < pPvtData->echoStringRepeat; i1++) {
 					strlcat(pEchoStringRepeat, pPvtData->pEchoString,
 						  (pPvtData->echoStringLen * pPvtData->echoStringRepeat) + 1);

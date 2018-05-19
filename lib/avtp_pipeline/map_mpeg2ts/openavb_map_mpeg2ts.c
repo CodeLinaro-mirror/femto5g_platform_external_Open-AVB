@@ -329,13 +329,13 @@ static int syncScan(media_q_item_t *pMediaQItem, int startIdx)
 {
 	char *data = pMediaQItem->pPubData;
 	int offset;
-	for (offset = startIdx; offset < pMediaQItem->dataLen; offset++) {
+	for (offset = startIdx; offset < (int)pMediaQItem->dataLen; offset++) {
 		if (data[offset] == MPEG2_TS_SYNC_BYTE)
 			break;
 	}
 
 	AVB_LOGF_WARNING("Dropped %d bytes", offset - startIdx);
-	if (offset >= pMediaQItem->dataLen)
+	if (offset >= (int)pMediaQItem->dataLen)
 		offset = -1;
 
 	return offset;
@@ -397,7 +397,7 @@ tx_cb_ret_t openavbMapMpeg2tsTxCB(media_q_t *pMediaQ, U8 *pData, U32 *dataLen)
 			if (nItemBytes == 0) {
 				// Empty MQ item, ignore
 			}
-			else if (nAvailBytes >= pPvtData->tsPacketSize) {
+			else if (nAvailBytes >= (int)pPvtData->tsPacketSize) {
 				// PTP walltime already set in the interface module. Just add the max transit time.
 				// If this is a new mq item, add the AVTP transit time to the timestamp
 				if (pMediaQItem->readIdx == 0) {
@@ -444,7 +444,7 @@ tx_cb_ret_t openavbMapMpeg2tsTxCB(media_q_t *pMediaQ, U8 *pData, U32 *dataLen)
 				}
 
 				// Now, copy data from current MQ item
-				memcpy(pPayload + offset, pMediaQItem->pPubData + pMediaQItem->readIdx, bytesNeeded);
+				memcpy(pPayload + offset, (uint8_t*)pMediaQItem->pPubData + pMediaQItem->readIdx, bytesNeeded);
 
 				// Check that the data we've copied is synchronized
 				/// i.e. that the transport stream packet starts
@@ -479,7 +479,7 @@ tx_cb_ret_t openavbMapMpeg2tsTxCB(media_q_t *pMediaQ, U8 *pData, U32 *dataLen)
 				assert(pPvtData->nSavedBytes + nItemBytes <= MPEG2_TS_PKT_SIZE);
 
 				memcpy(pPvtData->savedBytes + pPvtData->nSavedBytes,
-					pMediaQItem->pPubData + pMediaQItem->readIdx,
+					(uint8_t*)pMediaQItem->pPubData + pMediaQItem->readIdx,
 					nItemBytes);
 				pPvtData->nSavedBytes += nItemBytes;
 
@@ -488,7 +488,7 @@ tx_cb_ret_t openavbMapMpeg2tsTxCB(media_q_t *pMediaQ, U8 *pData, U32 *dataLen)
 			}
 
 			// Have we reached our target?
-			if (sourcePacketsAdded >= pPvtData->numSourcePackets)
+			if (sourcePacketsAdded >= (int)pPvtData->numSourcePackets)
 				moreSourcePackets = FALSE;
 
 			// Have we used up the data in the MQ item?
@@ -600,7 +600,7 @@ bool openavbMapMpeg2tsRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 				int i;
 				for (i = 0; i < sourcePacketCount; i++) {
 					if (pMediaQItem->itemSize - pMediaQItem->dataLen >= pPvtData->tsPacketSize) {
-						memcpy(pMediaQItem->pPubData + pMediaQItem->dataLen,
+						memcpy((uint8_t*)pMediaQItem->pPubData + pMediaQItem->dataLen,
 							pPayload + MPEGTS_SRC_PKT_SIZE - pPvtData->tsPacketSize,
 							pPvtData->tsPacketSize);
 						pMediaQItem->dataLen += pPvtData->tsPacketSize;

@@ -246,6 +246,7 @@ void openavbIntfMjpegOpenglEndCB(media_q_t *pMediaQ)
 void openavbIntfMjpegOpenglGenEndCB(media_q_t *pMediaQ)
 {
 	AVB_TRACE_ENTRY(AVB_TRACE_INTF);
+	(void) pMediaQ;
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
 }
 

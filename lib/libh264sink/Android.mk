@@ -23,6 +23,11 @@ ifeq ($(call is-platform-sdk-version-at-least,25),true)
 LOCAL_CFLAGS += -DUSE_MEDIA_CODEC_BUFFER
 endif
 
+ifeq ($(PLATFORM_VERSION), P)
+LOCAL_CFLAGS += -DSURFACE_NO_GLOBAL_TRANSACTION
+LOCAL_SHARED_LIBRARIES += libmedia_omx
+endif
+
 LOCAL_MODULE_TAGS := optional
 
 LOCAL_MODULE:= libh264sink

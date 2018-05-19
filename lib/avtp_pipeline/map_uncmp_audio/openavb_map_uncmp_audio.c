@@ -523,7 +523,7 @@ tx_cb_ret_t openavbMapUncmpAudioTxCB(media_q_t *pMediaQ, U8 *pData, U32 *dataLen
 
 				U8 *pItemData = (U8 *)pMediaQItem->pPubData + pMediaQItem->readIdx;
 				while (framesProcessed < pPubMapInfo->framesPerPacket && pMediaQItem->readIdx < pMediaQItem->dataLen) {
-					int i1;
+					uint32_t i1;
 					for (i1 = 0; i1 < pPubMapInfo->audioChannels; i1++) {
 						if (pPubMapInfo->itemSampleSizeBytes == 2) {
 							S32 sample = *(S16 *)pItemData;
@@ -721,7 +721,7 @@ bool openavbMapUncmpAudioRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 				}
 
 				while (((pAVTPDataUnit + pPubMapInfo->packetFrameSizeBytes) <= pAVTPDataUnitEnd) && ((pItemData + pPubMapInfo->itemFrameSizeBytes) <= pItemDataEnd)) {
-					int i1;
+					uint32_t i1;
 					for (i1 = 0; i1 < pPubMapInfo->audioChannels; i1++) {
 						if (pPubMapInfo->itemSampleSizeBytes == 2) {
 							S32 sample = ntohl(*(S32 *)pAVTPDataUnit);
