@@ -71,6 +71,8 @@
 sem_t theadInitSem ;
 using namespace android;
 
+#define PROP_VEHICLEAUDIOFOCUS "vendor.audio.vehicle.focus.enabled"
+
 struct MyStreamSource : public BnStreamSource {
     // Object assumes ownership of fd.
     MyStreamSource(int fd);
@@ -199,6 +201,11 @@ void* AvbMpegStreamthread(void *arg)
        return NULL;
     }
 
+    bool vhal_focus_old = property_get_bool(PROP_VEHICLEAUDIOFOCUS, true);
+    if (vhal_focus_old) {
+        property_set(PROP_VEHICLEAUDIOFOCUS, "false");
+    }
+
     sp<SurfaceComposerClient> composerClient = new SurfaceComposerClient;
     CHECK_EQ(composerClient->initCheck(), (status_t)OK);
 
@@ -264,6 +271,10 @@ void* AvbMpegStreamthread(void *arg)
     }
 
     composerClient->dispose();
+
+    if (vhal_focus_old) {
+        property_set(PROP_VEHICLEAUDIOFOCUS, "true");
+    }
 
     pthread_exit (NULL);
 }
