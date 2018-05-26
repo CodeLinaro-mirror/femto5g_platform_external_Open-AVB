@@ -88,7 +88,6 @@ typedef struct {
 	int nRepeatCount;
 	int nBuffersSent;
 
-	int mqFlush;
 
 	// Talker variables for tracking bitrate
 	unsigned int maxBitrate;
@@ -611,9 +610,9 @@ bool openavbIntfMpeg2tsFileRxCB(media_q_t *pMediaQ)
 		while (moreData) {
 			media_q_item_t *pMediaQItem = openavbMediaQTailLock(pMediaQ, pPvtData->ignoreTimestamp);
 			if (pMediaQItem) {
-				pPvtData->mqFlush = FALSE;      /* mqFlush initialised to zero when media available .*/
 				while (pPvtData->pFile && pMediaQItem->dataLen > 0) {
 					written = fwrite(pMediaQItem->pPubData, 1, pMediaQItem->dataLen, pPvtData->pFile);
+					fflush(pPvtData->pFile);
 					if (written == 0) {
 						int e = ferror(pPvtData->pFile);
 						AVB_LOGF_ERROR("Error writing file: %s, %s", pPvtData->pFileName, strerror(e));
@@ -627,12 +626,6 @@ bool openavbIntfMpeg2tsFileRxCB(media_q_t *pMediaQ)
 			}
 			else {
 				moreData = FALSE;
-			}
-		}
-		if (moreData == FALSE) {
-			if (pPvtData->mqFlush == FALSE) {
-				fflush(pPvtData->pFile);
-				pPvtData->mqFlush = TRUE;
 			}
 		}
 	}
