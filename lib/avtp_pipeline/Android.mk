@@ -111,9 +111,12 @@ LOCAL_SHARED_LIBRARIES += \
             libopenavb_intf_ctrl \
             libopenavb_intf_echo \
             libopenavb_intf_h264_file \
+            libopenavb_intf_h264_stream \
             libopenavb_intf_logger \
             libopenavb_intf_mjpeg_file \
+            libopenavb_intf_mjpeg_opengl \
             libopenavb_intf_mpeg2ts_file \
+            libopenavb_intf_mpeg2ts_stream \
             libopenavb_intf_null \
             libopenavb_intf_tinyalsa \
             libopenavb_intf_tonegen \
