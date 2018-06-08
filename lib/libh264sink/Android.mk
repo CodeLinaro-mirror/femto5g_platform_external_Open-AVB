@@ -23,7 +23,7 @@ ifeq ($(call is-platform-sdk-version-at-least,25),true)
 LOCAL_CFLAGS += -DUSE_MEDIA_CODEC_BUFFER
 endif
 
-ifeq ($(PLATFORM_VERSION), P)
+ifeq ($(call is-platform-sdk-version-at-least,28),true)
 LOCAL_CFLAGS += -DSURFACE_NO_GLOBAL_TRANSACTION
 LOCAL_SHARED_LIBRARIES += libmedia_omx
 endif

@@ -21,7 +21,7 @@ ifeq ($(call is-platform-sdk-version-at-least,27),true)
 LOCAL_CFLAGS += -DNO_SK_LOCK
 endif
 
-ifeq ($(PLATFORM_VERSION), P)
+ifeq ($(call is-platform-sdk-version-at-least,28),true)
 LOCAL_CFLAGS += -DSKIA_MAKE_FROM_DATA -DSURFACE_NO_GLOBAL_TRANSACTION
 endif
 
@@ -35,7 +35,7 @@ LOCAL_SHARED_LIBRARIES := \
     libgui \
     liblog
 
-ifeq ($(PLATFORM_VERSION), P)
+ifeq ($(call is-platform-sdk-version-at-least,28),true)
 #workaround to link to libskia
 LOCAL_SHARED_LIBRARIES += libhwui libui
 else

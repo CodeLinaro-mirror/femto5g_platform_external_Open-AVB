@@ -17,7 +17,7 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_C_INCLUDES)
 
 LOCAL_CFLAGS += -Wall -Werror -Wunused -Wunreachable-code
 
-ifeq ($(PLATFORM_VERSION), P)
+ifeq ($(call is-platform-sdk-version-at-least,28),true)
 LOCAL_CFLAGS += -DSURFACE_NO_GLOBAL_TRANSACTION -DOMX_SPLIT
 endif
 
