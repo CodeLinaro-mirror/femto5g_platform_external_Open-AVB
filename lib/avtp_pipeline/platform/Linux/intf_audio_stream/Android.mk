@@ -17,7 +17,8 @@ LOCAL_SHARED_LIBRARIES := libopenavb \
 LOCAL_REQUIRED_MODULES := \
    audio_stream_talker.ini \
    audio_stream_listener.ini \
-   audio.eavb.default
+   audio.eavb.default \
+   audio_policy_configuration.xml
 
 include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
@@ -30,6 +31,13 @@ include $(BUILD_PREBUILT)
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := DATA
 LOCAL_MODULE := audio_stream_listener.ini
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/avb
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE_CLASS := DATA
+LOCAL_MODULE := audio_policy_configuration.xml
 LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/avb
 include $(BUILD_PREBUILT)
