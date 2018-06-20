@@ -54,6 +54,9 @@
 #define LOWER_LIMIT_PPM -250
 #define PPM_OFFSET_TO_RATIO(ppm) ((ppm) / ((FrequencyRatio)US_PER_SEC) + 1)
 
+#define MIN_LS_RATIO 0.5
+#define MAX_LS_RATIO 2.0
+
 /* This is the threshold in ns for which frequency adjustments will be made */
 #define PHASE_ERROR_THRESHOLD (1000000000)
 

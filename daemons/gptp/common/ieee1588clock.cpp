@@ -309,6 +309,13 @@ FrequencyRatio IEEE1588Clock::calcLocalSystemClockRateDifference( Timestamp loca
 		ppt_offset = 1.0;
 	}
 
+	// Check for jumps in system time or local time
+	if ((fabs(ppt_offset) < MIN_LS_RATIO) || (fabs(ppt_offset) > MAX_LS_RATIO)) {
+		GPTP_LOG_WARNING("Local to system clock ratio (%Lf) exceeding threshold",
+				ppt_offset);
+		ppt_offset = 1.0;
+	}
+
 	_prev_system_time = system_time;
 	_prev_local_time = local_time;
 
