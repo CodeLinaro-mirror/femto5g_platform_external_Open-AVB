@@ -242,6 +242,11 @@ extern DLL_EXPORT bool openavbIntfH264StreamInitialize(media_q_t *pMediaQ, opena
 	pMediaQ->pPvtIntfInfo = calloc(1, sizeof(pvt_data_t));
 
 	pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
+	if(!pPvtData){
+		AVB_LOG_DEBUG("H264 Initialize: no memory allocation");
+		AVB_TRACE_EXIT(AVB_TRACE_INTF);
+		return FALSE;
+	}
 	pPvtData->width = DEFAULT_WIDTH;
 	pPvtData->height = DEFAULT_HEIGHT;
 	pPvtData->frameRate = DEFAULT_FRAMERATE;
