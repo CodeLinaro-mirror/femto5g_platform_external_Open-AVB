@@ -233,6 +233,7 @@ include_directories(
 		${AVB_SRC_DIR}/tl
 		${AVB_SRC_DIR}/util
 		${AVB_OSAL_DIR}/endpoint
+		${AVB_OSAL_DIR}/filewriter
 		${AVB_OSAL_DIR}/fqtss/qmgr
 		)
 
@@ -253,6 +254,7 @@ add_subdirectory ( mcr )
 add_subdirectory ( ${AVB_OSAL_DIR}/rawsock )
 # OpenAVB Common (support) files
 SET ( SRC_FILES ${SRC_FILES} ${AVB_OSAL_DIR}/openavb_time_osal.c )
+SET ( SRC_FILES ${SRC_FILES} ${AVB_OSAL_DIR}/filewriter/openavb_filewriter.c )
 SET ( SRC_FILES ${SRC_FILES} ${AVB_SRC_DIR}/openavb_common/avb.c )
 SET ( SRC_FILES ${SRC_FILES} ${AVB_SRC_DIR}/openavb_common/mrp_client.c )
 
