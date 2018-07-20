@@ -51,16 +51,19 @@ using namespace android;
  *                               Defines
  *****************************************************************************/
 #define OUTPUT_DQ_TIMEOUT          20000ll // Can wait for output buff
-#define INPUT_DQ_TIMEOUT             500ll // Shouldn't wait on input buff
-#define INPUT_DQ_TIMEOUT_INCREMENT   100ll // Incremental wait time on input buff dq
+#define INPUT_DQ_TIMEOUT           50000ll // 10 ms
+#define DATA_WAIT_TIMEOUT_NS    50000000ll // 50 ms
 
 #define INITIAL_BUFFER_SIZE   100000
 #define BUFFER_SIZE_INCREMENT 100000
 #define MAX_BUFFER_SIZE      7077888 // Sized to match MediaCodec input buffer
 
+#define NSEC_PER_SEC 1000000000
+
 #define PROP_ARBITRARYBYTES "vendor.vidc.dec.debug.arbitrarybytes.mode"
 
 class AvbH264Sink;
+void* Avbh264InputThread(void *arg);
 
 /******************************************************************************
  *                        global static variables
@@ -150,20 +153,27 @@ class PacketBuffer : public RefBase {
 public:
     PacketBuffer()
         : mBuffer(nullptr),
+          mMutex(PTHREAD_MUTEX_INITIALIZER),
+          mCv(PTHREAD_COND_INITIALIZER),
           mBufferSize(0),
           mPos(0),
           mCount(0) {
         GrowBuffer(INITIAL_BUFFER_SIZE);
+        pthread_mutex_init(&mMutex, nullptr);
+        pthread_cond_init(&mCv, nullptr);
     };
     ~PacketBuffer();
     bool GrowBuffer(size_t size);
     bool CopyBuf(uint8_t *pBuf, int size);
-    void Reset();
-    size_t GetSize() { return mPos; };
-    uint8_t* GetBuf() { return mBuffer; };
+    size_t MoveDataTo(void *pBuf);
+    bool WaitForData(uint32_t timeout);
+    bool DataAvailable();
 
 private:
+    void Reset();
     uint8_t* mBuffer;
+    pthread_mutex_t mMutex;
+    pthread_cond_t mCv;
     size_t mBufferSize;
     size_t mPos;
     int mCount;
@@ -207,11 +217,13 @@ bool PacketBuffer::GrowBuffer(size_t size) {
  * Call this function to append a packet's data to the buffer.
  */
 bool PacketBuffer::CopyBuf(uint8_t *pBuf, int size) {
+    pthread_mutex_lock(&mMutex);
     // Check buffer is large enough to contain new data
     if ((mPos + size) > mBufferSize) {
         // Try to grow buffer to fit new data. Growth increment should be much
         // greater than new buffer size to prevent constant reallocation.
         if (!GrowBuffer(BUFFER_SIZE_INCREMENT)) {
+            pthread_mutex_unlock(&mMutex);
             return false;
         }
     }
@@ -220,7 +232,50 @@ bool PacketBuffer::CopyBuf(uint8_t *pBuf, int size) {
     memcpy((mBuffer + mPos), pBuf, size);
     mPos += size;
     mCount++;
+    pthread_cond_broadcast(&mCv);
+    pthread_mutex_unlock(&mMutex);
     return true;
+}
+
+/**
+ *
+ */
+bool PacketBuffer::DataAvailable() {
+    pthread_mutex_lock(&mMutex);
+    bool retVal = (mPos > 0) ? true : false;
+    pthread_mutex_unlock(&mMutex);
+    return retVal;
+}
+
+/**
+ *
+ */
+bool PacketBuffer::WaitForData(uint32_t timeout) {
+    timespec ts;
+    pthread_mutex_lock(&mMutex);
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    ts.tv_nsec += timeout;
+    if (ts.tv_nsec > NSEC_PER_SEC) {
+        ts.tv_sec += 1;
+        ts.tv_nsec -= NSEC_PER_SEC;
+    }
+    pthread_cond_timedwait(&mCv, &mMutex, &ts);
+    bool retVal = (mPos > 0) ? true : false;
+    pthread_mutex_unlock(&mMutex);
+    return retVal;
+}
+
+/**
+ *
+ */
+size_t PacketBuffer::MoveDataTo(void *pBuf) {
+    pthread_mutex_lock(&mMutex);
+    // Copy data
+    size_t size = mPos;
+    memcpy(pBuf, mBuffer, mPos);
+    Reset();
+    pthread_mutex_unlock(&mMutex);
+    return size;
 }
 
 /**
@@ -309,14 +364,13 @@ public:
         : mCodec(nullptr),
           mPacketBuffer(),
           mVideoStats(vs->width, vs->height, vs->frameRate),
-          mInputTimeout(INPUT_DQ_TIMEOUT),
           mStopStream(false),
           mSawOutputEOS(false),
-          mNextDqUsec(0),
           mFrameDurationUsec(0),
           prev_arbitrarybytes(-1) {
        char propVal[PROPERTY_VALUE_MAX] = {0};
        int currentVal;
+       pthread_t tid;
        if (vs->frameRate > 0) {
            mFrameDurationUsec = (s2ns(1) / vs->frameRate) / 1000;
        }
@@ -327,6 +381,9 @@ public:
        if (currentVal != 1) {
            prev_arbitrarybytes = currentVal;
            property_set(PROP_ARBITRARYBYTES, "1");
+       }
+       if (0 != pthread_create(&tid, NULL, Avbh264InputThread, this)){
+           ALOGE("Avbh264InputThread creation failed...\n ");
        }
     };
     virtual ~AvbH264Sink() {
@@ -339,6 +396,7 @@ public:
     };
     int DataSink(uint8_t *pBuf, int size);
     int Run();
+    int RunInput();
     int Stop();
     int InitMediaCodec(const sp<ALooper> &looper, const sp<Surface> &surface);
 
@@ -346,11 +404,9 @@ private:
     sp<MediaCodec> mCodec;
     PacketBuffer mPacketBuffer;
     VideoStats mVideoStats;
-    int64_t mInputTimeout;
 
     bool mStopStream;
     bool mSawOutputEOS;
-    int64_t mNextDqUsec;
     int64_t mFrameDurationUsec;
     int prev_arbitrarybytes;
 };
@@ -403,6 +459,7 @@ int AvbH264Sink::Run() {
                 &index, &offset, &size, &presentationTimeUs, &flags,
                 OUTPUT_DQ_TIMEOUT);
 
+        //ALOGE("Dequeue output buffer %d bi=%zu", err, bufferIndex);
         if (err == OK) {
             outputInfo.FrameDecoded(size);
 
@@ -410,7 +467,7 @@ int AvbH264Sink::Run() {
             CHECK_EQ(err, (status_t)OK);
 
             if (flags & MediaCodec::BUFFER_FLAG_EOS) {
-                ALOGD("reached EOS on output.");
+                ALOGI("reached EOS on output.");
                 mSawOutputEOS = true;
             }
 
@@ -427,15 +484,72 @@ int AvbH264Sink::Run() {
             ALOGI("INFO_FORMAT_CHANGED: %s", format->debugString().c_str());
         } else if (err == -EAGAIN) {
             // try pulling again, not output buffer was available within timeout
+
+            //ALOGE("try pulling again, not output buffer was available within timeout ");
         } else {
             ALOGE("Got error %d\n", err);
         }
     }
 
-    ALOGD("Reached EOS or stream stopped - stopping codec and exiting\n");
+    ALOGE("Reached EOS or stream stopped - stopping codec and exiting\n");
     outputInfo.PrintInfo();
     mCodec->stop();
     mCodec->release();
+
+    return 0;
+}
+
+/**
+ *
+ */
+int AvbH264Sink::RunInput() {
+    int32_t err;
+    size_t bufferIndex = 0;
+    size_t dataSize = 0;
+
+#ifdef USE_MEDIA_CODEC_BUFFER
+    sp<MediaCodecBuffer> codecBuffer = nullptr;
+#else
+    sp<ABuffer> codecBuffer = nullptr;
+#endif
+
+    while (!(mSawOutputEOS || mStopStream)) {
+        if (mPacketBuffer.DataAvailable() == 0) {
+            if(!mPacketBuffer.WaitForData(DATA_WAIT_TIMEOUT_NS)) {
+                continue;
+            }
+        }
+
+        // Try to dequeue an input buffer from the codec
+        err = mCodec->dequeueInputBuffer(&bufferIndex, INPUT_DQ_TIMEOUT);
+        if (err != OK) {
+           continue;
+        }
+
+        // Grab the input buffer
+        err = mCodec->getInputBuffer(bufferIndex, &codecBuffer);
+        if (err != OK) {
+            ALOGD("Cannot getInputBuffer err=%d.", err);
+            continue;
+        }
+
+        // Push buffered data into the input buffer
+        dataSize = mPacketBuffer.MoveDataTo(codecBuffer->data());
+
+        // Re-queue the filled input buffer
+        err = mCodec->queueInputBuffer(
+                bufferIndex,
+                0,
+                dataSize,
+                0,
+                0);
+
+        //ALOGE("queue input buffer ret=%d bi =%zu", err, bufferIndex);
+        CHECK_EQ(err, (status_t)OK);
+    }
+
+
+
 
     return 0;
 }
@@ -453,67 +567,15 @@ int AvbH264Sink::Stop() {
  * This function will be called every time the listener receives a packet.
  */
 int AvbH264Sink::DataSink(uint8_t *pBuf, int size) {
-    size_t bufferIndex = 0;
-#ifdef USE_MEDIA_CODEC_BUFFER
-    sp<MediaCodecBuffer> codecBuffer = nullptr;
-#else
-    sp<ABuffer> codecBuffer = nullptr;
-#endif
-
-    uint32_t bufferFlags = 0;
-    int err = 0;
-    int64_t currentTimeUsec = ALooper::GetNowUs();
-
     if (mStopStream) {
         return -1;
     }
 
     if (!mPacketBuffer.CopyBuf(pBuf, size)) {
+        ALOGE("Failed to copy data");
         return -1;
     }
 
-    // Check if we have buffered enough data
-    if (mNextDqUsec == 0) {
-        mNextDqUsec = currentTimeUsec + mFrameDurationUsec;
-        return size;
-    } else if (mNextDqUsec > currentTimeUsec) {
-        return size;
-    }
-
-    // Try to dequeue an input buffer from the codec
-    err = mCodec->dequeueInputBuffer(&bufferIndex, mInputTimeout);
-    if (err != OK) {
-        // Couldn't get an input buffer in time, buffer data for a bit longer
-        mNextDqUsec = currentTimeUsec + mFrameDurationUsec;
-        mInputTimeout += INPUT_DQ_TIMEOUT_INCREMENT;
-        return size;
-    }
-
-    // Grab the input buffer
-    err = mCodec->getInputBuffer(bufferIndex, &codecBuffer);
-    if (err != OK) {
-        return -1;
-    }
-
-    // Push buffered data into the input buffer
-    //ALOGE("Pushing %zu bytes into codec input buffer %zu (maxsize = %zu)\n",
-    //        mPacketBuffer.GetSize(), bufferIndex,  codecBuffer->capacity());
-    memcpy(codecBuffer->data(), mPacketBuffer.GetBuf(), mPacketBuffer.GetSize());
-
-    // Re-queue the filled input buffer
-    err = mCodec->queueInputBuffer(
-            bufferIndex,
-            0,
-            mPacketBuffer.GetSize(),
-            0,
-            bufferFlags);
-
-    // reset packet buffer and timers
-    mPacketBuffer.Reset();
-    mInputTimeout = INPUT_DQ_TIMEOUT;
-    mNextDqUsec = 0;
-
-    CHECK_EQ(err, (status_t)OK);
     return size;
 }
 
@@ -544,6 +606,19 @@ void* Avbh264SinkThread(void *arg) {
     sink->Run();
 
     looper->stop();
+    return NULL;
+}
+
+/**
+ * This function is used to pull data out of the packet buffer and into the
+ * media codec input buffers
+ */
+void* Avbh264InputThread(void *arg) {
+    sp<AvbH264Sink> sink = (AvbH264Sink*) arg;
+
+    // This function returns once EOS is reached or stream is halted
+    sink->RunInput();
+
     return NULL;
 }
 
