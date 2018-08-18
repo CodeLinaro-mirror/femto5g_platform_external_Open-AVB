@@ -71,7 +71,7 @@
 sem_t theadInitSem ;
 using namespace android;
 
-#define PROP_VEHICLEAUDIOFOCUS "vendor.audio.vehicle.focus.enabled"
+#define PROP_VEHICLEAUDIOFOCUS "persist.vendor.audio.vehicle.focus.enabled"
 
 struct MyStreamSource : public BnStreamSource {
     // Object assumes ownership of fd.
