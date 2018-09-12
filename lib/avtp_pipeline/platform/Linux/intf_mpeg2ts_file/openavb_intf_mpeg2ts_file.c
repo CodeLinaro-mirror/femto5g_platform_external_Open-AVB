@@ -608,7 +608,6 @@ bool openavbIntfMpeg2tsFileRxCB(media_q_t *pMediaQ)
 		}
 
 		bool moreData = TRUE;
-		size_t written;
 
 		while (moreData) {
 			media_q_item_t *pMediaQItem = openavbMediaQTailLock(pMediaQ, pPvtData->ignoreTimestamp);
