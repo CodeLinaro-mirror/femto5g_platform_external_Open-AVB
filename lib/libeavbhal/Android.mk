@@ -13,7 +13,9 @@ LOCAL_SRC_FILES:= \
 
 LOCAL_SHARED_LIBRARIES := \
             liblog \
-            libutils
+            libutils \
+            libcutils \
+            libhardware
 
 LOCAL_C_INCLUDES:= \
         $(LOCAL_PATH)
