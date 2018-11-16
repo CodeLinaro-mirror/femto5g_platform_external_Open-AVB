@@ -421,7 +421,12 @@ int AvbH264Sink::InitMediaCodec(const sp<ALooper> &looper,
     format->setString("mime",MEDIA_MIMETYPE_VIDEO_AVC);
     format->setInt32("height",mVideoStats.height);
     format->setInt32("width",mVideoStats.width );
-    format->setInt32("arbitrary_bytes", 1);
+
+    // Enable Arbitrary Bytes modes, which allows us to pass abitrarily sized
+    // buffers to the decoder instead of individual AVC NAL frames.
+    format->setInt32("arbitrary_bytes", 1); // Android N flag
+    // Android O flag set via system property in AvbH264Sink constructor
+    format->setInt32("use-arbitrary-mode", 1); // Android P flag
 
     mCodec = MediaCodec::CreateByType(looper,
             MEDIA_MIMETYPE_VIDEO_AVC, false);
