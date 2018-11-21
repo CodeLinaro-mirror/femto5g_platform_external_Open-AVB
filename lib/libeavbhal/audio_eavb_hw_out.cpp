@@ -125,7 +125,7 @@ static char * out_get_parameters(const struct audio_stream *stream, const char *
 
 static uint32_t out_get_latency(const struct audio_stream_out *stream)
 {
-    return 0;
+    return 10;
 }
 
 static int out_set_volume(struct audio_stream_out *stream, float left,

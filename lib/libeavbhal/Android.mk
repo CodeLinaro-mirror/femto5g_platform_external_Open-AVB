@@ -27,6 +27,7 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE:= audio.eavb.default
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_VENDOR_MODULE := true
+LOCAL_MULTILIB := both
 
 include $(BUILD_SHARED_LIBRARY)
 
