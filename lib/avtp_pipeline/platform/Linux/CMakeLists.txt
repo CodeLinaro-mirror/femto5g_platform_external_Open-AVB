@@ -276,6 +276,11 @@ endif ()
 
 # Use GLIB for strlcpy and strlcat
 set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_GLIB" )
+MESSAGE ("Default CMAKE_SHARED_LINKER_FLAGS          : ${CMAKE_SHARED_LINKER_FLAGS}")
+set ( CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -lm  -lglib-2.0 -ldl -lrt -lasound -lalsa_intf -lpthread" )
+MESSAGE ("CMAKE_C_FLAGS          : ${CMAKE_C_FLAGS}")
+MESSAGE ("CMAKE_SHARED_LINKER_FLAGS          : ${CMAKE_SHARED_LINKER_FLAGS}")
+MESSAGE ("CMAKE_EXE_LINKER_FLAGS          : ${CMAKE_EXE_LINKER_FLAGS}")
 
 add_library ( openavb SHARED ${SRC_FILES} )
 if (AVB_FEATURE_NEUTRINO)
