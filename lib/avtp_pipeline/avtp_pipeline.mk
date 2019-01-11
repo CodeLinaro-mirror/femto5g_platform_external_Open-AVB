@@ -34,4 +34,5 @@ build/Makefile:
 	      -DGLIB_PKG_LIBRARIES=glib-2.0 gobject-2.0 \
 	      -DALSA_INCLUDE_DIRS=$(PKG_CONFIG_SYSROOT_DIR)/usr/include/alsa \
 	      -DALSA_LIBRARIES=asound \
+	      -DSDX_ALSA_LIB_INCLUDED=$(SDX_ALSA_LIB_INCLUDED) \
               ..
