@@ -661,8 +661,10 @@ public:
 	virtual bool update(
 		int64_t ml_phoffset,
 		int64_t ls_phoffset,
+		int64_t lq_phoffset,
 		FrequencyRatio ml_freqoffset,
 		FrequencyRatio ls_freqoffset,
+		FrequencyRatio lq_freqoffset,
 		uint64_t local_time,
 		uint32_t sync_count,
 		uint32_t pdelay_count,
@@ -710,13 +712,24 @@ public:
 		int8_t   log_announce_interval,
 		int8_t   log_pdelay_interval,
 		uint16_t port_number );
-   /**	
+   /**
     * @brief Updates GmIdentity IPC values
     * @return TRUE
     */
     virtual bool updateGmId(ClockIdentity& id, uint16_t portNumber);
 
+	/**
+    * @brief Updates sync status
+    * @return TRUE
+    */
+	virtual bool updateSyncStatus(bool is_sync);
 
+	/**
+    * @brief Updates Qtimer to monotonic time offset
+    * @return TRUE
+    */
+
+	virtual bool updateQtimeToMonoOffset(int64_t offset);
 
 	/**
 	 * @brief unmaps and unlink shared memory

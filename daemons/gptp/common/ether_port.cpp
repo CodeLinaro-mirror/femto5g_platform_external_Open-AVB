@@ -748,6 +748,8 @@ void EtherPort::becomeSlave( bool restart_syntonization ) {
 	clock->deleteEventTimerLocked( this, SYNC_INTERVAL_TIMEOUT_EXPIRES );
 
 	setPortState( PTP_SLAVE );
+	
+	clock->setSyncStatus(true);
 
 	if (!automotive_profile) {
 		clock->addEventTimerLocked

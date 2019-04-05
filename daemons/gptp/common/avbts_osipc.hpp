@@ -79,8 +79,10 @@ public:
 	virtual bool update(
 		int64_t  ml_phoffset,
 		int64_t ls_phoffset,
+		int64_t lq_phoffset,
 		FrequencyRatio  ml_freqoffset,
 		FrequencyRatio ls_freq_offset,
+		FrequencyRatio lq_freq_offset,
 		uint64_t local_time,
 		uint32_t sync_count,
 		uint32_t pdelay_count,
@@ -136,7 +138,13 @@ public:
       */
     virtual bool updateGmId(ClockIdentity& id, uint16_t portNumber) = 0;
 
-
+	 /**
+      * @brief Updates sync status
+      * @param is_sync - Sync status of gPTP slave
+      * @param portNumber Port of the grandmaster
+      * @return Implementation dependent
+      */
+    virtual bool updateSyncStatus(bool is_sync) = 0;
 
 	/*
 	 * Destroys IPC

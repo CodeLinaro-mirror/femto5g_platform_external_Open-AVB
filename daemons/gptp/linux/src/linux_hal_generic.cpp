@@ -55,6 +55,8 @@
 #define TX_PHY_TIME 184
 #define RX_PHY_TIME 382
 
+#define QTIMER_RESAMPLING 5
+
 net_result LinuxNetworkInterface::nrecv
 ( LinkLayerAddress *addr, uint8_t *payload, size_t &length )
 {
@@ -432,7 +434,7 @@ static inline Timestamp pctTimestamp( struct ptp_clock_time *t ) {
 
 // Use HW cross-timestamp if available
 bool LinuxTimestamperGeneric::HWTimestamper_gettime
-( Timestamp *system_time, Timestamp *device_time, uint32_t *local_clock,
+( Timestamp *system_time,Timestamp *mono_time, Timestamp *device_time, uint32_t *local_clock,
   uint32_t *nominal_clock_rate ) const
 {
 	if( phc_fd == -1 )
@@ -479,11 +481,59 @@ bool LinuxTimestamperGeneric::HWTimestamper_gettime
 		if (device_time_l != NULL && system_time_l != NULL) {
 			*device_time = pctTimestamp( device_time_l );
 			*system_time = pctTimestamp( system_time_l );
-			return true;
+			//return true;
 		} else {
 			return false;
         }
-
 	}
 
+#ifdef PTP_SW_QTIMER
+	{
+
+		int64_t interval = 0;
+		int64_t calculated_mono_time = 0;
+
+		// Find average delta between qtimer and system time
+		for(int i = 0; i < QTIMER_RESAMPLING; ++i ) {
+			struct timespec real;
+			struct ptp_clock_time real_pct;
+			struct ptp_clock_time qtimer_pct;
+			uint64_t qTimerCount = 0, qTimerFreq = 0, qTimerNanosSec = 0, qTimerNanosNSec = 0;
+
+			clock_gettime(CLOCK_REALTIME, &real);
+#if __aarch64__
+			asm volatile("mrs %0, cntvct_el0" : "=r" (qTimerCount));
+			asm volatile("mrs %0, cntfrq_el0" : "=r"(qTimerFreq));
+#else
+			asm volatile("mrrc p15, 1, %Q0, %R0, c14" : "=r" (qTimerCount));
+			qTimerFreq =  19200000; //19.2 MHz TBD: find right asm instruction
+#endif
+			qTimerNanosSec = (qTimerCount / qTimerFreq);
+			qTimerNanosNSec = (qTimerCount % qTimerFreq);
+			qTimerNanosNSec *= 1000000000;
+			qTimerNanosNSec /= qTimerFreq;
+			/*GPTP_LOG_WARNING("qTimerCount = %llu, qTimeFreq = %llu, qTime=%llu.%09llu",
+				qTimerCount, qTimerFreq, qTimerNanosSec, qTimerNanosNSec);*/
+			qtimer_pct.sec = qTimerNanosSec;
+			qtimer_pct.nsec = qTimerNanosNSec;
+
+			real_pct.sec = real.tv_sec;
+			real_pct.nsec = real.tv_nsec;
+
+			interval += pctns(pct_diff(&real_pct, &qtimer_pct));
+		}
+
+		// Calculate monotonic qtimer time equivanlent to system time above, which
+		// will allow us to easily calculate qtimer<->gptp time offset.
+		calculated_mono_time = TIMESTAMP_TO_NS(*system_time);
+		calculated_mono_time -= (interval / QTIMER_RESAMPLING);
+		mono_time->set64(calculated_mono_time);
+
+		/*GPTP_LOG_WARNING("system_time = %d.%d, mono_time = %d.%d, device_time_l = %d.%d",
+				system_time->seconds_ls, system_time->nanoseconds,
+				mono_time->seconds_ls, mono_time->nanoseconds,
+				device_time->seconds_ls, device_time->nanoseconds);*/
+	}
+#endif
+	return true;
 }

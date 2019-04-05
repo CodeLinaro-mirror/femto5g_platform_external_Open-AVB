@@ -32,10 +32,8 @@ help:
 
 ntn: FORCE
 	$(call descend,lib/neutrino)
-
 ntn_clean:
 	$(call descend,lib/neutrino/,clean)
-
 mrpd:
 	$(call descend,daemons/$@)
 
@@ -63,6 +61,7 @@ simple_talker:
 
 simple_talker_clean:
 	$(call descend,examples/simple_talker/,clean)
+
 
 simple_listener:
 	$(call descend,examples/$@)
@@ -103,14 +102,26 @@ avtp_pipeline_clean:
 avtp_pipeline_doc: ntn
 	$(MAKE) -s -C lib/avtp_pipeline -f avtp_pipeline.mk doc
 
+libgptp:
+	$(call descend,lib/libgptp)
+
+libgptp_clean:
+	$(call descend,lib/libgptp/,clean)
+
+libgptp_test:
+	$(call descend,examples/$@)
+
+libgptp_test_clean:
+	$(call descend,examples/libgptp_test/,clean)
+
 examples_all: simple_talker simple_listener mrp_client live_stream jackd-talker \
 	jackd-listener
 
 examples_all_clean: simple_talker_clean simple_listener_clean mrp_client_clean \
 	jackd-talker_clean jackd-listener_clean live_stream_clean
 
-all: daemons_all avtp_pipeline
+all: daemons_all avtp_pipeline libgptp libgptp_test
 
-clean: daemons_all_clean avtp_pipeline_clean
+clean: daemons_all_clean avtp_pipeline_clean libgptp_clean libgptp_test_clean
 
 .PHONY: FORCE

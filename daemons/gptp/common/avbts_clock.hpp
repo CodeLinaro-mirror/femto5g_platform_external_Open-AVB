@@ -139,6 +139,7 @@ private:
 	bool _local_system_freq_offset_init;
 	Timestamp _prev_local_time;
 	Timestamp _prev_system_time;
+	Timestamp _prev_mono_time;
 
 	OS_IPC *ipc;
 
@@ -296,7 +297,14 @@ public:
    * @param  id New id and port number
    * @return void
    */
-  void setGrandmasterClockIdentity(ClockIdentity id, uint16_t portNumber);	
+  void setGrandmasterClockIdentity(ClockIdentity id, uint16_t portNumber);
+
+    /**
+   * @brief  Update sync status
+   * @param  is_sync Sync status of PTP slave
+   * @return void
+   */
+  void setSyncStatus(bool is_sync);
 
   /**
    * @brief  Gets grandmaster clock quality object
@@ -472,7 +480,7 @@ public:
       if (index <= 0) {
          return;
       }
-	
+
 	  if (index < MAX_PORTS) {
 		  port_list[index - 1] = port;
 	  }
@@ -531,7 +539,8 @@ public:
    * @return The offset in ppt (parts per trillion)
    */
   FrequencyRatio calcLocalSystemClockRateDifference
-	  ( Timestamp local_time, Timestamp system_time );
+	  ( Timestamp local_time, Timestamp system_time, Timestamp mono_time,
+	    FrequencyRatio* local_mono_freq_offset);
 
   /**
    * @brief  Sets the master offset, sintonyze and adjusts the frequency offset
@@ -550,7 +559,9 @@ public:
   ( CommonPort *port, int64_t master_local_offset,
     Timestamp local_time, FrequencyRatio master_local_freq_offset,
     int64_t local_system_offset, Timestamp system_time,
-    FrequencyRatio local_system_freq_offset, unsigned sync_count,
+    FrequencyRatio local_system_freq_offset,
+    int64_t local_mono_offset, Timestamp mono_time,
+    FrequencyRatio local_mono_freq_offset, unsigned sync_count,
     unsigned pdelay_count, PortState port_state, bool asCapable );
 
   /**

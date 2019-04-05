@@ -899,9 +899,9 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
 		GPTP_LOG_INFO( "Group %s not found, will try root (0) instead", group_name );
 	}
 #ifdef ANDROID
-    shm_fd = open( SHM_NAME, O_RDWR | O_CREAT, 0660 );
+    shm_fd = open( SHM_NAME, O_RDWR | O_CREAT, 0666 );
 #else
-    shm_fd = shm_open( SHM_NAME, O_RDWR | O_CREAT, 0660 );
+    shm_fd = shm_open( SHM_NAME, O_RDWR | O_CREAT, 0666 );
 #endif
 
 	if( shm_fd == -1 ) {
@@ -956,8 +956,10 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
 bool LinuxSharedMemoryIPC::update(
 	int64_t ml_phoffset,
 	int64_t ls_phoffset,
+	int64_t lq_phoffset,
 	FrequencyRatio ml_freqoffset,
 	FrequencyRatio ls_freqoffset,
+	FrequencyRatio lq_freqoffset,
 	uint64_t local_time,
 	uint32_t sync_count,
 	uint32_t pdelay_count,
@@ -975,8 +977,10 @@ bool LinuxSharedMemoryIPC::update(
 		ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
 		ptimedata->ml_phoffset = ml_phoffset;
 		ptimedata->ls_phoffset = ls_phoffset;
+		ptimedata->lq_phoffset = lq_phoffset;
 		ptimedata->ml_freqoffset = ml_freqoffset;
 		ptimedata->ls_freqoffset = ls_freqoffset;
+		ptimedata->lq_freqoffset = lq_freqoffset;
 		ptimedata->local_time = local_time;
 		ptimedata->sync_count   = sync_count;
 		ptimedata->pdelay_count = pdelay_count;
@@ -1006,6 +1010,38 @@ bool LinuxSharedMemoryIPC::updateGmId(ClockIdentity& id, uint16_t portNumber) {
        return true;
 }
 
+
+bool LinuxSharedMemoryIPC::updateSyncStatus(bool is_sync) {
+       int buf_offset = 0;
+       char *shm_buffer = master_offset_buffer;
+       gPtpTimeData *ptimedata;
+       if (shm_buffer != NULL) {
+               /* lock */
+               pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+               buf_offset += sizeof(pthread_mutex_t);
+               ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+               ptimedata->sync_status = is_sync;
+               /* unlock */
+               pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+       }
+       return true;
+}
+
+bool LinuxSharedMemoryIPC::updateQtimeToMonoOffset(int64_t offset) {
+	int buf_offset = 0;
+    char *shm_buffer = master_offset_buffer;
+    gPtpTimeData *ptimedata;
+    if (shm_buffer != NULL) {
+	   /* lock */
+	   pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+	   buf_offset += sizeof(pthread_mutex_t);
+	   ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+	   ptimedata->qtime_to_mono_offset = offset;
+	   /* unlock */
+	   pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+	}
+	return true;
+}
 
 bool LinuxSharedMemoryIPC::update_grandmaster(
 	uint8_t gptp_grandmaster_id[],

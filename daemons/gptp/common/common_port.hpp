@@ -881,7 +881,7 @@ public:
 	 * @return True in case of success. FALSE in case of error
 	 */
 	void getDeviceTime
-	( Timestamp &system_time, Timestamp &device_time,
+	( Timestamp &system_time, Timestamp &mono_time, Timestamp &device_time,
 	  uint32_t &local_clock, uint32_t & nominal_clock_rate );
 
 	/**

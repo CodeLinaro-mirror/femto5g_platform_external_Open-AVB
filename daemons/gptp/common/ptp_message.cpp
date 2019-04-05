@@ -988,13 +988,16 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
 	uint64_t delay;
 	Timestamp sync_arrival;
 	Timestamp system_time(0, 0, 0);
+	Timestamp mono_time(0, 0, 0);
 	Timestamp device_time(0, 0, 0);
 
 	signed long long local_system_offset;
+	signed long long local_mono_offset;
 	signed long long scalar_offset;
 
 	FrequencyRatio local_clock_adjustment;
 	FrequencyRatio local_system_freq_offset;
+	FrequencyRatio local_mono_freq_offset;
 	FrequencyRatio master_local_freq_offset;
 	int64_t correction;
 	int32_t scaledLastGmFreqChange = 0;
@@ -1088,7 +1091,7 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
 	uint32_t local_clock, nominal_clock_rate;
 	uint32_t device_sync_time_offset;
 
-	port->getDeviceTime(system_time, device_time, local_clock,
+	port->getDeviceTime(system_time, mono_time, device_time, local_clock,
 			    nominal_clock_rate);
 	GPTP_LOG_VERBOSE
 		( "Device Time = %llu,System Time = %llu",
@@ -1112,6 +1115,7 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
 
 	if( port->getPortState() == PTP_SLAVE )
 	{
+
 		/* The sync_count counts the number of sync messages received
 		   that influence the time on the device. Since adjustments are only
 		   made in the PTP_SLAVE state, increment it here */
@@ -1124,20 +1128,24 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
 		local_system_freq_offset =
 			port->getClock()
 			->calcLocalSystemClockRateDifference
-			( device_time, system_time );
+			( device_time, system_time, mono_time, &local_mono_freq_offset );
 		TIMESTAMP_SUB_NS
 			( system_time, (uint64_t)
 			  (((FrequencyRatio) device_sync_time_offset)/
 			   local_system_freq_offset) );
 		local_system_offset =
 			TIMESTAMP_TO_NS(system_time) - TIMESTAMP_TO_NS(sync_arrival);
+		local_mono_offset =
+			TIMESTAMP_TO_NS(mono_time) - TIMESTAMP_TO_NS(sync_arrival);
 
 		port->getClock()->setMasterOffset
 			( port, scalar_offset, sync_arrival, local_clock_adjustment,
 			  local_system_offset, system_time, local_system_freq_offset,
+			  local_mono_offset, mono_time, local_mono_freq_offset,
 			  port->getSyncCount(), port->getPdelayCount(),
 			  port->getPortState(), port->getAsCapable() );
 		port->syncDone();
+		port->getClock()->setSyncStatus(true);
 		// Restart the SYNC_RECEIPT timer
 		port->startSyncReceiptTimer((unsigned long long)
 			 (SYNC_RECEIPT_TIMEOUT_MULTIPLIER *

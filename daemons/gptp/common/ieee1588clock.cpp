@@ -265,6 +265,11 @@ void IEEE1588Clock::setGrandmasterClockIdentity(ClockIdentity id, uint16_t portN
     }
 }
 
+void IEEE1588Clock::setSyncStatus(bool is_sync) {
+    if (ipc != NULL) {
+        ipc->updateSyncStatus(is_sync);
+    }
+}
 
 void IEEE1588Clock::deleteEventTimer
 ( CommonPort *target, Event event )
@@ -282,15 +287,18 @@ void IEEE1588Clock::deleteEventTimerLocked
     if( putTimerQLock() == oslock_fail ) return;
 }
 
-FrequencyRatio IEEE1588Clock::calcLocalSystemClockRateDifference( Timestamp local_time, Timestamp system_time ) {
+FrequencyRatio IEEE1588Clock::calcLocalSystemClockRateDifference( Timestamp local_time, Timestamp system_time, Timestamp mono_time, FrequencyRatio *local_mono_freq_offset ) {
 	unsigned long long inter_system_time;
+	unsigned long long inter_mono_time;
 	unsigned long long inter_local_time;
 	FrequencyRatio ppt_offset;
+	FrequencyRatio ppt_offset_mono;
 
 	GPTP_LOG_DEBUG( "Calculated local to system clock rate difference" );
 
 	if( !_local_system_freq_offset_init ) {
 		_prev_system_time = system_time;
+		_prev_mono_time = mono_time;
 		_prev_local_time = local_time;
 
 		_local_system_freq_offset_init = true;
@@ -300,13 +308,22 @@ FrequencyRatio IEEE1588Clock::calcLocalSystemClockRateDifference( Timestamp loca
 
 	inter_system_time =
 		TIMESTAMP_TO_NS(system_time) - TIMESTAMP_TO_NS(_prev_system_time);
+	inter_mono_time =
+		TIMESTAMP_TO_NS(mono_time) - TIMESTAMP_TO_NS(_prev_mono_time);
 	inter_local_time  =
 		TIMESTAMP_TO_NS(local_time) -  TIMESTAMP_TO_NS(_prev_local_time);
+
 
 	if( inter_system_time != 0 ) {
 		ppt_offset = ((FrequencyRatio)inter_local_time)/inter_system_time;
 	} else {
 		ppt_offset = 1.0;
+	}
+
+	if( inter_mono_time != 0 ) {
+		ppt_offset_mono = ((FrequencyRatio)inter_local_time)/inter_mono_time;
+	} else {
+		ppt_offset_mono = 1.0;
 	}
 
 	// Check for jumps in system time or local time
@@ -315,10 +332,21 @@ FrequencyRatio IEEE1588Clock::calcLocalSystemClockRateDifference( Timestamp loca
 				ppt_offset);
 		ppt_offset = 1.0;
 	}
+	if ((fabs(ppt_offset_mono) < MIN_LS_RATIO) || (fabs(ppt_offset_mono) > MAX_LS_RATIO)) {
+		GPTP_LOG_WARNING("Local to mono clock ratio (%Lf) exceeding threshold",
+				ppt_offset_mono);
+		ppt_offset_mono = 1.0;
+	}
+	/*GPTP_LOG_WARNING("Local-system clock ratio = %Lf, local-mono clock ratio = %Lf",
+	        ppt_offset, ppt_offset_mono);*/
 
 	_prev_system_time = system_time;
+	_prev_mono_time = mono_time;
 	_prev_local_time = local_time;
 
+	if (local_mono_freq_offset != nullptr) {
+		*local_mono_freq_offset = ppt_offset_mono;
+	}
   return ppt_offset;
 }
 
@@ -372,7 +400,9 @@ void IEEE1588Clock::setMasterOffset
 ( CommonPort *port, int64_t master_local_offset,
   Timestamp local_time, FrequencyRatio master_local_freq_offset,
   int64_t local_system_offset, Timestamp system_time,
-  FrequencyRatio local_system_freq_offset, unsigned sync_count,
+  FrequencyRatio local_system_freq_offset,
+  int64_t local_mono_offset, Timestamp mono_time,
+  FrequencyRatio local_mono_freq_offset, unsigned sync_count,
   unsigned pdelay_count, PortState port_state, bool asCapable )
 {
 	_master_local_freq_offset = master_local_freq_offset;
@@ -395,8 +425,9 @@ void IEEE1588Clock::setMasterOffset
 		port_identity.getPortNumber(&port_number);
 
 		ipc->update(
-			master_local_offset, local_system_offset, master_local_freq_offset,
-			local_system_freq_offset, TIMESTAMP_TO_NS(local_time),
+			master_local_offset, local_system_offset, local_mono_offset,
+			master_local_freq_offset, local_system_freq_offset, local_mono_freq_offset,
+			TIMESTAMP_TO_NS(local_time),
 			sync_count, pdelay_count, port_state, asCapable);
 
 		ipc->update_grandmaster(

@@ -489,6 +489,7 @@ bool CommonPort::processSyncAnnounceTimeout( Event e )
     portId.getPortNumber(&portNumber);
 
 	Timestamp system_time;
+	Timestamp mono_time;
 	Timestamp device_time;
 	uint32_t local_clock, nominal_clock_rate;
 
@@ -531,11 +532,11 @@ bool CommonPort::processSyncAnnounceTimeout( Event e )
 
 	setPortState( PTP_MASTER );
 
-	getDeviceTime( system_time, device_time,
+	getDeviceTime( system_time, mono_time, device_time,
 		       local_clock, nominal_clock_rate );
 
 	(void) clock->calcLocalSystemClockRateDifference
-		( device_time, system_time );
+		( device_time, system_time, mono_time, nullptr );
 
 	setQualifiedAnnounce( NULL );
 
@@ -601,6 +602,7 @@ bool CommonPort::processEvent( Event e )
 		}
 		else if (e == SYNC_RECEIPT_TIMEOUT_EXPIRES) {
 			incCounter_ieee8021AsPortStatRxSyncReceiptTimeouts();
+			clock->setSyncStatus(false);
 		}
 
 		ret = _processEvent( e );
@@ -646,13 +648,16 @@ bool CommonPort::processEvent( Event e )
 		   causing an update to local/system timestamp */
 		{
 			Timestamp system_time;
+			Timestamp mono_time;
 			Timestamp device_time;
 			uint32_t local_clock, nominal_clock_rate;
 			FrequencyRatio local_system_freq_offset;
+			FrequencyRatio local_mono_freq_offset;
 			int64_t local_system_offset;
+			int64_t local_mono_offset;
 
 			getDeviceTime
-				( system_time, device_time,
+				( system_time, mono_time, device_time,
 				  local_clock, nominal_clock_rate );
 
 			GPTP_LOG_VERBOSE
@@ -666,13 +671,18 @@ bool CommonPort::processEvent( Event e )
 			local_system_offset =
 				TIMESTAMP_TO_NS(system_time) -
 				TIMESTAMP_TO_NS(device_time);
+			local_mono_offset =
+				TIMESTAMP_TO_NS(mono_time) -
+				TIMESTAMP_TO_NS(device_time);
 			local_system_freq_offset =
 				clock->calcLocalSystemClockRateDifference
-				( device_time, system_time );
+				( device_time, system_time, mono_time, &local_mono_freq_offset );
 			clock->setMasterOffset
 				( this, 0, device_time, 1.0,
 				  local_system_offset, system_time,
-				  local_system_freq_offset, getSyncCount(),
+				  local_system_freq_offset,
+				  local_mono_offset, mono_time,
+				  local_mono_freq_offset,  getSyncCount(),
 				  pdelay_count, port_state, asCapable );
 		}
 
@@ -691,12 +701,12 @@ bool CommonPort::processEvent( Event e )
 }
 
 void CommonPort::getDeviceTime
-( Timestamp &system_time, Timestamp &device_time,
+( Timestamp &system_time, Timestamp &mono_time, Timestamp &device_time,
   uint32_t &local_clock, uint32_t &nominal_clock_rate )
 {
 	if (_hw_timestamper) {
 		_hw_timestamper->HWTimestamper_gettime
-			( &system_time, &device_time,
+			( &system_time, &mono_time, &device_time,
 			  &local_clock, &nominal_clock_rate );
 	} else {
 		device_time = system_time = clock->getSystemTime();

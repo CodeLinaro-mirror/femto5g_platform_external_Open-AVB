@@ -137,7 +137,7 @@ public:
 	 * @return TRUE if got the time successfully, FALSE otherwise
 	 */
 	virtual bool HWTimestamper_gettime
-	( Timestamp *system_time, Timestamp *device_time,
+	( Timestamp *system_time, Timestamp *mono_time, Timestamp *device_time,
 	  uint32_t *local_clock, uint32_t *nominal_clock_rate ) const;
 
 	/**

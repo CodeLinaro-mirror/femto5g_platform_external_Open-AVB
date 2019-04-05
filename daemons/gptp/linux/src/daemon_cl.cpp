@@ -48,6 +48,7 @@
 #include <ctype.h>
 #include <inttypes.h>
 #include <signal.h>
+#include <inttypes.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <stdlib.h>
@@ -55,6 +56,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
+#include <linux/ptp_clock.h>
 
 #ifdef SYSTEMD_WATCHDOG
 #include <watchdog.hpp>
@@ -66,6 +68,28 @@
 #define PHY_DELAY_MB_RX_I20 2133//100M delay
 
 void gPTPPersistWriteCB(char *bufPtr, uint32_t bufSize);
+
+
+#define MAX_NSEC 1000000000
+/* Return *a - *b */
+static inline ptp_clock_time pct_diff
+( struct ptp_clock_time *a, struct ptp_clock_time *b ) {
+	ptp_clock_time result;
+	if( a->nsec >= b->nsec ) {
+		result.nsec = a->nsec - b->nsec;
+	} else {
+		--a->sec;
+		result.nsec = (MAX_NSEC - b->nsec) + a->nsec;
+	}
+	result.sec = a->sec - b->sec;
+
+	return result;
+}
+
+static inline int64_t pctns(struct ptp_clock_time t)
+{
+	return t.sec * 1000000000LL + t.nsec;
+}
 
 void print_usage( char *arg0 ) {
 	fprintf( stderr,
@@ -467,6 +491,61 @@ int main(int argc, char **argv)
 		restoredataptr = ((char *)restoredata) + (restoredatalength - restoredatacount);
 	}
 	portInit.clock = pClock;
+
+
+
+#ifdef PTP_SW_QTIMER
+	{
+
+		int64_t qtimer_to_mono_to_offset = 0;
+		int64_t qtimer_to_mono_to_offset_min = INT64_MAX;
+		int64_t qtimer_to_mono_to_offset_max = INT64_MIN;
+		int64_t avg_offset = 0;
+
+		// Find average delta between qtimer and system time
+		for(int i = 0; i < 20; ++i ) {
+			struct timespec mono;
+			struct ptp_clock_time mono_pct;
+			struct ptp_clock_time qtimer_pct;
+			uint64_t qTimerCount = 0, qTimerFreq = 0, qTimerNanosSec = 0, qTimerNanosNSec = 0;
+			int64_t offset;
+
+			clock_gettime(CLOCK_MONOTONIC, &mono);
+#if __aarch64__
+			asm volatile("mrs %0, cntvct_el0" : "=r" (qTimerCount));
+			asm volatile("mrs %0, cntfrq_el0" : "=r"(qTimerFreq));
+#else
+			asm volatile("mrrc p15, 1, %Q0, %R0, c14" : "=r" (qTimerCount));
+			qTimerFreq =  19200000; //19.2 MHz TBD: find right asm instruction
+#endif
+			qTimerNanosSec = (qTimerCount / qTimerFreq);
+			qTimerNanosNSec = (qTimerCount % qTimerFreq);
+			qTimerNanosNSec *= 1000000000;
+			qTimerNanosNSec /= qTimerFreq;
+			qtimer_pct.sec = qTimerNanosSec;
+			qtimer_pct.nsec = qTimerNanosNSec;
+
+			mono_pct.sec = mono.tv_sec;
+			mono_pct.nsec = mono.tv_nsec;
+
+			offset = pctns(pct_diff(&qtimer_pct, &mono_pct));
+			qtimer_to_mono_to_offset += offset;
+			if (offset < qtimer_to_mono_to_offset_min) {
+				qtimer_to_mono_to_offset_min = offset;
+			} else if (offset > qtimer_to_mono_to_offset_max) {
+				qtimer_to_mono_to_offset_max = offset;
+			}
+		}
+
+		avg_offset = (qtimer_to_mono_to_offset / 20);
+		GPTP_LOG_WARNING("qtimer_to_mono_offset -- min:%ld max:%ld new avg:% " PRId64 " ",
+				qtimer_to_mono_to_offset_min, qtimer_to_mono_to_offset_max, avg_offset);
+
+		if (ipc) {
+			ipc->updateQtimeToMonoOffset(avg_offset);
+		}
+	}
+#endif
 
 	pPort = new EtherPort(&portInit);
 
