@@ -343,6 +343,17 @@ static int openavbTLCfgCallback(void *user, const char *tlSection, const char *n
 			valOK = TRUE;
 		}
 	}
+	else if (MATCH(name, "enable_wakeup_on_pps")) {
+		errno = 0;
+		long tmp;
+		tmp = strtol(value, &pEnd, 10);
+		if (*pEnd == '\0' && errno == 0
+			&& tmp >= 0
+			&& tmp <= 1) {
+			pCfg->enable_wakeup_on_pps = (tmp == 1);
+			valOK = TRUE;
+		}
+	}
 
 	else if (MATCH(name, "map_lib")) {
 		if (pTLState->mapLib.libName)

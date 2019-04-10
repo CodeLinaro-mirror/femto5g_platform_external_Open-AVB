@@ -47,6 +47,8 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_pub.h"
 #include "openavb_log.h"
 
+#include "emac.h"
+
 U32 gMaxTL;
 tl_handle_t *gTLHandleList;
 
@@ -387,6 +389,7 @@ EXTERN_DLL_EXPORT void openavbTLInitCfg(openavb_tl_cfg_t *pCfg)
 	pCfg->batch_factor = 1;
 	pCfg->report_seconds = 0;
 	pCfg->start_paused = FALSE;
+	pCfg->enable_wakeup_on_pps = 0;
 	pCfg->sr_class = SR_CLASS_B;
 	pCfg->sr_rank = SR_RANK_REGULAR;
 	pCfg->raw_tx_buffers = 8;

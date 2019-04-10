@@ -10,6 +10,7 @@ LOCAL_CFLAGS := -Wall -Wextra -Wno-parentheses -ggdb -Wno-sign-compare -Wno-unus
 LOCAL_CFLAGS += -DAVB_FEATURE_FQTSS=1
 LOCAL_CFLAGS += -DAVB_FEATURE_ENDPOINT=1
 LOCAL_CFLAGS += -DAVB_FEATURE_NEUTRINO=1
+LOCAL_CFLAGS += -DAVB_PPS_FEATURE=1
 
 LOCAL_LDFLAGS += -Wl,--export-dynamic
 
@@ -35,7 +36,8 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH) \
             $(LOCAL_PATH)/rawsock \
             $(LOCAL_PATH)/../../daemons/mrpd \
             $(LOCAL_PATH)/../../daemons/common \
-            $(LOCAL_PATH)/../neutrino
+            $(LOCAL_PATH)/../neutrino \
+            $(LOCAL_PATH)/../emac
 
 
 LOCAL_SRC_FILES := \
@@ -62,7 +64,8 @@ LOCAL_SRC_FILES := \
             tl/openavb_talker_endpoint.c \
             tl/openavb_tl.c \
             tl/openavb_tl_endpoint.c \
-            ../neutrino/neutrino.c
+            ../neutrino/neutrino.c \
+            ../emac/emac.c
 
 # raw socket
 LOCAL_SRC_FILES += \

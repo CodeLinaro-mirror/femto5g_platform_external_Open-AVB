@@ -11,6 +11,7 @@ set ( OPENAVB_PLATFORM "${OPENAVB_HAL}-${OPENAVB_OSAL}" )
 set ( PLATFORM_INCLUDE_DIRECTORIES
 	${CMAKE_SOURCE_DIR}/platform/generic
 	${CMAKE_SOURCE_DIR}/../neutrino
+	${CMAKE_SOURCE_DIR}/../emac
 	${CMAKE_SOURCE_DIR}/openavb_common
 	${CMAKE_SOURCE_DIR}/../../daemons/common
 	${CMAKE_SOURCE_DIR}/../../daemons/mrpd
@@ -18,10 +19,12 @@ set ( PLATFORM_INCLUDE_DIRECTORIES
 
 set ( PLATFORM_LINK_DIRECTORIES
 	${CMAKE_SOURCE_DIR}/../neutrino
+	${CMAKE_SOURCE_DIR}/../emac
 )
 
 set ( PLATFORM_LINK_LIBRARIES
 	neutrino
+	emac
 )
 
 set ( AVB_FEATURE_PCAP 1 )

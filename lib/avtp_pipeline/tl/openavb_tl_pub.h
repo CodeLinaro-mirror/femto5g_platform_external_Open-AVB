@@ -131,6 +131,8 @@ typedef struct {
 	bool rx_signal_mode;
 	/// Wait until GPTP has acquired a time
 	bool wait_for_gptp;
+	/// enable pps based wakeup instead of software based timers to transfer AVB pkts
+	bool enable_wakeup_on_pps;
 
 	/// Initialization function in mapper
 	openavb_map_initialize_fn_t pMapInitFn;

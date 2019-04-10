@@ -84,6 +84,9 @@ typedef struct {
 	// Private listener data.
 	void *pPvtListenerData;
 
+	// PPS Data place holder
+	void *pEventConfigData;
+
 	// Thread for talker or listener
 	THREAD_DEFINITON(TLThread);
 

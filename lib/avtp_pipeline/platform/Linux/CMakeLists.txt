@@ -287,9 +287,8 @@ endif ()
 
 add_library ( openavb SHARED ${SRC_FILES} )
 if (AVB_FEATURE_NEUTRINO)
-  target_link_libraries ( openavb neutrino )
+  target_link_libraries ( openavb neutrino emac)
 endif ()
-
 install ( TARGETS openavb ARCHIVE DESTINATION LIBRARY DESTINATION ${AVB_INSTALL_LIB_DIR} )
 
 if ( AVB_FEATURE_PCAP )

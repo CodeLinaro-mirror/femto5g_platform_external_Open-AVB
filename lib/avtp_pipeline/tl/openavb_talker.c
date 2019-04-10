@@ -39,6 +39,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "openavb_avtp.h"
 #include "openavb_talker.h"
 // #include "openavb_time.h"
+#include "emac.h"
 
 // DEBUG Uncomment to turn on logging for just this module.
 //#define AVB_LOG_ON	1
@@ -60,6 +61,7 @@ bool talkerStartStream(tl_state_t *pTLState)
 		return FALSE;
 	}
 
+	eventConfigData_t *pEventConfigData = NULL;
 	openavb_tl_cfg_t *pCfg = &pTLState->cfg;
 	talker_data_t *pTalkerData = pTLState->pPvtTalkerData;
 
@@ -98,6 +100,37 @@ bool talkerStartStream(tl_state_t *pTLState)
 		// Override the class observation interval with the one provided by the mapping module.
 		pTalkerData->wakeRate = pStream->pMapCB->map_transmit_interval_cb(pTLState->pMediaQ) / pCfg->batch_factor;
 	}
+
+	/* if wakeup_on_pps is enabled, initialise emac PPS feature */
+	if (pTLState->cfg.enable_wakeup_on_pps) {
+		pTLState->pEventConfigData = (eventConfigData_t *) calloc(1, sizeof(eventConfigData_t));
+		if (!pTLState->pEventConfigData) {
+			AVB_LOG_WARNING("Failed to allocate event data ");
+		}
+
+		pEventConfigData = (eventConfigData_t *)pTLState->pEventConfigData;
+		pEventConfigData->ifacename = (char *) malloc (sizeof(char) * IFNAMSIZE);
+		memcpy(pEventConfigData->ifacename,pTLState->cfg.ifname,strlen(pTLState->cfg.ifname)+1);
+
+		pEventConfigData->sr_class = pTLState->cfg.sr_class;
+		pEventConfigData->wakeRate = pTalkerData->wakeRate;
+
+		if (!eventConfigure(pEventConfigData) && !pTLState->cfg.enable_wakeup_on_pps) {
+			pTLState->cfg.enable_wakeup_on_pps = 0;
+		}
+
+		if (!eventInit(pEventConfigData) && !pTLState->cfg.enable_wakeup_on_pps) {
+			pTLState->cfg.enable_wakeup_on_pps = 0;
+		}
+
+		if (pTLState->cfg.enable_wakeup_on_pps) {
+			AVB_LOGF_INFO("Event based AVB pkts transmission Enabled, event wakeup status: %d",pTLState->cfg.enable_wakeup_on_pps);
+		}
+		else {
+			AVB_LOGF_INFO("Legacy AVB pkts transmission Enabled, event wakeup status: %d",pTLState->cfg.enable_wakeup_on_pps);
+		}
+	}
+
 	pTalkerData->sleepUsec = MICROSECONDS_PER_SECOND / pTalkerData->wakeRate;
 	pTalkerData->intervalNS = NANOSECONDS_PER_SECOND / pTalkerData->wakeRate;
 
@@ -109,7 +142,6 @@ bool talkerStartStream(tl_state_t *pTLState)
 		pTalkerData->tSpec.maxIntervalFrames, pTalkerData->tSpec.maxFrameSize,
 		pCfg->batch_factor, pTalkerData->intervalNS / 1000, SRKbps, DataKbps);
 
-
 	// number of intervals per report
 	pTalkerData->wakesPerReport = pCfg->report_seconds * NANOSECONDS_PER_SECOND / pTalkerData->intervalNS;
 	// counts of intervals and frames between reports
@@ -119,7 +151,7 @@ bool talkerStartStream(tl_state_t *pTLState)
 	// setup the initial times
 	U64 nowNS;
 	CLOCK_GETTIME64(OPENAVB_TIMER_CLOCK, &nowNS);
-	
+
 	// Align clock : allows for some performance gain
 	nowNS = ((nowNS + (pTalkerData->intervalNS)) / pTalkerData->intervalNS) * pTalkerData->intervalNS;
 
@@ -152,6 +184,14 @@ void talkerStopStream(tl_state_t *pTLState)
 		AVB_LOG_ERROR("Invalid listener data");
 		AVB_TRACE_EXIT(AVB_TRACE_TL);
 		return;
+	}
+
+	if (pTLState->cfg.enable_wakeup_on_pps) {
+		eventConfigData_t *pEventConfigData = (eventConfigData_t *)pTLState->pEventConfigData;
+		if (eventStop(pEventConfigData)) {
+			pTLState->cfg.enable_wakeup_on_pps = 0;
+			AVB_LOGF_INFO("Event based AVB pkts transmission Disabled/Stopped, event wakeup status: %d",pTLState->cfg.enable_wakeup_on_pps);
+		}
 	}
 
 	void *rawsock = NULL;
@@ -199,20 +239,32 @@ static inline bool talkerDoStream(tl_state_t *pTLState)
 		U64 nowNS;
 
 		if (!pCfg->tx_blocking_in_intf) {
+			if (!pCfg->enable_wakeup_on_pps) {
+				// sleep until the next interval
+				SLEEP_UNTIL_NSEC(pTalkerData->nextCycleNS);
 
-			// sleep until the next interval
-			SLEEP_UNTIL_NSEC(pTalkerData->nextCycleNS);
+				//AVB_DBG_INTERVAL(8000, TRUE);
 
-			//AVB_DBG_INTERVAL(8000, TRUE);
-
-			// send the frames for this interval
-			int i;
-			for (i = pTalkerData->wakeFrames; i > 0; i--) {
+				// send the frames for this interval
+				int i;
+				for (i = pTalkerData->wakeFrames; i > 0; i--) {
 					if (IS_OPENAVB_SUCCESS(openavbAvtpTx(pTalkerData->avtpHandle, i == 1, pCfg->tx_blocking_in_intf)))
-					pTalkerData->cntFrames++;
-				else break;
+						pTalkerData->cntFrames++;
+					else break;
 				}
 			}
+			else {
+				eventConfigData_t *pEventConfigData = (eventConfigData_t *)pTLState->pEventConfigData;
+				if (eventWake(pEventConfigData) == true) {
+					int i;
+					for (i = pTalkerData->wakeFrames; i > 0; i--) {
+						if (IS_OPENAVB_SUCCESS(openavbAvtpTx(pTalkerData->avtpHandle,i == 1, pCfg->tx_blocking_in_intf)))
+							pTalkerData->cntFrames++;
+						else break;
+					}
+				}
+			}
+		}
 		else {
 			// Interface module block option
 			if (IS_OPENAVB_SUCCESS(openavbAvtpTx(pTalkerData->avtpHandle, TRUE, pCfg->tx_blocking_in_intf)))
@@ -340,10 +392,8 @@ void openavbTLRunTalker(tl_state_t *pTLState)
 
 	if (pTLState->bConnected) {
 		bool bServiceIPC;
-
 		// Do until we are stopped or loose connection to endpoint
 		while (pTLState->bRunning && pTLState->bConnected) {
-
 			// Talk (or just sleep if not streaming.)
 			bServiceIPC = talkerDoStream(pTLState);
 

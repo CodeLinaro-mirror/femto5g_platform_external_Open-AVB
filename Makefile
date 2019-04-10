@@ -34,6 +34,13 @@ ntn: FORCE
 	$(call descend,lib/neutrino)
 ntn_clean:
 	$(call descend,lib/neutrino/,clean)
+
+emac: FORCE
+	$(call descend,lib/emac)
+
+emac_clean:
+	$(call descend,lib/emac/,clean)
+
 mrpd:
 	$(call descend,daemons/$@)
 
@@ -93,7 +100,7 @@ live_stream:
 live_stream_clean:
 	$(call descend,examples/live_stream/,clean)
 
-avtp_pipeline: ntn
+avtp_pipeline: ntn emac
 	$(MAKE) -s -C lib/avtp_pipeline -f avtp_pipeline.mk
 
 avtp_pipeline_clean:
