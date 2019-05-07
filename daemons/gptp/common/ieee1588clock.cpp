@@ -265,9 +265,9 @@ void IEEE1588Clock::setGrandmasterClockIdentity(ClockIdentity id, uint16_t portN
     }
 }
 
-void IEEE1588Clock::setSyncStatus(bool is_sync) {
+void IEEE1588Clock::setSyncStatus(bool is_sync, PortState port_state) {
     if (ipc != NULL) {
-        ipc->updateSyncStatus(is_sync);
+        ipc->updateSyncStatus(is_sync, port_state);
     }
 }
 

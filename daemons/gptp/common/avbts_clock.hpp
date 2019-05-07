@@ -304,7 +304,7 @@ public:
    * @param  is_sync Sync status of PTP slave
    * @return void
    */
-  void setSyncStatus(bool is_sync);
+  void setSyncStatus(bool is_sync, PortState port_state);
 
   /**
    * @brief  Gets grandmaster clock quality object

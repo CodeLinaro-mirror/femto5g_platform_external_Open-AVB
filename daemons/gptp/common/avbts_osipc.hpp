@@ -144,7 +144,7 @@ public:
       * @param portNumber Port of the grandmaster
       * @return Implementation dependent
       */
-    virtual bool updateSyncStatus(bool is_sync) = 0;
+    virtual bool updateSyncStatus(bool is_sync, PortState port_state) = 0;
 
 	/*
 	 * Destroys IPC

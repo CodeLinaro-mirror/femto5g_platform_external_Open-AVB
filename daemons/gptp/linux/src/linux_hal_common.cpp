@@ -1011,7 +1011,7 @@ bool LinuxSharedMemoryIPC::updateGmId(ClockIdentity& id, uint16_t portNumber) {
 }
 
 
-bool LinuxSharedMemoryIPC::updateSyncStatus(bool is_sync) {
+bool LinuxSharedMemoryIPC::updateSyncStatus(bool is_sync , PortState port_state) {
        int buf_offset = 0;
        char *shm_buffer = master_offset_buffer;
        gPtpTimeData *ptimedata;
@@ -1021,6 +1021,7 @@ bool LinuxSharedMemoryIPC::updateSyncStatus(bool is_sync) {
                buf_offset += sizeof(pthread_mutex_t);
                ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
                ptimedata->sync_status = is_sync;
+               ptimedata->port_state = port_state;
                /* unlock */
                pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
        }
