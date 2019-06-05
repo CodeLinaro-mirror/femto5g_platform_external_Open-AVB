@@ -521,22 +521,9 @@ static bool readAudio(pvt_data_t *pPvtData, uint8_t *buffer, U32 buflen) {
 
     // Check if we have enough data to fill request
     if (pPvtData->dataLeftInBuffer < buflen) {
-        if (pPvtData->dataLeftInBuffer == 0) {
-            // No data available, don't try to send packets
-            MUTEX_UNLOCK_ALT(pPvtData->audioBufferMutex);
-            return FALSE;
-        } else {
-            IF_LOG_INTERVAL(100) {
-                AVB_LOGF_ERROR("readAudio - buffer underflow - need %d bytes, have %d bytes",
-                        buflen, pPvtData->dataLeftInBuffer);
-            }
-            memcpy(buffer, pPvtData->audioBuffer + pPvtData->audioBufferPos, pPvtData->dataLeftInBuffer);
-            memset(buffer + pPvtData->dataLeftInBuffer, 0, buflen - pPvtData->dataLeftInBuffer);
-            pPvtData->audioBufferPos = 0;
-            pPvtData->dataLeftInBuffer = 0;
-        }
+        // No data available, don't try to send packets
         MUTEX_UNLOCK_ALT(pPvtData->audioBufferMutex);
-        return TRUE;
+        return FALSE;
     }
 
     // Still have enough data left in the buffer, use it
