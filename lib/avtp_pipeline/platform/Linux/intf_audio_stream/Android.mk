@@ -14,6 +14,10 @@ LOCAL_SHARED_LIBRARIES := libopenavb \
         libopenavb_map_uncmp_audio \
         libcutils
 
+ifeq ($(call is-platform-sdk-version-at-least,29),true)
+   LOCAL_SHARED_LIBRARIES += libprocessgroup
+endif
+
 LOCAL_REQUIRED_MODULES := \
    audio_stream_talker.ini \
    audio_stream_listener.ini \

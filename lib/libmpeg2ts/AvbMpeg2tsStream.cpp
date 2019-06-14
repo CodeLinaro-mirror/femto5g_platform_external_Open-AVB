@@ -209,8 +209,17 @@ void* AvbMpegStreamthread(void *arg)
     sp<SurfaceComposerClient> composerClient = new SurfaceComposerClient;
     CHECK_EQ(composerClient->initCheck(), (status_t)OK);
 
-    sp<IBinder> display(SurfaceComposerClient::getBuiltInDisplay(
-            ISurfaceComposer::eDisplayIdMain));
+#ifdef PHYS_DISPLAY
+    const auto displayIds = SurfaceComposerClient::getPhysicalDisplayIds();
+    if (displayIds.empty()) {
+       printf("getPhysicalDisplayIds() failed\n");
+       return NULL;
+    }
+	sp<IBinder> display(SurfaceComposerClient::getPhysicalDisplayToken(displayIds.front()));
+#else
+	sp<IBinder> display(SurfaceComposerClient::getBuiltInDisplay(
+                         ISurfaceComposer::eDisplayIdMain));
+#endif
     DisplayInfo info;
     SurfaceComposerClient::getDisplayInfo(display, &info);
     ssize_t displayWidth = info.w;

@@ -28,6 +28,10 @@ LOCAL_CFLAGS += -DSURFACE_NO_GLOBAL_TRANSACTION
 LOCAL_SHARED_LIBRARIES += libmedia_omx
 endif
 
+ifeq ($(call is-platform-sdk-version-at-least,29),true)
+	LOCAL_CFLAGS += -DPHYS_DISPLAY
+endif
+
 LOCAL_MODULE_TAGS := optional
 
 LOCAL_MODULE:= libh264sink

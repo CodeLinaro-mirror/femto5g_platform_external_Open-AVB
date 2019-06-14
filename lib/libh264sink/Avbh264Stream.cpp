@@ -100,7 +100,7 @@ private:
 void CodecOutputInfo::FrameDecoded(size_t frameSize) {
     if (mNumBuffersDecoded == 0) {
         // For more accurate fps count, start timer on first frame received
-        mStartTimeUs = ALooper::GetNowUs();
+        mStartTimeUs = android::ALooper::GetNowUs();
     }
 
     mNumBuffersDecoded++;
@@ -117,7 +117,7 @@ void CodecOutputInfo::FrameDecoded(size_t frameSize) {
  * This function is used to print out the current stats.
  */
 void CodecOutputInfo::PrintInfo() {
-    int64_t elapsedTimeUs = ALooper::GetNowUs() - mStartTimeUs;
+    int64_t elapsedTimeUs = android::ALooper::GetNowUs() - mStartTimeUs;
 
     ALOGD("track 0: %lld frames decoded, %.2f fps. %lld"
             " bytes received. %.2f KB/sec\n",
@@ -312,9 +312,17 @@ private:
 Display::Display() {
     mComposerClient = new SurfaceComposerClient;
     CHECK_EQ(mComposerClient->initCheck(), (status_t)OK);
-
-    sp<IBinder> display(SurfaceComposerClient::getBuiltInDisplay(
+#ifdef PHYS_DISPLAY
+    const auto displayIds = SurfaceComposerClient::getPhysicalDisplayIds();
+    if (displayIds.empty()) {
+       printf("getPhysicalDisplayIds() failed\n");
+       return;
+    }
+	sp<IBinder> display(SurfaceComposerClient::getPhysicalDisplayToken(displayIds.front()));
+#else
+	sp<IBinder> display(SurfaceComposerClient::getBuiltInDisplay(
                          ISurfaceComposer::eDisplayIdMain));
+#endif
     DisplayInfo info;
     SurfaceComposerClient::getDisplayInfo(display, &info);
     ssize_t displayWidth = info.w;
@@ -398,7 +406,7 @@ public:
     int Run();
     int RunInput();
     int Stop();
-    int InitMediaCodec(const sp<ALooper> &looper, const sp<Surface> &surface);
+    int InitMediaCodec(const sp<android::ALooper> &looper, const sp<Surface> &surface);
 
 private:
     sp<MediaCodec> mCodec;
@@ -414,7 +422,7 @@ private:
 /**
  * Initializes the media codec and attaches to the given surface.
  */
-int AvbH264Sink::InitMediaCodec(const sp<ALooper> &looper,
+int AvbH264Sink::InitMediaCodec(const sp<android::ALooper> &looper,
         const sp<Surface> &surface) {
     int err = 0;
     sp<AMessage> format = new AMessage;
@@ -458,7 +466,7 @@ int AvbH264Sink::Run() {
     outputInfo.PrintInfoEveryNBuffer(60);
 
     while (!(mSawOutputEOS || mStopStream)) {
-        int64_t frameStartUsec = ALooper::GetNowUs();
+        int64_t frameStartUsec = android::ALooper::GetNowUs();
 
         status_t err = mCodec->dequeueOutputBuffer(
                 &index, &offset, &size, &presentationTimeUs, &flags,
@@ -477,7 +485,7 @@ int AvbH264Sink::Run() {
             }
 
             // space out the frames based on the frame rate
-            int64_t displayTimeUsec = ALooper::GetNowUs() - frameStartUsec;
+            int64_t displayTimeUsec = android::ALooper::GetNowUs() - frameStartUsec;
             if (displayTimeUsec < mFrameDurationUsec) {
                 usleep(mFrameDurationUsec - displayTimeUsec);
             }
@@ -594,7 +602,7 @@ void* Avbh264SinkThread(void *arg) {
     // Create sink and keep local ref to keep sink alive until thread is done
     sp<AvbH264Sink> sink = gSink = new AvbH264Sink((VideoStats*) arg);
     sp<Display> display = new Display();
-    sp<ALooper> looper = new ALooper();
+    sp<android::ALooper> looper = new android::ALooper();
 
     looper->start();
 

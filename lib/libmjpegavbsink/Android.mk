@@ -25,6 +25,10 @@ ifeq ($(call is-platform-sdk-version-at-least,28),true)
 LOCAL_CFLAGS += -DSKIA_MAKE_FROM_DATA -DSURFACE_NO_GLOBAL_TRANSACTION
 endif
 
+ifeq ($(call is-platform-sdk-version-at-least,29),true)
+	LOCAL_CFLAGS += -DPHYS_DISPLAY
+endif
+
 LOCAL_CFLAGS += -Wall -Werror -Wunused -Wunreachable-code
 
 LOCAL_SHARED_LIBRARIES := \

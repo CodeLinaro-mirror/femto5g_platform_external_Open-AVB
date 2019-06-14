@@ -114,8 +114,17 @@ void GlSink::FrameReady() {
  *
  */
 status_t GlSink::readyToRun() {
-    sp<IBinder> dtoken(SurfaceComposerClient::getBuiltInDisplay(
-            ISurfaceComposer::eDisplayIdMain));
+#ifdef PHYS_DISPLAY
+    const auto displayIds = SurfaceComposerClient::getPhysicalDisplayIds();
+    if (displayIds.empty()) {
+       printf("getPhysicalDisplayIds() failed\n");
+       return -1;
+    }
+	sp<IBinder> dtoken(SurfaceComposerClient::getPhysicalDisplayToken(displayIds.front()));
+#else
+	sp<IBinder> dtoken(SurfaceComposerClient::getBuiltInDisplay(
+             ISurfaceComposer::eDisplayIdMain));
+#endif
     DisplayInfo dinfo;
     status_t status = SurfaceComposerClient::getDisplayInfo(dtoken, &dinfo);
     if (status) {
