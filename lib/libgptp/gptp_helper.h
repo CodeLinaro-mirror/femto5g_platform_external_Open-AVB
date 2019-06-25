@@ -70,6 +70,9 @@ bool gptpGetPtpTimeFromQTimeTickCount(uint64_t *gptp_time_ns, uint64_t qtime_tic
 /* Get PTP time in nanoseconds for Monotonic in nanoseconds */
 bool gptpGetPtpTimeFromMonoTime(uint64_t *gptp_time_ns, uint64_t time_mono_ns);
 
+/* Get current PTP time in nanoseconds */
+bool gptpGetCurPtpTime(uint64_t *gptp_time_ns);
+
 bool gptpInit(void);
 
 bool gptpDeinit(void);

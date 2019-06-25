@@ -396,6 +396,83 @@ FrequencyRatio IEEE1588Clock::calcMasterLocalClockRateDifference( Timestamp mast
 	return ppt_offset;
 }
 
+class ValueAverage_int64 {
+public:
+    ValueAverage_int64(int window) :
+        size(window),
+        pos(0),
+        count(0) {
+        valueArray = (int64_t*)calloc(size, sizeof(int64_t));
+    };
+
+    void push(int64_t val) {
+        valueArray[pos++] = val;
+        if (count < size) {
+            count++;
+        }
+        if (pos >= size) {
+            pos = 0;
+        }
+    };
+
+    int64_t get() {
+        int64_t val = 0;
+        for (int i = 0; i < count; i++) {
+            val += valueArray[i] / count; //Need to divide every entry as we go, else we hit int64_max
+        }
+        return val;
+    };
+
+private:
+    int64_t* valueArray;
+    int size;
+    int pos;
+    int count;
+};
+
+class ValueAverage_FR {
+public:
+    ValueAverage_FR(int window) :
+        size(window),
+        pos(0),
+        count(0) {
+        valueArray = (FrequencyRatio*)calloc(size, sizeof(FrequencyRatio));
+    };
+
+    void push(FrequencyRatio val) {
+        valueArray[pos++] = val;
+        if (count < size) {
+            count++;
+        }
+        if (pos >= size) {
+            pos = 0;
+        }
+    };
+
+    FrequencyRatio get() {
+        FrequencyRatio val = 0;
+        for (int i = 0; i < count; i++) {
+            val += valueArray[i];
+            //GPTP_LOG_STATUS("val[%d] = %Lf", i, valueArray[i]);
+        }
+        return val / (FrequencyRatio)count;
+    };
+
+private:
+    FrequencyRatio* valueArray;
+    int size;
+    int pos;
+    int count;
+};
+
+#define FREQ_OFFSET_MAX 0.1 // Could be reduced to 0.001. "typical" observed ratio is around 0.999976
+
+#define AVERAGE_WINDOW 64 //TODO: adjust as needed, probably too wide a window
+static ValueAverage_int64 local_system_offset_avg(AVERAGE_WINDOW);
+static ValueAverage_FR local_system_freq_offset_avg(AVERAGE_WINDOW);
+static ValueAverage_int64 local_mono_offset_avg(AVERAGE_WINDOW);
+static ValueAverage_FR local_mono_freq_offset_avg(AVERAGE_WINDOW);
+
 void IEEE1588Clock::setMasterOffset
 ( CommonPort *port, int64_t master_local_offset,
   Timestamp local_time, FrequencyRatio master_local_freq_offset,
@@ -424,9 +501,36 @@ void IEEE1588Clock::setMasterOffset
 		port->getPortIdentity(port_identity);
 		port_identity.getPortNumber(&port_number);
 
+		// Limit freq offset to reasonable values. First few values can be
+		// unreasonably large/small during initial sync which would
+		// affect the average value for a while.
+		if ((local_system_freq_offset < (1.0 - FREQ_OFFSET_MAX)) ||
+		        (local_system_freq_offset > (1.0 + FREQ_OFFSET_MAX)) ){
+		    local_system_freq_offset = 1.0;
+		}
+		if ((local_mono_freq_offset < (1.0 - FREQ_OFFSET_MAX)) ||
+		        (local_mono_freq_offset > (1.0 + FREQ_OFFSET_MAX)) ){
+		    local_mono_freq_offset = 1.0;
+		}
+
+		local_system_offset_avg.push(local_system_offset);
+		local_system_freq_offset_avg.push(local_system_freq_offset);
+		local_mono_offset_avg.push(local_mono_offset);
+		local_mono_freq_offset_avg.push(local_mono_freq_offset);
+
+
+	if (port->getTestMode()) {
+		GPTP_LOG_STATUS("MASTER Clock offset:%lld   Clock rate ratio:%Lf   Sync Count:%u   PDelay Count:%u",
+						master_local_offset, master_local_freq_offset, sync_count, pdelay_count);
+		GPTP_LOG_STATUS("SYSTEM Clock offset:%lld  (avg:%lld)  Clock rate ratio:%Lf  avg(%Lf)   Sync Count:%u   PDelay Count:%u",
+						local_system_offset, local_system_offset_avg.get(), local_system_freq_offset, local_system_freq_offset_avg.get(), sync_count, pdelay_count);
+		GPTP_LOG_STATUS("QTIMER Clock offset:%lld  (avg:%lld)  Clock rate ratio:%Lf  avg(%Lf)   Sync Count:%u   PDelay Count:%u",
+						local_mono_offset, local_mono_offset_avg.get(), local_mono_freq_offset, local_mono_freq_offset_avg.get(), sync_count, pdelay_count);
+	}
+
 		ipc->update(
-			master_local_offset, local_system_offset, local_mono_offset,
-			master_local_freq_offset, local_system_freq_offset, local_mono_freq_offset,
+			master_local_offset, local_system_offset_avg.get(), local_mono_offset_avg.get(),
+			master_local_freq_offset, local_system_freq_offset_avg.get(), local_mono_freq_offset_avg.get(),
 			TIMESTAMP_TO_NS(local_time),
 			sync_count, pdelay_count, port_state, asCapable);
 

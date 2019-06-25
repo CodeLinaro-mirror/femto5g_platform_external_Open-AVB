@@ -88,7 +88,82 @@ uint64_t getQtimerTicks()
     return (qTimerCount) ;
 }
 
-int main()
+void do_some_tests_qtimer() {
+    int i=0;
+    struct timespec ts = { 0, 1000000 };
+    uint64_t prev_vec_time;
+    uint64_t prev_gptp_time;
+    uint64_t test_vec_time;
+    uint64_t test_gptp_time;
+    int64_t delta_vec_time;
+    int64_t delta_gptp_time;
+    prev_vec_time = test_vec_time = getQtimerTime();
+    gptpGetPtpTimeFromQTimeNs(&prev_gptp_time, prev_vec_time);
+    for(i=0;i<1000;i++)
+        if (gptpGetPtpTimeFromQTimeNs(&test_gptp_time, test_vec_time)) {
+            delta_vec_time = test_vec_time;
+            delta_vec_time -= prev_vec_time;
+            delta_gptp_time = test_gptp_time;
+            delta_gptp_time -= prev_gptp_time;
+
+            printf("ns qtimer_time %" PRIi64 "  gptp_time %" PRIi64 "\n",
+                            delta_vec_time,delta_gptp_time);
+            prev_vec_time = test_vec_time;
+            prev_gptp_time = test_gptp_time;
+
+            nanosleep(&ts,NULL);
+            test_vec_time += 1000000UL;
+        } else {
+            printf("Qtimer time test failed\n");
+    }
+
+
+}
+
+void do_some_tests_sys() {
+    int i=0;
+    struct timespec ts = { 0, 1000000 };
+    uint64_t prev_vec_time;
+    uint64_t prev_gptp_time;
+    uint64_t test_vec_time;
+    uint64_t test_gptp_time;
+    int64_t delta_vec_time;
+    int64_t delta_gptp_time;
+    prev_vec_time = test_vec_time = systemTime(CLOCK_REALTIME);
+    gptpGetTime(&prev_gptp_time, prev_vec_time);
+    for(i=0;i<1000;i++)
+        if (gptpGetTime(&test_gptp_time, test_vec_time)) {
+            delta_vec_time = test_vec_time;
+            delta_vec_time -= prev_vec_time;
+            delta_gptp_time = test_gptp_time;
+            delta_gptp_time -= prev_gptp_time;
+
+            printf("ns sys_time %" PRIi64 "  gptp_time %" PRIi64 "\n",
+                            delta_vec_time,delta_gptp_time);
+            prev_vec_time = test_vec_time;
+            prev_gptp_time = test_gptp_time;
+
+            nanosleep(&ts,NULL);
+            test_vec_time += 1000000UL;
+        } else {
+            printf("Qtimer time test failed\n");
+    }
+
+
+}
+
+void do_some_tests_ptp() {
+    int i=0;
+    uint64_t ptp_time = 0;
+
+    for(i=0;i<10;i++){
+        if(gptpGetCurPtpTime(&ptp_time)){
+            printf("ns ptp_time %" PRIu64 "\n",ptp_time);
+        }
+    }
+}
+
+int main(int argc, char *argv[])
 {
     uint64_t test_vec_time;
     uint64_t test_gptp_time;
@@ -138,6 +213,27 @@ int main()
                     test_gptp_time/1000000000UL, test_gptp_time%1000000000UL);
     } else {
         printf("Monotonic time test failed\n");
+    }
+
+    if (gptpGetCurPtpTime(&test_gptp_time)) {
+            printf("gptp time %" PRIu64 ".%" PRIu64 "\n",
+					test_gptp_time/1000000000UL, test_gptp_time%1000000000UL);
+    } else {
+        printf("GPTP time test failed\n");
+    }
+
+    if (argc == 2) {
+        if (argv[1][0] == 'q') {
+            printf("\n\n\n====================QTIMER based test=====================\n\n\n");
+            do_some_tests_qtimer();
+        } else if (argv[1][0] == 's') {
+            printf("\n\n\n====================SYSTEM based test=====================\n\n\n");
+            do_some_tests_sys();
+        }
+        else if (argv[1][0] == 'p') {
+            printf("\n\n\n====================PTP based test=====================\n\n\n");
+            do_some_tests_ptp();
+        }
     }
 
     if(!gptpDeinit()) {
