@@ -76,10 +76,37 @@ pthread_mutex_t gInitMutex = PTHREAD_MUTEX_INITIALIZER;
 #define LOCK()  	pthread_mutex_lock(&gInitMutex)
 #define UNLOCK()	pthread_mutex_unlock(&gInitMutex)
 
+#define CLOCKFD 3
+#define FD_TO_CLOCKID(fd)	((~(clockid_t) (fd) << 3) | CLOCKFD)
+
 bool bInitialized = false;
 int gPtpShmFd = -1;
 char *gPtpMmap = NULL;
 gPtpTimeData gPtpTD;
+int gptpPhcFd = -1;
+clockid_t gPtpClockid = -1;
+
+
+
+static int gptpClkInit(int *gptp_phc_fd)
+{
+    *gptp_phc_fd = open("/dev/ptp0", O_RDWR );
+
+    if( *gptp_phc_fd == -1 ||
+        (gPtpClockid = FD_TO_CLOCKID(*gptp_phc_fd)) == -1 ) {
+        printf("Failed to open PTP clock device\n");
+        return false;
+    }
+    return true;
+}
+
+static void gptpClkDeInit(int gptp_phc_fd)
+{
+    if (gptp_phc_fd < 0)
+	close(gptp_phc_fd);
+
+    gPtpClockid = -1;
+}
 
 /* gptp core function to init gptp scaling */
 static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
@@ -190,6 +217,9 @@ static bool gptpTimeInit(void) {
 	if (!gptpScaling(&gPtpTD, gPtpMmap))
 		return false;
 
+	if(!gptpClkInit(&gptpPhcFd))
+		return false;
+
 	return true;
 }
 
@@ -298,6 +328,30 @@ bool gptpGetTime(uint64_t *gptp_time_sys, uint64_t time_sys_ns) {
 	return false;
 }
 
+
+/* public API to query current gptp time */
+bool gptpGetCurPtpTime(uint64_t *gptp_time_cur) {
+
+    struct timespec ts;
+
+    ts.tv_sec = ts.tv_nsec = 0;
+    *gptp_time_cur = 0;
+
+    if (!bInitialized) {
+	return false;
+    }
+    if (clock_gettime(gPtpClockid, &ts)) {
+	printf("clock_gettime failed");
+	return false;
+    }
+
+    *gptp_time_cur = (ts.tv_sec)*1000000000LL + ts.tv_nsec;
+
+    return true;
+}
+
+
+
 /* public API to init gptp time scaling */
 bool gptpInit(void) {
 	LOCK();
@@ -312,5 +366,6 @@ bool gptpInit(void) {
 /* public API to deinit gptp time scaling */
 bool gptpDeinit(void) {
 	gptpMemDeinit(gPtpShmFd, gPtpMmap);
+	gptpClkDeInit(gptpPhcFd);
 	return true;
 }
