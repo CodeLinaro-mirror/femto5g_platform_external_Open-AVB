@@ -67,6 +67,8 @@
 #define PHY_DELAY_MB_TX_I20 1044//100M delay
 #define PHY_DELAY_MB_RX_I20 2133//100M delay
 
+#define PTP_DEVICE "/dev/ptp0"
+
 void gPTPPersistWriteCB(char *bufPtr, uint32_t bufSize);
 
 
@@ -89,6 +91,13 @@ static inline ptp_clock_time pct_diff
 static inline int64_t pctns(struct ptp_clock_time t)
 {
 	return t.sec * 1000000000LL + t.nsec;
+}
+
+static void change_ptp_dev_perm(void){
+	if(0 != chmod(PTP_DEVICE,
+		S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH)){
+		GPTP_LOG_ERROR("Failed to change ptp dev node permissions\n");
+    }
 }
 
 void print_usage( char *arg0 ) {
@@ -596,6 +605,8 @@ int main(int argc, char **argv)
 		pGPTPPersist->setWriteSize((uint32_t)restoredatacount);
 		pGPTPPersist->registerWriteCB(gPTPPersistWriteCB);
 	}
+
+	change_ptp_dev_perm();
 
 	pPort->processEvent(POWERUP);
 
