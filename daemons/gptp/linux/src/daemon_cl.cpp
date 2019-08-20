@@ -67,7 +67,7 @@
 #define PHY_DELAY_MB_TX_I20 1044//100M delay
 #define PHY_DELAY_MB_RX_I20 2133//100M delay
 
-#define PTP_DEVICE "/dev/ptp0"
+#define PTP_DEVICE_PATHNAME "/dev/ptp0"
 
 void gPTPPersistWriteCB(char *bufPtr, uint32_t bufSize);
 
@@ -94,7 +94,7 @@ static inline int64_t pctns(struct ptp_clock_time t)
 }
 
 static void change_ptp_dev_perm(void){
-	if(0 != chmod(PTP_DEVICE,
+	if(0 != chmod(PTP_DEVICE_PATHNAME,
 		S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH)){
 		GPTP_LOG_ERROR("Failed to change ptp dev node permissions\n");
     }
