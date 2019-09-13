@@ -74,7 +74,7 @@ void gPTPPersistWriteCB(char *bufPtr, uint32_t bufSize);
 /* Return *a - *b */
 static inline ptp_clock_time pct_diff
 ( struct ptp_clock_time *a, struct ptp_clock_time *b ) {
-	ptp_clock_time result;
+	ptp_clock_time result = {0,0,0};
 	if( a->nsec >= b->nsec ) {
 		result.nsec = a->nsec - b->nsec;
 	} else {
