@@ -248,6 +248,7 @@ void* AvbMpegStreamthread(void *arg)
     sp<IBinder> binder = sm->getService(String16("media.player"));
     sp<IMediaPlayerService> service = interface_cast<IMediaPlayerService>(binder);
 
+    CHECK(service != NULL);
     CHECK(service.get() != NULL);
 
     sp<MyClient> client = new MyClient;
