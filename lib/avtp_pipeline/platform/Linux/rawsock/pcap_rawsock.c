@@ -42,6 +42,9 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #define	AVB_LOG_COMPONENT	"Raw Socket"
 #endif
 
+extern openavb_endpoint_cfg_t  x_cfg;
+extern bool gListenerStreaming;
+
 static pcap_t* open_pcap_dev(const char* ifname, int frameSize, char* errbuf)
 {
 	pcap_t* handle = pcap_create(ifname, errbuf);
@@ -188,6 +191,10 @@ U8 *pcapRawsockGetRxFrame(void *pvRawsock, U32 timeout, unsigned int *offset, un
 			return (U8*)packet;
 		case -1:
 			AVB_LOGF_ERROR("pcap_next_ex failed: %s", pcap_geterr(rawsock->handle));
+			if (x_cfg.loglistenerstatus == 1 && gListenerStreaming) {
+				// eth link down
+				AVB_LOG_L_STATUS("ERROR : STREAM_INTERRUPTED");
+			}
 			break;
 		case 0:
 			usleep(1000); //1ms
