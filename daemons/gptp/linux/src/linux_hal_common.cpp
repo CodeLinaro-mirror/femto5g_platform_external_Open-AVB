@@ -932,6 +932,7 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
 		goto exit_unlink;
 	}
 	pthread_mutexattr_setpshared(&shared,1);
+	pthread_mutexattr_setprotocol(&shared, PTHREAD_PRIO_INHERIT);
 	/*create a mutex */
 	err = pthread_mutex_init((pthread_mutex_t *) master_offset_buffer, &shared);
 	if(err != 0) {
