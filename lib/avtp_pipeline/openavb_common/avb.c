@@ -59,7 +59,7 @@
 int gptpinit(int *shm_fd, char **memory_offset_buffer)
 {
 #ifdef ANDROID
-	*shm_fd = open(SHM_NAME, O_RDWR, 0);
+	*shm_fd = open(SHM_NAME, O_RDWR| O_CREAT, 0);
 #elif defined(GPTP_IPC_GVM_MODE)
 	*shm_fd = open(GVM_SHM_NAME, O_RDWR);
 #else
