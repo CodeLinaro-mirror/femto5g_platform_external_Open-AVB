@@ -27,7 +27,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define GPTP_LOG_HPP
 
 /**@file*/
-
+#include <string>
 #include <stdio.h>
 #include <stdarg.h>
 #include <time.h>
@@ -35,9 +35,18 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <syslog.h>
 #endif
 
+#ifdef ANDROID
+#define LOG_TAG "GPTP"
+#include <utils/Log.h>
+#else
+#define ALOGE(format, ...)
+#endif
+
 #ifdef GENIVI_DLT
 #include "dlt.h"
 #endif
+
+#define GPTP_LOG_FULL_MSG_LEN 1024
 
 #define GPTP_LOG_CRITICAL_ON		1
 #define GPTP_LOG_ERROR_ON			1
@@ -45,6 +54,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define GPTP_LOG_WARNING_ON			1
 #define GPTP_LOG_INFO_ON			1
 #define GPTP_LOG_STATUS_ON			1
+#define GPTP_LOG_DIAGNOSTIC_ON 1
 //#define GPTP_LOG_DEBUG_ON			1
 //#define GPTP_LOG_VERBOSE_ON		1
 
@@ -57,13 +67,30 @@ typedef enum {
 	GPTP_LOG_LVL_STATUS,
 	GPTP_LOG_LVL_DEBUG,
 	GPTP_LOG_LVL_VERBOSE,
+	GPTP_LOG_LVL_DIAGNOSTIC
 } GPTP_LOG_LEVEL;
 
+// Modes for log capture only customer specific
+typedef enum {
+	// Disable logs
+	GPTP_LOG_DISABLED = 1,
+	// log to logcat and  file
+	GPTP_LOG_FILE,
+	// logcat -- default option
+	GPTP_LOG_LOGCAT,
+	// MAX logmode
+	GPTP_LOG_MODE_MAX
+} gptp_log_mode_t;
 
 void gptplogRegister(void);
 void gptplogUnregister(void);
 void gptpLog(GPTP_LOG_LEVEL level, const char *tag, const char *path, int line, const char *fmt, ...);
 
+bool gptpLogModeConfigure(uint8_t);
+bool gptpOpenCountersFile(char *);
+bool gptpOpenExceptionsFile(char *);
+bool gptpCloseCountersFile();
+bool gptpCloseExceptionsFile();
 
 #define GPTP_LOG_REGISTER() gptplogRegister()
 
@@ -127,6 +154,16 @@ void gptpLog(GPTP_LOG_LEVEL level, const char *tag, const char *path, int line, 
 #endif
 #else
 #define GPTP_LOG_STATUS(fmt,...)
+#endif
+
+#ifdef GPTP_LOG_DIAGNOSTIC_ON
+#ifdef GPTP_AUTO_START
+#define GPTP_LOG_DIAGNOSTIC_COUN(fmt,...) syslog (LOG_INFO, fmt, ## __VA_ARGS__)
+#else
+#define GPTP_LOG_DIAGNOSTIC_COUNT(fmt,...) gptpLog(GPTP_LOG_LVL_DIAGNOSTIC, "DIAGNOSTIC", NULL, 0, fmt, ## __VA_ARGS__)
+#endif
+#else
+#define GPTP_LOG_DIAGNOSTIC_COUNT(fmt,...)
 #endif
 
 #ifdef GPTP_LOG_DEBUG_ON
