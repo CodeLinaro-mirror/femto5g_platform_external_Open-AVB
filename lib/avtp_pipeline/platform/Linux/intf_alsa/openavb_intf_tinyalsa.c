@@ -199,6 +199,9 @@ typedef struct {
 
 	// The number of frames that have been passed to ALSA by the listener.
 	U32 framesConsumed;
+
+	U32 alsaPeriodSize;
+	U32 alsaPeriodCount;
 } pvt_data_t;
 
 
@@ -406,6 +409,20 @@ void openavbIntfTinyalsaCfgCB(media_q_t *pMediaQ, const char *name, const char *
 				&pEnd, 10);
 			AVB_LOGF_INFO("intf_nv_clock_recovery_adjustment_range = %d", pPvtData->clockRecoveryAdjustmentRange);
 		}
+
+		else if (strcmp(name, "intf_nv_alsa_period_size") ==
+			 0) {
+			pPvtData->alsaPeriodSize = strtol(value,
+				&pEnd, 10);
+			AVB_LOGF_INFO("intf_nv_alsaPeriodSize = %d", pPvtData->alsaPeriodSize);
+		}
+
+		else if (strcmp(name, "intf_nv_alsa_period_count") ==
+			 0) {
+			pPvtData->alsaPeriodCount = strtol(value,
+				&pEnd, 10);
+			AVB_LOGF_INFO("intf_nv_alsa_period_count = %d", pPvtData->alsaPeriodCount);
+		}
 	}
 
 	AVB_TRACE_EXIT(AVB_TRACE_INTF);
@@ -498,8 +515,8 @@ void openavbIntfTinyalsaTxInitCB(media_q_t *pMediaQ)
 		memset(&pPvtData->config, 0, sizeof(pPvtData->config));
 		pPvtData->config.channels = pPvtData->audioChannels;
 		pPvtData->config.rate = pPvtData->audioRate;
-		pPvtData->config.period_size = PERIOD_SIZE;
-		pPvtData->config.period_count = PERIOD_COUNT;
+		pPvtData->config.period_size = pPvtData->alsaPeriodSize;
+		pPvtData->config.period_count = pPvtData->alsaPeriodCount;
 		pPvtData->config.start_threshold = 0;
 		pPvtData->config.stop_threshold = 0;
 		pPvtData->config.silence_threshold = 0;
@@ -522,6 +539,8 @@ void openavbIntfTinyalsaTxInitCB(media_q_t *pMediaQ)
 			fprintf(stderr, "Unable to open PCM device (%s)\n",
 			pcm_get_error(pPvtData->pcmHandle));
 				return ;
+		} else {
+			AVB_LOGF_INFO("Period size %d Period count %d",pPvtData->alsaPeriodSize, pPvtData->alsaPeriodCount);
 		}
 
 		pPvtData->pcm_size = pcm_frames_to_bytes(pPvtData->pcmHandle, pcm_get_buffer_size(pPvtData->pcmHandle));
@@ -762,8 +781,8 @@ void openavbIntfTinyalsaRxInitCB(media_q_t *pMediaQ)
 
 		pPvtData->config.channels = pPvtData->audioChannels;
 		pPvtData->config.rate = pPvtData->audioRate;
-		pPvtData->config.period_size = PERIOD_SIZE;
-		pPvtData->config.period_count = PERIOD_COUNT;
+		pPvtData->config.period_size = pPvtData->alsaPeriodSize;
+		pPvtData->config.period_count = pPvtData->alsaPeriodCount;
 		pPvtData->config.start_threshold = 0;
 		pPvtData->config.stop_threshold = 0;
 		pPvtData->config.silence_threshold = 0;
@@ -788,6 +807,9 @@ void openavbIntfTinyalsaRxInitCB(media_q_t *pMediaQ)
 			fprintf(stderr, "Unable to open PCM device %u (%s)\n",
 					0, pcm_get_error(pPvtData->pcmHandle));
 			return;
+		} else {
+
+			AVB_LOGF_INFO("Period size %d Period count %d",pPvtData->alsaPeriodSize, pPvtData->alsaPeriodCount);
 		}
 		pPvtData->pcm_size = pcm_frames_to_bytes(pPvtData->pcmHandle, pcm_get_buffer_size(pPvtData->pcmHandle));
 	}
@@ -928,6 +950,8 @@ extern DLL_EXPORT bool openavbIntfTinyalsaInitialize(media_q_t *pMediaQ, openavb
 		pPvtData->clockSourceTimestampThrowaway = 10;
 		pPvtData->clockRecoveryAdjustmentRange = 500;
 
+		pPvtData->alsaPeriodCount = PERIOD_COUNT;
+		pPvtData->alsaPeriodSize = PERIOD_SIZE;
 		MUTEX_ATTR_HANDLE(mta);
 		MUTEX_ATTR_INIT(mta);
 		MUTEX_ATTR_SET_TYPE(mta, MUTEX_ATTR_TYPE_DEFAULT);
