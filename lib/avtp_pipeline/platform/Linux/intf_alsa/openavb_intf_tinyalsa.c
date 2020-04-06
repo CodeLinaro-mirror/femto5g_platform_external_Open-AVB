@@ -202,8 +202,40 @@ typedef struct {
 
 	U32 alsaPeriodSize;
 	U32 alsaPeriodCount;
+
+        U32 deviceId;
+        U32 cardId;
 } pvt_data_t;
 
+
+static void parsePcmDeviceName(char *pDeviceName, U32 *cardID, U32 *deviceID)
+{
+    U32 card = 0;
+    U32 device = 0;
+
+    if((!pDeviceName) || (!cardID)|| (!deviceID)) {
+        AVB_LOGF_ERROR("%s: Invalid format ", __func__);
+        return;
+    }
+    /*Default values*/
+    *cardID = 0;
+    *deviceID = 0;
+
+    if ((pDeviceName[0] != 'h')
+        || (pDeviceName[1] != 'w')
+        || (pDeviceName[2] != ':')) {
+        AVB_LOGF_ERROR("%s: Invalid format ", __func__);
+        return;
+    } else if (sscanf(&pDeviceName[3], "%u,%u", &card, &device) != 2) {
+        AVB_LOGF_ERROR("%s: Invalid format ", __func__);
+        return;
+    }
+
+    *cardID = card;
+    *deviceID = device;
+
+    return;
+}
 
 // Each configuration name value pair for this mapping will result in this callback being called.
 void openavbIntfTinyalsaCfgCB(media_q_t *pMediaQ, const char *name, const char *value)
@@ -240,6 +272,8 @@ void openavbIntfTinyalsaCfgCB(media_q_t *pMediaQ, const char *name, const char *
 				free(pPvtData->pDeviceName);
 			}
 			pPvtData->pDeviceName = strdup(value);
+			parsePcmDeviceName(pPvtData->pDeviceName, &pPvtData->cardId, &pPvtData->deviceId);
+			AVB_LOGF_INFO("PCM: card=%u device=%u", pPvtData->cardId, pPvtData->deviceId);
 		}
 
 		else if (strcmp(name, "intf_nv_audio_rate") == 0) {
@@ -534,7 +568,8 @@ void openavbIntfTinyalsaTxInitCB(media_q_t *pMediaQ)
 				pPvtData->config.format = PCM_FORMAT_S16_LE;
 				break;
 		}
-		pPvtData->pcmHandle = pcm_open(0,0,PCM_IN,&pPvtData->config);
+		AVB_LOGF_INFO("%s: pcm_open cardId=%u deviceId=%u ", __func__, pPvtData->cardId, pPvtData->deviceId);
+		pPvtData->pcmHandle = pcm_open(pPvtData->cardId, pPvtData->deviceId,PCM_IN,&pPvtData->config);
 		if (!pPvtData->pcmHandle || !pcm_is_ready(pPvtData->pcmHandle)) {
 			fprintf(stderr, "Unable to open PCM device (%s)\n",
 			pcm_get_error(pPvtData->pcmHandle));
@@ -802,7 +837,8 @@ void openavbIntfTinyalsaRxInitCB(media_q_t *pMediaQ)
 		}
 
 		//card = 0, device = 0
-		pPvtData->pcmHandle = pcm_open(0, 0, PCM_OUT, &pPvtData->config);
+		AVB_LOGF_INFO("%s: pcm_open cardId=%u deviceId=%u ", __func__, pPvtData->cardId, pPvtData->deviceId);
+		pPvtData->pcmHandle = pcm_open(pPvtData->cardId, pPvtData->deviceId, PCM_OUT, &pPvtData->config);
 		if (!pPvtData->pcmHandle || !pcm_is_ready(pPvtData->pcmHandle)) {
 			fprintf(stderr, "Unable to open PCM device %u (%s)\n",
 					0, pcm_get_error(pPvtData->pcmHandle));
@@ -824,7 +860,8 @@ static void consumeAudio(pvt_data_t *pPvtData, void *data, U32 dataLen)
 	if (rslt) {
 		AVB_LOGF_ERROR("pcm_write: %d %d  %s %d", rslt, errno, pcm_get_error(pPvtData->pcmHandle), dataLen);
 		pcm_close(pPvtData->pcmHandle);
-		pPvtData->pcmHandle = pcm_open(0, 0, PCM_OUT, &pPvtData->config);
+		AVB_LOGF_INFO("%s: pcm_open cardId=%u deviceId=%u ", __func__, pPvtData->cardId, pPvtData->deviceId);
+		pPvtData->pcmHandle = pcm_open(pPvtData->cardId, pPvtData->deviceId, PCM_OUT, &pPvtData->config);
 		if (!pPvtData->pcmHandle || !pcm_is_ready(pPvtData->pcmHandle)) {
 			fprintf(stderr, "Unable to open PCM device %u (%s)\n",
 					0, pcm_get_error(pPvtData->pcmHandle));
