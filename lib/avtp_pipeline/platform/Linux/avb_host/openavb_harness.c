@@ -140,8 +140,6 @@ int main(int argc, char *argv[])
 	char *optIfnameGlobal = NULL;
 	char *endpointIniFile = NULL;
 	log_out_t loggingType = LOG_OUT_SHELL;
-	struct sched_param param;
-	int useRTprio = 0;
 
 	// Talker listener vars
 	int iniIdx = 0;
@@ -172,7 +170,7 @@ int main(int argc, char *argv[])
 
 	bool optDone = FALSE;
 	while (!optDone) {
-		int opt = getopt(argc, argv, "a:his:d:I:e:l:r");
+		int opt = getopt(argc, argv, "a:his:d:I:e:l");
 		if (opt != EOF) {
 			switch (opt) {
 				case 'a':
@@ -202,9 +200,6 @@ int main(int argc, char *argv[])
 					AVB_LOG_ERROR("Unsupported on current platform");
 #endif
 					break;
-				case 'r':
-					useRTprio = 1;
-					break;
 				case '?':
 				default:
 					openavbTlHarnessUsage(programName);
@@ -213,17 +208,6 @@ int main(int argc, char *argv[])
 		}
 		else {
 			optDone = TRUE;
-		}
-	}
-	if (useRTprio) {
-		param.sched_priority = sched_get_priority_max(SCHED_FIFO);
-		errno = 0;
-		if (sched_setscheduler(0, SCHED_FIFO, &param) == -1) {
-			printf("Failed to increase priority to RT. errno = %d (%s) \n",
-					errno, strerror(errno));
-			exit(-1);
-		} else {
-			printf("Process marked as RT with priority %d \n", param.sched_priority);
 		}
 	}
 
