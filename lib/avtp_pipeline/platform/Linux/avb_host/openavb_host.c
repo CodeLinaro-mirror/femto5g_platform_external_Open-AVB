@@ -82,7 +82,6 @@ void openavbTlHostUsage(char *programName)
 		"  -e endpoint.ini.\n"
 		"  -r Increase process prority to RealTime. Overrides -n option.\n"
 		"  -n val Set process nice to (val). Range -20 (highest priority) to +19 (lowest priority), default: -20.\n"
-		"  -l output logging to logcat (default: shell) \n"
 		"\n"
 		"Examples:\n"
 		"  %s talker.ini\n"
@@ -111,7 +110,6 @@ int main(int argc, char *argv[])
 	struct sched_param param;
 	int niceVal = DEFAULT_NICE;
 	int useRTprio = 0;
-	log_out_t loggingType = LOG_OUT_SHELL;
 
 	programName = strrchr(argv[0], '/');
 	programName = programName ? programName + 1 : argv[0];
@@ -127,7 +125,7 @@ int main(int argc, char *argv[])
 	// Process command line
 	bool optDone = FALSE;
 	while (!optDone) {
-		int opt = getopt(argc, argv, "hrn:I:e:l");
+		int opt = getopt(argc, argv, "hrn:I:e:");
 		if (opt != EOF) {
 			switch (opt) {
 				case 'I':
@@ -150,13 +148,6 @@ int main(int argc, char *argv[])
 					}
 					break;
 				}
-				case 'l':
-#ifdef ANDROID
-					loggingType = LOG_OUT_LOGCAT;
-#else
-					AVB_LOG_ERROR("Unsupported on current platform");
-#endif
-					break;
 				case 'h':
 				default:
 					openavbTlHostUsage(programName);
@@ -188,7 +179,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	osalAVBInitialize(optIfnameGlobal,endpointIniFile, loggingType);
+	osalAVBInitialize(optIfnameGlobal,endpointIniFile);
 
 	iniIdx = optind;
 	U32 tlCount = argc - iniIdx;
