@@ -72,7 +72,7 @@ extern int rtnetlink_sock;
 void getRtnetlinkstats (struct nlmsghdr *rtnlmsg)
 {
 	struct ifinfomsg *infomsg;
-	char ifname[IFNAMELEN];
+	char ifname[IFNAMELEN] = "";
 	int rtlen;
 	struct rtattr *rtnetlink_attr;
 
