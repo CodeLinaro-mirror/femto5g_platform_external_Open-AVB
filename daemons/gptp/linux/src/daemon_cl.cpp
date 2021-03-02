@@ -592,6 +592,11 @@ int main(int argc, char **argv)
 	portInit.thread_factory = thread_factory;
 	portInit.timer_factory = timer_factory;
 	portInit.lock_factory = lock_factory;
+	portInit.logmode = GPTP_LOG_LOGCAT;
+	portInit.logExceptions = 0;
+	portInit.gptp_exception_file = NULL;
+	portInit.logDiagnosticCounters = 0;
+	portInit.gptp_diagnostic_counter_file = NULL;
 
 	if(use_config_file)
 	{

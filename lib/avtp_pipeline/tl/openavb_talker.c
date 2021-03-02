@@ -95,6 +95,12 @@ bool talkerStartStream(tl_state_t *pTLState)
 
 	avtp_stream_t *pStream = (avtp_stream_t *)(pTalkerData->avtpHandle);
 
+	if (!pStream) {
+		AVB_LOG_ERROR("Invalid pStream");
+		AVB_TRACE_EXIT(AVB_TRACE_TL);
+		return FALSE;
+	}
+
 	if (!pStream->pMapCB->map_transmit_interval_cb(pTLState->pMediaQ)) {
 		pTalkerData->wakeRate = pTalkerData->classRate / pCfg->batch_factor;
 	}
