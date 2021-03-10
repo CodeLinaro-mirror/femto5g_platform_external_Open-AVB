@@ -128,13 +128,12 @@ typedef enum { false = 0, true = 1 } bool;
 #endif
 
 typedef struct {
-	bool sync_status;				//!< PTP Sync status
 	int64_t ml_phoffset;			//!< Master to local phase offset
 	int64_t ls_phoffset;			//!< Local to system phase offset
 	FrequencyRatio ml_freqoffset;	//!< Master to local frequency offset
 	FrequencyRatio ls_freqoffset;	//!< Local to system frequency offset
 	uint64_t local_time;			//!< Local time of last update
-
+	bool sync_status;				//!< PTP Sync status
 	/* Current grandmaster information */
 	/* Referenced by the IEEE Std 1722.1-2013 AVDECC Discovery Protocol Data Unit (ADPDU) */
 	uint8_t gptp_grandmaster_id[PTP_CLOCK_IDENTITY_LENGTH]; //!< Current grandmaster id (all 0's if no grandmaster selected)
@@ -162,6 +161,10 @@ typedef struct {
 	PID_TYPE process_id;			//!< Process id number
 	uint8_t gmIdentifier[PTP_CLOCK_IDENTITY_LENGTH];
 	uint16_t portNumber;
+
+	int64_t lq_phoffset;			//!< Local to qtimer phase offset
+	FrequencyRatio lq_freqoffset;	//!< Local to qtimer frequency offset
+	int64_t qtime_to_mono_offset; //!Qtimer to monotonic offset
 
 }gPtpTimeData;
 
