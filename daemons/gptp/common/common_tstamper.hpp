@@ -132,6 +132,13 @@ public:
 	virtual bool HWTimestamper_PPS_stop() { return true; };
 
 	/**
+	 * @brief  Gets current ptp clock time.
+	 * @param  ptp_cur_time [out] Current ptp time
+	 * @return TRUE in case of sucess, FALSE if error.
+	 */
+	virtual bool HWTimestamper_getptptime( uint64_t *ptp_cur_time ) { return true; };
+
+	/**
 	 * @brief  Gets the HWTimestamper version
 	 * @return version (signed integer)
 	 */
