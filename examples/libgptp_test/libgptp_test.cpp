@@ -42,7 +42,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <limits.h>
 #include <sys/time.h>
 #include <time.h>
-
+#include <unistd.h>
 #include <gptp_helper.h>
 
 uint64_t systemTime(int clock)
@@ -163,6 +163,80 @@ void do_some_tests_ptp() {
     }
 }
 
+#ifdef RGPTP_CLNT_ENABLED
+static void rgptp_test(void) {
+    bool rgptp_avail = false;
+    uint64_t test_rgptp_time;
+
+    rgptp_avail = rgptpInit();
+    if (rgptp_avail) {
+        printf("RGPTP Available\n");
+        if (rgptpGetCurPtpTime(&test_rgptp_time)){
+            printf("rgptp time %" PRIu64 ".%" PRIu64 "\n",
+                    test_rgptp_time/1000000000UL, test_rgptp_time%1000000000UL);
+        }
+        else {
+            printf("RGPTP time test failed\n");
+        }
+        if(!rgptpDeinit()) {
+            printf("RGPTP deinit failed\n");
+        }
+    }
+    else {
+        printf("RGPTP Not Available\n");
+    }
+    return;
+}
+
+static void do_some_tests_rgptp_s(int time_s) {
+    uint64_t rptp_time = 0;
+    uint64_t ptp_time = 0;
+    int i = 0;
+    int64_t ns = 0;
+
+    if (rgptpInit()) {
+        for(i=0; i< 200; i++) {
+            gptpGetCurPtpTime(&ptp_time);
+            rgptpGetCurPtpTime(&rptp_time);
+            ns = (ptp_time - rptp_time);
+            printf("gptp time: %" PRIu64 "rgptp time: %"PRIu64 " diff:%" PRId64 "\n", ptp_time, rptp_time, ns);
+            sleep(time_s);
+        }
+        if(!rgptpDeinit()) {
+            printf("RGPTP deinit failed\n");
+        }
+    }
+    else {
+        printf("RGPTP Not Available\n");
+    }
+    return;
+}
+
+static void do_some_tests_rgptp_u(int time_us) {
+    uint64_t rptp_time = 0;
+    uint64_t ptp_time = 0;
+    int i = 0;
+    int64_t ns = 0;
+
+    if (rgptpInit()) {
+        for(i=0; i< 200; i++) {
+            gptpGetCurPtpTime(&ptp_time);
+            rgptpGetCurPtpTime(&rptp_time);
+            ns = (ptp_time - rptp_time);
+            printf("gptp time: %" PRIu64 "rgptp time: %"PRIu64 " diff:%" PRId64 "\n", ptp_time, rptp_time, ns);
+            usleep(time_us);
+        }
+        if(!rgptpDeinit()) {
+            printf("RGPTP deinit failed\n");
+        }
+    }
+    else {
+        printf("RGPTP Not Available\n");
+    }
+    return;
+}
+#endif
+
 int main(int argc, char *argv[])
 {
     uint64_t test_vec_time;
@@ -252,7 +326,30 @@ int main(int argc, char *argv[])
             printf("\n\n\n====================PTP based test=====================\n\n\n");
             do_some_tests_ptp();
         }
+#ifdef RGPTP_CLNT_ENABLED
+        else if(argv[1][0] == 'r') {
+            rgptp_test();
+        }
+#endif
     }
+#ifdef RGPTP_CLNT_ENABLED
+    if (argc == 3) {
+        if(argv[1][0] == 's') {
+            int time_s = 0;
+            time_s = atoi(argv[2]);
+            printf("\n\n====================RPTP based test========================");
+            printf("\nsleep interval: %ds\n", time_s);
+            do_some_tests_rgptp_s(time_s);
+        }
+        else if(argv[1][0] == 'u') {
+            int time_us = 0;
+            time_us = atoi(argv[2]);
+            printf("\n\n====================RPTP based test=====================");
+            printf("\nsleep interval: %dus\n", time_us);
+            do_some_tests_rgptp_u(time_us);
+        }
+	}
+#endif
 
     if(!gptpDeinit()) {
         printf("GPTP deinit failed\n");
