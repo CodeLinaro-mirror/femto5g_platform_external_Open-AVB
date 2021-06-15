@@ -54,6 +54,7 @@
 #define DEFAULT_AUDIO_FORMAT AUDIO_FORMAT_PCM_16_BIT
 #define DEFAULT_SAMPLE_RATE 48000
 #define DEFAULT_CHANNEL_MASK AUDIO_CHANNEL_OUT_STEREO
+#define SINGLE_PCM_SAMPLE_SIZE 2
 
 #define USE_ECNR_THREAD
 
@@ -74,8 +75,7 @@ typedef struct {
 } eavb_audio_device;
 
 #ifdef USE_ECNR_THREAD
-typedef struct
-{
+typedef struct {
     void *buffer;
     void *buffer_end;
     size_t total_buffer_size;
@@ -88,12 +88,14 @@ typedef struct
 
 typedef struct {
     //std::recursive_mutex* mutex;
-    int eavbFd =-1;
+    int eavbFd = -1;
     int printErrorOnce;
     uint32_t rate;
     audio_format_t format;
     audio_channel_mask_t channel_mask;
     uint32_t channels;
+    uint32_t iniChannelCount;
+    uint32_t channelSelectBitMask;
     size_t bufferSize;
     char eavbSocketPath[MAX_PATH_LEN];
 #ifdef USE_ECNR_THREAD
