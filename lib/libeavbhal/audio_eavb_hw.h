@@ -57,6 +57,17 @@
 
 #define USE_ECNR_THREAD
 
+enum {
+    /* Media playback */
+    BUS_MEDIA,
+    /* System/notification sound */
+    BUS_SYS_NOTIFICATION,
+    /* Navigation guidance */
+    BUS_NAV_GUIDANCE,
+    /* Phone playback */
+    BUS_PHONE,
+};
+
 typedef struct {
     struct audio_hw_device device;
     //std::recursive_mutex* mutex;
