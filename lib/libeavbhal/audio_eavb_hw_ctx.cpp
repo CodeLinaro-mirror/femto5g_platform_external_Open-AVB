@@ -51,6 +51,7 @@
 // set WRITE_POLL_MS to 0 for blocking sockets, nonzero for polled non-blocking
 // sockets
 #define WRITE_POLL_MS 20
+#define MONO_CHANNEL 1
 
 #ifdef USE_ECNR_THREAD
 int circ_buff_init(circular_buffer_t *circ_buff, size_t total_buffer_size, size_t elem_size) {
@@ -352,6 +353,12 @@ int eavb_stream_write(eavb_stream_ctx *ctx, const void* buffer, size_t bytes) {
 
 finish:
     {
+        if (ctx->bus == BUS_NAV_GUIDANCE || ctx->bus == BUS_PHONE) {
+            if (ctx->channels != MONO_CHANNEL) {
+                /* Calculate delay using actual bytes sent from framework */
+                bytes *= 2;
+            }
+        }
         const int us_delay = calc_audiotime_usec(ctx, bytes);
         ctx->time2 = systemTime(CLOCK_MONOTONIC);
         if (ctx->time1 && (ctx->time1 < ctx->time2)) {

@@ -35,6 +35,22 @@
 
 #include "audio_eavb_hw.h"
 
+#define MONO_CHANNEL 1
+
+void StereoToMono(const void *buffer, size_t len, uint32_t channelcount)
+{
+    int16_t* localsrcbufptr = (int16_t*)buffer;
+    int16_t* localdestbufptr = (int16_t*)buffer;
+
+    while (len > 0)
+    {
+        // Take the average of the left and right channels to get the mono content
+        *localdestbufptr = (*localsrcbufptr / 2) + (*(localsrcbufptr + 1) / 2);
+        localdestbufptr++;
+        localsrcbufptr += 2;
+        len = len - (channelcount * 2);
+    }
+}
 
 static uint32_t out_get_sample_rate(const struct audio_stream *stream)
 {
@@ -147,9 +163,25 @@ static int out_set_volume(struct audio_stream_out *stream, float left,
 static ssize_t out_write(struct audio_stream_out *stream, const void* buffer,
                          size_t bytes)
 {
+    ssize_t sent;
+
     eavb_stream_out* out = (eavb_stream_out*) stream;
-    //ALOGD("out_write: out=%p, out->ctx=%p, bytes: %zu  bus_num: %d", out, &out->eavbCtx, bytes, out->eavbCtx.bus);
-    return eavb_stream_write(&out->eavbCtx, buffer, bytes);
+    if (out->eavbCtx.bus == BUS_NAV_GUIDANCE || out->eavbCtx.bus == BUS_PHONE) {
+        if (out->eavbCtx.channels != MONO_CHANNEL) {
+            /* Average out stereo data for navigation and phone bus types */
+            StereoToMono(buffer, bytes, out->eavbCtx.channels);
+            bytes /= 2;
+        }
+    }
+    sent = eavb_stream_write(&out->eavbCtx, buffer, bytes);
+    if (out->eavbCtx.bus == BUS_NAV_GUIDANCE || out->eavbCtx.bus == BUS_PHONE) {
+        if (out->eavbCtx.channels != MONO_CHANNEL) {
+            /* Return the actual bytes sent from framework */
+            sent *= 2;
+        }
+    }
+
+    return sent;
 }
 
 static int out_get_render_position(const struct audio_stream_out *stream,
