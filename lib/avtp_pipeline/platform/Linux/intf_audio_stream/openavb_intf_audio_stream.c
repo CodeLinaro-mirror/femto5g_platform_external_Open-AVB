@@ -580,6 +580,14 @@ void openavbIntfAudioStreamTxInitCB(media_q_t *pMediaQ) {
             return;
         }
 
+        if (config_socket_client < 0) {
+            config_skt_client_connect(CONFIG_SOCKET_PATH);
+        }
+
+        if (config_socket_client >= 0) {
+            send_config_to_eavb_hal(pPvtData);
+        }
+
         pPvtData->pServerSocket = skt_connect(pPvtData->socketPath, SOCKET_BUFFER_SIZE);
         if (pPvtData->pServerSocket < 0) {
              AVB_LOG_ERROR("Failed to create data socket");

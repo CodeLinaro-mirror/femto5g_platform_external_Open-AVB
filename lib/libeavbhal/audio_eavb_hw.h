@@ -108,6 +108,7 @@ typedef struct {
 #endif
     int32_t bus;
     uint64_t time1, time2;
+    void *stereoBuffer;
 } eavb_stream_ctx;
 
 typedef struct {

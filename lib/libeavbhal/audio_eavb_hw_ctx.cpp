@@ -54,7 +54,7 @@
 #define CONFIG_SOCKET_PATH "/data/misc/eavb/config_socket"
 #define SOCKET_PATH_MAX_LENGTH 100
 #define SOCKET_BUFFER_SIZE (1024)
-#define MAX_NUMBER_OF_CHANNELS 3
+#define MAX_NUMBER_OF_CHANNELS 4
 // set WRITE_POLL_MS to 0 for blocking sockets, nonzero for polled non-blocking
 // sockets
 #define WRITE_POLL_MS 20
@@ -205,6 +205,37 @@ static int calc_audiotime_usec(eavb_stream_ctx* ctx, int bytes) {
            ctx->rate);
 }
 
+static void MonoToStereo(const void *monoBuffer, const void *stereoBuffer, size_t len, uint32_t channelcount)
+{
+    int16_t* localsrcbufptr = (int16_t*)monoBuffer;
+    int16_t* localdestbufptr = (int16_t*)stereoBuffer;
+
+    while (len > 0)
+    {
+        // Copy the mono channel data to left and right channels
+        *localdestbufptr = *localsrcbufptr;
+        *(localdestbufptr + 1) = *localsrcbufptr;
+        localsrcbufptr++;
+        localdestbufptr += 2;
+        len = len - (channelcount * 2);
+    }
+}
+
+static void StereoToMono(const void *buffer, size_t len, uint32_t channelcount)
+{
+    int16_t* localsrcbufptr = (int16_t*)buffer;
+    int16_t* localdestbufptr = (int16_t*)buffer;
+
+    while(len > 0)
+    {
+        // Take the average of the left and right channels to get the mono content
+        *localdestbufptr = (*localsrcbufptr / 2) + (*(localsrcbufptr + 1) / 2);
+        localdestbufptr++;
+        localsrcbufptr += 2;
+        len = len - (channelcount * 2);
+    }
+}
+
 static int skt_connect(const char* path, size_t buffer_sz) {
     int ret = 0;
     int skt_fd = -1;
@@ -318,6 +349,7 @@ static int skt_write(eavb_stream_ctx *ctx, const void* p, size_t len) {
                 if (count) {
                     skt_disconnect(fd);
                     ctx->eavbFd = -1;
+                    ctx->iniChannelCount = 0;
                     return count;
                 } else {
                     return -1;
@@ -332,6 +364,7 @@ static int skt_write(eavb_stream_ctx *ctx, const void* p, size_t len) {
             if (count) {
                 skt_disconnect(fd);
                 ctx->eavbFd = -1;
+                ctx->iniChannelCount = 0;
                 return count;
             } else {
                 return -1;
@@ -500,22 +533,80 @@ int eavb_stream_write(eavb_stream_ctx *ctx, const void* buffer, size_t bytes) {
             // reset once successfully connected
             ctx->printErrorOnce = 0;
         }
+        if (ctx->iniChannelCount == 0) {
+            for(int i=0; i < MAX_NUMBER_OF_CHANNELS; i++) {
+                if(strcmp(ctx->eavbSocketPath,streamConfigInfos[i].socketPath) == 0) {
+                    ctx->iniChannelCount = streamConfigInfos[i].audioChannelCount;
+                    if (ctx->bus == BUS_NAV_GUIDANCE || ctx->bus == BUS_PHONE) {
+                        if (ctx->channels != ctx->iniChannelCount) {
+                            if (ctx->channels == MONO_CHANNEL) {
+                                if (ctx->stereoBuffer) {
+                                    free(ctx->stereoBuffer);
+                                }
+                                ctx->stereoBuffer = (void*) malloc(bytes * 2);
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
     }
 
-    sent = skt_write(ctx, buffer, bytes);
+    if (ctx->bus == BUS_NAV_GUIDANCE || ctx->bus == BUS_PHONE) {
+        //ALOGI("Channel count from framework:%d INI:%d for bus:%d", ctx->channels, ctx->channelcount_ini, ctx->bus);
+        if (ctx->channels != ctx->iniChannelCount) {
+            if (ctx->channels == MONO_CHANNEL) {
+                /* Mono to stereo conversion */
+                if (ctx->stereoBuffer) {
+                    MonoToStereo(buffer, (const void *)ctx->stereoBuffer, bytes, ctx->channels);
+                    bytes *= 2;
+                    sent = skt_write(ctx, ctx->stereoBuffer, bytes);
+                } else {
+                    ALOGE("Stereo buffer is not allocated for bus %d", ctx->bus);
+                    goto finish;
+                }
+            } else {
+                /* Stereo to mono conversion */
+                StereoToMono(buffer, bytes, ctx->channels);
+                bytes /= 2;
+                sent = skt_write(ctx, buffer, bytes);
+            }
+        } else {
+            sent = skt_write(ctx, buffer, bytes);
+        }
+    } else {
+        sent = skt_write(ctx, buffer, bytes);
+    }
 
     if (sent == -1) {
         ALOGE("write failed - server might have disconnected");
         skt_disconnect(ctx->eavbFd);
         ctx->eavbFd = -1;
+        ctx->iniChannelCount = 0;
+    } else {
+        if (ctx->bus == BUS_NAV_GUIDANCE || ctx->bus == BUS_PHONE) {
+            if (ctx->channels != ctx->iniChannelCount) {
+                /* Return the actual bytes sent from framework */
+                if (ctx->channels == MONO_CHANNEL) {
+                    sent /= 2;
+                } else {
+                    sent *= 2;
+                }
+            }
+        }
     }
 
 finish:
     {
         if (ctx->bus == BUS_NAV_GUIDANCE || ctx->bus == BUS_PHONE) {
-            if (ctx->channels != MONO_CHANNEL) {
+            if (ctx->channels != ctx->iniChannelCount) {
                 /* Calculate delay using actual bytes sent from framework */
-                bytes *= 2;
+                if (ctx->channels == MONO_CHANNEL) {
+                    bytes /= 2;
+                } else {
+                    bytes *= 2;
+                }
             }
         }
         const int us_delay = calc_audiotime_usec(ctx, bytes);
@@ -581,6 +672,7 @@ int eavb_stream_ctx_init(eavb_stream_ctx *ctx, struct audio_config *config) {
     ctx->time2 = 0;
     ctx->iniChannelCount = 0;
     ctx->channelSelectBitMask = 0;
+    ctx->stereoBuffer = NULL;
 
     if (config) {
         ctx->format = config->format;
@@ -611,6 +703,11 @@ void eavb_stream_ctx_destroy(eavb_stream_ctx *ctx) {
     if (ctx->eavbFd >= 0) {
         skt_disconnect(ctx->eavbFd);
         ctx->eavbFd = -1;
+    }
+    ctx->iniChannelCount = 0;
+    if (ctx->stereoBuffer) {
+        free(ctx->stereoBuffer);
+        ctx->stereoBuffer = NULL;
     }
 }
 
