@@ -20,7 +20,11 @@ endif
 
 LOCAL_REQUIRED_MODULES := \
    audio_stream_talker.ini \
+   audio_stream_talker_media.ini \
+   audio_stream_talker_navigation.ini \
+   audio_stream_talker_phone.ini \
    audio_stream_listener.ini \
+   audio_stream_listener_7ch.ini \
    audio.eavb.default \
    audio_policy_configuration.xml
 
@@ -36,7 +40,35 @@ include $(BUILD_PREBUILT)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := DATA
+LOCAL_MODULE := audio_stream_talker_media.ini
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR)/etc
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE_CLASS := DATA
+LOCAL_MODULE := audio_stream_talker_navigation.ini
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR)/etc
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE_CLASS := DATA
+LOCAL_MODULE := audio_stream_talker_phone.ini
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR)/etc
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE_CLASS := DATA
 LOCAL_MODULE := audio_stream_listener.ini
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR)/etc
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE_CLASS := DATA
+LOCAL_MODULE := audio_stream_listener_7ch.ini
 LOCAL_SRC_FILES := $(LOCAL_MODULE)
 LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR)/etc
 include $(BUILD_PREBUILT)

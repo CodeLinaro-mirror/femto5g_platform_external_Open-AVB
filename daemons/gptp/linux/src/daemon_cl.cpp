@@ -219,6 +219,12 @@ static void *wait_for_epoll_event(void *arg)
     GPTP_LOG_INFO("Added fd : %d to the epoll\n",sock);
     epoll_events = (struct epoll_event *) calloc(MAX_EVENTS, sizeof(ev));
 
+    if(NULL == epoll_events){
+        GPTP_LOG_ERROR("epoll_events alloc failed : %s\n",strerror(errno));
+        close(epoll_fd);
+        return NULL;
+    }
+
     while (1){
         int n, i;
 

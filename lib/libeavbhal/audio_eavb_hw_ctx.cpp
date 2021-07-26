@@ -40,6 +40,10 @@
 #include <system/audio.h>
 #include <cutils/sockets.h>
 #include "audio_eavb_hw.h"
+#include <sys/un.h>
+#include <sys/poll.h>
+#include <pthread.h>
+
 
 #define USEC_PER_SEC 1000000L
 #define NANOSECONDS_PER_MSEC (1000000L)
@@ -47,10 +51,25 @@
 
 #define SOCK_SEND_TIMEOUT_MS 2000 /* Timeout for sending */
 #define SOCK_RECV_TIMEOUT_MS 5000 /* Timeout for receiving */
-
+#define CONFIG_SOCKET_PATH "/data/misc/eavb/config_socket"
+#define SOCKET_PATH_MAX_LENGTH 100
+#define SOCKET_BUFFER_SIZE (1024)
+#define MAX_NUMBER_OF_CHANNELS 4
 // set WRITE_POLL_MS to 0 for blocking sockets, nonzero for polled non-blocking
 // sockets
 #define WRITE_POLL_MS 20
+#define MONO_CHANNEL 1
+pthread_t server_thread_id;
+bool context_initialized = false;
+
+typedef struct {
+    char socketPath[SOCKET_PATH_MAX_LENGTH];
+    int audioChannelCount;
+} StreamConfigInfo;
+
+
+StreamConfigInfo streamConfigInfos[MAX_NUMBER_OF_CHANNELS];
+
 
 #ifdef USE_ECNR_THREAD
 int circ_buff_init(circular_buffer_t *circ_buff, size_t total_buffer_size, size_t elem_size) {
@@ -186,6 +205,37 @@ static int calc_audiotime_usec(eavb_stream_ctx* ctx, int bytes) {
            ctx->rate);
 }
 
+static void MonoToStereo(const void *monoBuffer, const void *stereoBuffer, size_t len, uint32_t channelcount)
+{
+    int16_t* localsrcbufptr = (int16_t*)monoBuffer;
+    int16_t* localdestbufptr = (int16_t*)stereoBuffer;
+
+    while (len > 0)
+    {
+        // Copy the mono channel data to left and right channels
+        *localdestbufptr = *localsrcbufptr;
+        *(localdestbufptr + 1) = *localsrcbufptr;
+        localsrcbufptr++;
+        localdestbufptr += 2;
+        len = len - (channelcount * 2);
+    }
+}
+
+static void StereoToMono(const void *buffer, size_t len, uint32_t channelcount)
+{
+    int16_t* localsrcbufptr = (int16_t*)buffer;
+    int16_t* localdestbufptr = (int16_t*)buffer;
+
+    while(len > 0)
+    {
+        // Take the average of the left and right channels to get the mono content
+        *localdestbufptr = (*localsrcbufptr / 2) + (*(localsrcbufptr + 1) / 2);
+        localdestbufptr++;
+        localsrcbufptr += 2;
+        len = len - (channelcount * 2);
+    }
+}
+
 static int skt_connect(const char* path, size_t buffer_sz) {
     int ret = 0;
     int skt_fd = -1;
@@ -244,7 +294,7 @@ static int skt_connect(const char* path, size_t buffer_sz) {
 }
 
 static int skt_disconnect(int fd) {
-    ALOGI("fd %d", fd);
+    ALOGI("skt_disconnect fd %d", fd);
 
     if (fd != -1) {
       shutdown(fd, SHUT_RDWR);
@@ -299,6 +349,7 @@ static int skt_write(eavb_stream_ctx *ctx, const void* p, size_t len) {
                 if (count) {
                     skt_disconnect(fd);
                     ctx->eavbFd = -1;
+                    ctx->iniChannelCount = 0;
                     return count;
                 } else {
                     return -1;
@@ -313,6 +364,7 @@ static int skt_write(eavb_stream_ctx *ctx, const void* p, size_t len) {
             if (count) {
                 skt_disconnect(fd);
                 ctx->eavbFd = -1;
+                ctx->iniChannelCount = 0;
                 return count;
             } else {
                 return -1;
@@ -323,6 +375,147 @@ static int skt_write(eavb_stream_ctx *ctx, const void* p, size_t len) {
     }
     return (int)count;
 }
+
+
+static int accept_server_socket(int sfd)
+{
+    struct sockaddr_un remote;
+    struct pollfd pfd;
+    int fd;
+    socklen_t len = sizeof(struct sockaddr_un);
+    /* make sure there is data to process */
+    pfd.fd = sfd;
+    pfd.events = POLLIN;
+    int poll_ret;
+
+    do {
+        poll_ret = poll(&pfd, 1, -1);
+    } while (poll_ret == -1 && errno == EINTR);
+
+    if (poll_ret == 0) {
+        // allow some sleep time
+        usleep(10000);
+        ALOGD("accept poll timeout");
+        return -1;
+    }
+
+
+    do {
+        fd = accept(sfd, (struct sockaddr*)&remote, &len);
+    } while ((fd == -1) && (errno == EINTR));
+
+    if (fd == -1) {
+        ALOGE("sock accept failed (%s)", strerror(errno));
+        return -1;
+    }
+
+    ALOGE("accept_server_socket accepted eavb");
+    // match socket buffer size option with client
+    const int size = SOCKET_BUFFER_SIZE;
+    int ret =
+        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, (char*)&size, (int)sizeof(size));
+
+    if (ret < 0) {
+        ALOGE("setsockopt failed (%s)", strerror(errno));
+    }
+
+    return fd;
+}
+
+
+void *config_server_socket_ThreadFn(void *pv)
+{
+    int config_server_fd;
+    int client_fd = -1;
+    int len = -1;
+    StreamConfigInfo configInfo;
+    context_initialized = true;
+    config_server_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+
+    for (int i = 0; i < MAX_NUMBER_OF_CHANNELS; i++) {
+        streamConfigInfos[i].audioChannelCount = -1;
+        memset(streamConfigInfos[i].socketPath, 0, SOCKET_PATH_MAX_LENGTH);
+    }
+
+    if (config_server_fd < 0) {
+        ALOGE("failed to create socket");
+        return NULL;
+    }
+
+    if (socket_local_server_bind(config_server_fd, CONFIG_SOCKET_PATH,
+                                 ANDROID_SOCKET_NAMESPACE_ABSTRACT) < 0) {
+        ALOGE("failed to connect (%s)", strerror(errno));
+        close(config_server_fd);
+        context_initialized = false;
+        return NULL;
+    }
+
+    // keep polling until avb stream is stopped
+    while (context_initialized) {
+        if (listen(config_server_fd, 1) < 0) {
+            ALOGE("listen failed %s", strerror(errno));
+            close(config_server_fd);
+            context_initialized = false;
+            return NULL;
+        }
+
+        client_fd = accept_server_socket(config_server_fd);
+        ALOGD("config_server_socket client accepted");
+
+        while (context_initialized && (client_fd > 0)) {
+            do {
+                len = recv(client_fd, (void*)&configInfo, sizeof(StreamConfigInfo), 0);
+            } while ((len  == -1) && (errno == EINTR));
+
+            if (len <= 0) {
+                skt_disconnect(client_fd);
+                client_fd = -1;
+                continue;
+            }
+
+            if (len > 0) {
+                ALOGD("data read from config socket, socket path %s channel count %d",
+                      configInfo.socketPath,
+                      configInfo.audioChannelCount);
+
+                for (int i = 0; i < MAX_NUMBER_OF_CHANNELS; i++) {
+                    if ((streamConfigInfos[i].audioChannelCount == -1)
+                            || (strcmp(streamConfigInfos[i].socketPath, configInfo.socketPath) == 0)) {
+                        streamConfigInfos[i].audioChannelCount = configInfo.audioChannelCount;
+                        strlcpy(streamConfigInfos[i].socketPath, configInfo.socketPath,
+                                SOCKET_PATH_MAX_LENGTH);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if (client_fd > 0) {
+        skt_disconnect(client_fd);
+        client_fd = -1;
+    }
+
+    if (config_server_fd != -1) {
+        shutdown(config_server_fd, SHUT_RDWR);
+        close(config_server_fd);
+    }
+
+    return NULL;
+}
+
+
+
+static void config_socket_create()
+{
+    if (context_initialized == true) {
+        return;
+    }
+
+    pthread_create(&server_thread_id, NULL, config_server_socket_ThreadFn, NULL);
+    return;
+}
+
 
 int eavb_stream_write(eavb_stream_ctx *ctx, const void* buffer, size_t bytes) {
     int sent = -1;
@@ -340,18 +533,82 @@ int eavb_stream_write(eavb_stream_ctx *ctx, const void* buffer, size_t bytes) {
             // reset once successfully connected
             ctx->printErrorOnce = 0;
         }
+        if (ctx->iniChannelCount == 0) {
+            for(int i=0; i < MAX_NUMBER_OF_CHANNELS; i++) {
+                if(strcmp(ctx->eavbSocketPath,streamConfigInfos[i].socketPath) == 0) {
+                    ctx->iniChannelCount = streamConfigInfos[i].audioChannelCount;
+                    if (ctx->bus == BUS_NAV_GUIDANCE || ctx->bus == BUS_PHONE) {
+                        if (ctx->channels != ctx->iniChannelCount) {
+                            if (ctx->channels == MONO_CHANNEL) {
+                                if (ctx->stereoBuffer) {
+                                    free(ctx->stereoBuffer);
+                                }
+                                ctx->stereoBuffer = (void*) malloc(bytes * 2);
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
     }
 
-    sent = skt_write(ctx, buffer, bytes);
+    if (ctx->bus == BUS_NAV_GUIDANCE || ctx->bus == BUS_PHONE) {
+        //ALOGI("Channel count from framework:%d INI:%d for bus:%d", ctx->channels, ctx->channelcount_ini, ctx->bus);
+        if (ctx->channels != ctx->iniChannelCount) {
+            if (ctx->channels == MONO_CHANNEL) {
+                /* Mono to stereo conversion */
+                if (ctx->stereoBuffer) {
+                    MonoToStereo(buffer, (const void *)ctx->stereoBuffer, bytes, ctx->channels);
+                    bytes *= 2;
+                    sent = skt_write(ctx, ctx->stereoBuffer, bytes);
+                } else {
+                    ALOGE("Stereo buffer is not allocated for bus %d", ctx->bus);
+                    goto finish;
+                }
+            } else {
+                /* Stereo to mono conversion */
+                StereoToMono(buffer, bytes, ctx->channels);
+                bytes /= 2;
+                sent = skt_write(ctx, buffer, bytes);
+            }
+        } else {
+            sent = skt_write(ctx, buffer, bytes);
+        }
+    } else {
+        sent = skt_write(ctx, buffer, bytes);
+    }
 
     if (sent == -1) {
         ALOGE("write failed - server might have disconnected");
         skt_disconnect(ctx->eavbFd);
         ctx->eavbFd = -1;
+        ctx->iniChannelCount = 0;
+    } else {
+        if (ctx->bus == BUS_NAV_GUIDANCE || ctx->bus == BUS_PHONE) {
+            if (ctx->channels != ctx->iniChannelCount) {
+                /* Return the actual bytes sent from framework */
+                if (ctx->channels == MONO_CHANNEL) {
+                    sent /= 2;
+                } else {
+                    sent *= 2;
+                }
+            }
+        }
     }
 
 finish:
     {
+        if (ctx->bus == BUS_NAV_GUIDANCE || ctx->bus == BUS_PHONE) {
+            if (ctx->channels != ctx->iniChannelCount) {
+                /* Calculate delay using actual bytes sent from framework */
+                if (ctx->channels == MONO_CHANNEL) {
+                    bytes /= 2;
+                } else {
+                    bytes *= 2;
+                }
+            }
+        }
         const int us_delay = calc_audiotime_usec(ctx, bytes);
         ctx->time2 = systemTime(CLOCK_MONOTONIC);
         if (ctx->time1 && (ctx->time1 < ctx->time2)) {
@@ -408,12 +665,14 @@ int eavb_stream_read(eavb_stream_ctx *ctx, void* buffer, size_t bytes) {
 
 int eavb_stream_ctx_init(eavb_stream_ctx *ctx, struct audio_config *config) {
     ALOGD("eavb_stream_ctx_init - ctx = %p", ctx);
-
     ctx->printErrorOnce = 0;
     ctx->eavbSocketPath[0] = '\0';
     ctx->eavbFd = -1;
     ctx->time1 = 0;
     ctx->time2 = 0;
+    ctx->iniChannelCount = 0;
+    ctx->channelSelectBitMask = 0;
+    ctx->stereoBuffer = NULL;
 
     if (config) {
         ctx->format = config->format;
@@ -428,6 +687,7 @@ int eavb_stream_ctx_init(eavb_stream_ctx *ctx, struct audio_config *config) {
         ctx->channels = audio_channel_count_from_out_mask(ctx->channel_mask);
     }
     ctx->bufferSize = audio_eavb_hw_stream_compute_buffer_size(ctx->rate, ctx->format, ctx->channels);
+    config_socket_create();
     ALOGD("Buffer size = %zu", ctx->bufferSize);
 
     return 0;
@@ -444,6 +704,11 @@ void eavb_stream_ctx_destroy(eavb_stream_ctx *ctx) {
         skt_disconnect(ctx->eavbFd);
         ctx->eavbFd = -1;
     }
+    ctx->iniChannelCount = 0;
+    if (ctx->stereoBuffer) {
+        free(ctx->stereoBuffer);
+        ctx->stereoBuffer = NULL;
+    }
 }
 
 #ifdef USE_ECNR_THREAD
@@ -456,35 +721,125 @@ void eavb_halPollThread_init(eavb_stream_ctx *halctx) {
     return;
 }
 
+void channelSelectionFn(void *buffer, int len, uint32_t bitmask,
+                        int channelcount)
+{
+    uint32_t localmask = bitmask;
+    int16_t* localsrcbufptr = (int16_t*)buffer;
+    int16_t* localdestbufptr = (int16_t*)buffer;
+    int16_t* tempsrcbufptr = (int16_t*)buffer;
+
+    while (len > 0) {
+        while (localmask > 0) {
+            if (localmask & 0x1) {
+                *localdestbufptr = *tempsrcbufptr;
+                localdestbufptr++;
+                tempsrcbufptr++;
+            } else {
+                tempsrcbufptr++;
+            }
+
+            localmask = localmask >> 1;
+        }
+
+        localmask = bitmask;
+        localsrcbufptr = localsrcbufptr + channelcount;
+        tempsrcbufptr = localsrcbufptr;
+        len = len - channelcount * 2;
+    }
+}
 void *in_eavbHalPollingThreadFn(void *pv) {
     eavb_stream_ctx *pctx = (eavb_stream_ctx *) pv;
     size_t len = -1;
-    void *buffer;
+    void *buffer = NULL;
     struct timespec semwait_timeout;
+    int rxreadbufsize;
+    int sockbufsize;
+    rxreadbufsize = DEFAULT_READ_SIZE;
+    sockbufsize = DEFAULT_READ_SIZE;
 
     while (pctx->eavbFd <= 0) {
         pctx->eavbFd = skt_connect(pctx->eavbSocketPath, AUDIO_STREAM_INPUT_BUFFER_SZ);
         usleep(20);
     }
 
-    // read new data
-    buffer = (void*) malloc(DEFAULT_READ_SIZE);
-    if (!buffer){
-        goto cleanup;
-    }
-
-    if (circ_buff_init(&pctx->circ_buff, AUDIO_STREAM_INPUT_BUFFER_SZ, DEFAULT_READ_SIZE) < 0) {
-        goto cleanup;
-	}
     sem_init(&pctx->circ_buff_count_sem, 0, 0);
     sem_init(&pctx->circ_buff_space_left_sem, 0, 1);
 
-    ALOGI("creating ECNR poll thread");
-
     // keep polling until avb stream is stopped
     while (pctx->halPollingThreadRunning) {
-        if (pctx->eavbFd > 0) {
-            len = skt_read(pctx->eavbFd, buffer, DEFAULT_READ_SIZE);
+        if (pctx->iniChannelCount == 0) {
+            for (int i = 0; i < MAX_NUMBER_OF_CHANNELS; i++) {
+                if (strcmp(pctx->eavbSocketPath, streamConfigInfos[i].socketPath) == 0) {
+                    pctx->iniChannelCount = streamConfigInfos[i].audioChannelCount;
+
+                    switch ((uint32_t)(pctx->channel_mask)) {
+                        case AUDIO_CHANNEL_IN_MONO:
+                        case AUDIO_CHANNEL_INDEX_MASK_1 :
+                            pctx->channelSelectBitMask = 1;
+                            break;
+
+                        case AUDIO_CHANNEL_IN_BACK:
+                        case (AUDIO_CHANNEL_INDEX_MASK_1 + 1):
+                            pctx->channelSelectBitMask = 2;
+                            break;
+
+                        case AUDIO_CHANNEL_IN_STEREO:
+                        case AUDIO_CHANNEL_INDEX_MASK_2:
+                        case (AUDIO_CHANNEL_IN_FRONT | AUDIO_CHANNEL_IN_BACK):
+                            pctx->channelSelectBitMask = 3;
+                            break;
+
+                        case AUDIO_CHANNEL_INDEX_MASK_3:
+                            pctx->channelSelectBitMask = 0x07;
+                            break;
+
+                        case AUDIO_CHANNEL_INDEX_MASK_4:
+                            pctx->channelSelectBitMask = 0x0F;
+                            break;
+
+                        case AUDIO_CHANNEL_INDEX_MASK_5:
+                            pctx->channelSelectBitMask = 0x1F;
+                            break;
+
+                        case AUDIO_CHANNEL_INDEX_MASK_6:
+                            pctx->channelSelectBitMask = 0x3F;
+                            break;
+
+                        case AUDIO_CHANNEL_INDEX_MASK_7:
+                            pctx->channelSelectBitMask = 0x7F;
+                            break;
+
+                        default:
+                            pctx->channelSelectBitMask = 0;
+                            break;
+                    }
+
+                    /* below logic is to make sure the buffer size is multiple of the channel count.
+                    This is to avoid data drop issue at framework */
+                    rxreadbufsize = (pctx->channels * SINGLE_PCM_SAMPLE_SIZE ) *
+                                    (DEFAULT_READ_SIZE /
+                                     (pctx->channels * SINGLE_PCM_SAMPLE_SIZE));
+                    sockbufsize = (rxreadbufsize * pctx->iniChannelCount) / pctx->channels;
+                    ALOGI("halPollingThreadRunning pctx->channelSelectBitMask %d channels ini %d channels %d socketbufsize %d readbufsize %d",
+                          pctx->channelSelectBitMask, pctx->iniChannelCount, pctx->channels, sockbufsize,
+                          rxreadbufsize);
+                    // read new data
+                    buffer = (void*) malloc(sockbufsize);
+
+                    if (circ_buff_init(&pctx->circ_buff, AUDIO_STREAM_INPUT_BUFFER_SZ,
+                                       rxreadbufsize) < 0) {
+                        goto cleanup;
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        if (pctx->eavbFd > 0 && buffer != NULL) {
+            len = skt_read(pctx->eavbFd, buffer, sockbufsize);
+
             if (len <= 0) {
                 skt_disconnect(pctx->eavbFd);
                 pctx->eavbFd = -1;
@@ -492,14 +847,22 @@ void *in_eavbHalPollingThreadFn(void *pv) {
             }
 
             if (len > 0) {
+                if (pctx->channels != pctx->iniChannelCount) {
+                    channelSelectionFn(buffer, len, pctx->channelSelectBitMask,
+                                       pctx->iniChannelCount);
+                }
+
                 if (clock_gettime(CLOCK_REALTIME, &semwait_timeout) == -1) {
                     ALOGE("clock_gettime error");
                     continue;
                 }
+
                 semwait_timeout.tv_nsec += NANOSECONDS_PER_MSEC;
+
                 if (sem_timedwait(&pctx->circ_buff_space_left_sem, &semwait_timeout) < 0) {
                     continue;
                 }
+
                 pthread_mutex_lock(&pctx->circ_buff_mutex);
                 circ_buff_push(&pctx->circ_buff, buffer);
                 pthread_mutex_unlock(&pctx->circ_buff_mutex);
@@ -520,16 +883,15 @@ void *in_eavbHalPollingThreadFn(void *pv) {
 
 cleanup:
     ALOGI("closing ECNR poll thread");
-
     pctx->eavbFd = -1;
     close(pctx->eavbFd);
+
     if (buffer) {
         free(buffer);
     }
 
     sem_destroy(&pctx->circ_buff_space_left_sem);
     sem_destroy(&pctx->circ_buff_count_sem);
-
     pthread_exit(NULL);
     return NULL;
 }

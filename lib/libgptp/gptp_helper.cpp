@@ -94,7 +94,9 @@ pthread_mutex_t gInitMutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
 static bool bInitialized = false;
+#ifdef GPTP_AUTO_START
 static bool bServiceConnect = false;
+#endif
 /* Pipe file descriptors for cleanup the loop */
 int pipefd[2];
 fd_set readfds;
