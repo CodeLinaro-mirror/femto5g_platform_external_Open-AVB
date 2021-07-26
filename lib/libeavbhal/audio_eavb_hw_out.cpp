@@ -27,6 +27,8 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <cutils/sockets.h>
 
 #include <log/log.h>
 
@@ -76,7 +78,14 @@ static int out_set_format(struct audio_stream *stream, audio_format_t format)
 
 static int out_standby(struct audio_stream *stream)
 {
+    eavb_stream_out* out = (eavb_stream_out*) stream;
     ALOGI("out_standby");
+    if (out->eavbCtx.eavbFd >= 0) {
+        ALOGI("Closing HAL socket (%d)", out->eavbCtx.eavbFd);
+        shutdown(out->eavbCtx.eavbFd, SHUT_RDWR);
+        close(out->eavbCtx.eavbFd);
+        out->eavbCtx.eavbFd = -1;
+    }
     return 0;
 }
 
@@ -93,6 +102,9 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
 
     char* saveptr = nullptr;
     char* kvpair = strtok_r(str, ";", &saveptr);
+    char* str_bus = NULL;
+    char* last_r;
+    int32_t bus_num = -1;
 
     while (kvpair) {
         char* eq = strchr(kvpair, '=');
@@ -103,6 +115,14 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
         eq++;
         if (*eq == '\0') {
             // No value - skip to next pair
+            // Extract bus number from address
+            str_bus = strtok_r(kvpair, "BUS_", &last_r);
+            if (str_bus != NULL) {
+                bus_num = (int32_t)strtol(str_bus, (char **)NULL, 10);
+                ALOGI("%s: Bus number %d identified for the address", __func__, bus_num);
+                out->eavbCtx.bus = bus_num;
+                snprintf(out->eavbCtx.eavbSocketPath, MAX_PATH_LEN, "/data/misc/eavb/.eavb_out_%d", bus_num + 1);
+            }
             goto next_pair;
         }
 
@@ -139,7 +159,7 @@ static ssize_t out_write(struct audio_stream_out *stream, const void* buffer,
                          size_t bytes)
 {
     eavb_stream_out* out = (eavb_stream_out*) stream;
-    //ALOGD("out_write: out=%p, out->ctx=%p, bytes: %zu", out, &out->eavbCtx, bytes);
+    //ALOGD("out_write: out=%p, out->ctx=%p, bytes: %zu  bus_num: %d", out, &out->eavbCtx, bytes, out->eavbCtx.bus);
     return eavb_stream_write(&out->eavbCtx, buffer, bytes);
 }
 

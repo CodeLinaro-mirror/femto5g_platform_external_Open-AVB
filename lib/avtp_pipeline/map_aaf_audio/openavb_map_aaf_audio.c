@@ -82,6 +82,7 @@ typedef enum {
 	AAF_RATE_96K,
 	AAF_RATE_176K4,
 	AAF_RATE_192K,
+	AAF_RATE_24K
 } aaf_nominal_sample_rate_t;
 
 typedef enum {
@@ -173,6 +174,9 @@ static void x_calculateSizes(media_q_t *pMediaQ)
 				break;
 			case AVB_AUDIO_RATE_16KHZ:
 				pPvtData->aaf_rate = AAF_RATE_16K;
+				break;
+			case AVB_AUDIO_RATE_24KHZ:
+				pPvtData->aaf_rate = AAF_RATE_24K;
 				break;
 			case AVB_AUDIO_RATE_32KHZ:
 				pPvtData->aaf_rate = AAF_RATE_32K;
@@ -353,6 +357,10 @@ void openavbMapAVTPAudioCfgCB(media_q_t *pMediaQ, const char *name, const char *
 			char *pEnd;
 			pPvtData->genClockTickOnReceiveAudio = strtol(value,
 				&pEnd, 10);
+		}
+		else if (strcmp(name, "map_nv_evt") == 0) {
+			char* pEnd;
+			pPvtData->aaf_event_field = strtol(value, &pEnd, 10);
 		}
 	}
 

@@ -56,18 +56,18 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 
 #define SOCK_SEND_TIMEOUT_MS 20 /* Timeout for sending */
 #define SOCK_RECV_TIMEOUT_MS 10 /* Timeout for receiving */
-#define SOCKET_POLL_TIMEOUT -1 /* Timeout for connecting */
+#define SOCKET_POLL_TIMEOUT 10 /* Timeout for connecting */
 #define SOCKET_BUFFER_SIZE (28 * 1024)
 #define AUDIO_BUFF_SIZE 10*SOCKET_BUFFER_SIZE
 #define MAX_PATH_LEN 512
 
 // set WRITE_POLL_MS to 0 for blocking sockets, nonzero for polled non-blocking
 // sockets
-#define WRITE_POLL_MS 20
+#define WRITE_POLL_MS 200
 #define READ_POLL_MS 200
 
 extern void *halPollingThreadFn(void *pv);
-#define halPollingThread_THREAD_STK_SIZE THREAD_STACK_SIZE
+#define halPollThread_THREAD_STK_SIZE THREAD_STACK_SIZE
 THREAD_TYPE(halPollingThread);
 
 typedef struct {
@@ -91,6 +91,9 @@ typedef struct {
 
     // intf_nv_number_of_data_bytes
     U32 numberOfDataBytes;
+
+    // intf_nv_audio_source
+    bool is_voice;
 
     int pollingThreadRunning;
 
@@ -124,6 +127,8 @@ static int accept_server_socket(int sfd) {
   } while (poll_ret == -1 && errno == EINTR);
 
   if (poll_ret == 0) {
+    // allow some sleep time
+    usleep(10000);
     AVB_LOG_DEBUG("accept poll timeout");
     return -1;
   }
@@ -177,14 +182,24 @@ static int skt_connect(const char* path, size_t buffer_sz) {
         return -1;
     }
 
-    AVB_LOGF_DEBUG("connected to stack fd = %d", skt_fd);
+    AVB_LOGF_INFO("connected to stack fd = %d, path (%s)", skt_fd, path);
 
     return skt_fd;
 }
 
+static int skt_disconnect(int fd) {
+    AVB_LOGF_INFO("fd %d", fd);
+
+    if (fd != -1) {
+        shutdown(fd, SHUT_RDWR);
+        close(fd);
+    }
+    return 0;
+}
+
 static int skt_read(pvt_data_t *pPvtData, uint8_t* p, size_t len) {
     int read = 0;
-    struct pollfd pfd;
+//    struct pollfd pfd;
 
     if (pPvtData->pServerSocket < 0) {
         AVB_LOG_ERROR("invalid socket");
@@ -200,40 +215,39 @@ static int skt_read(pvt_data_t *pPvtData, uint8_t* p, size_t len) {
     }
 
 
-    int poll_ret;
-    pfd.fd = pPvtData->pHalSocket;
-    pfd.events = POLLIN | POLLHUP;
+//    int poll_ret;
+//    pfd.fd = pPvtData->pHalSocket;
+//    pfd.events = POLLIN | POLLHUP;
 
-    do {
-        poll_ret = poll(&pfd, 1, READ_POLL_MS);
-    } while ((poll_ret == -1) && (errno == EINTR));
+//    do {
+//        poll_ret = poll(&pfd, 1, READ_POLL_MS);
+//    } while ((poll_ret == -1) && (errno == EINTR));
 
-    if (poll_ret == 0) {
-      AVB_LOGF_VERBOSE("poll timeout (%d ms)", READ_POLL_MS);
-      //break;
-      return read;
-    } else if (poll_ret < 0) {
-      AVB_LOGF_ERROR("%s(): poll() failed: return %d errno %d (%s)", __func__,
-                       poll_ret, errno, strerror(errno));
-      //break;
-      return read;
-    }
+//    if (poll_ret == 0) {
+//      AVB_LOGF_VERBOSE("poll timeout (%d ms)", READ_POLL_MS);
+//      //break;
+//      return read;
+//    } else if (poll_ret < 0) {
+//      AVB_LOGF_ERROR("%s(): poll() failed: return %d errno %d (%s)", __func__,
+//                       poll_ret, errno, strerror(errno));
+//      //break;
+//      return read;
+//    }
 
-    if (pfd.revents & (POLLHUP | POLLNVAL)) {
-        return 0;
-    }
+//    if (pfd.revents & (POLLHUP | POLLNVAL)) {
+//        return 0;
+//    }
 
     do {
         read = recv(pPvtData->pHalSocket, p, len, 0);
     } while ((read == -1) && (errno == EINTR));
 
-    if (read == 0) {
-      return 0;
-    }
-
-    if (read < 0) {
-        AVB_LOGF_ERROR("read failed with errno=%d, str=%s\n", errno, strerror(errno));
-        return 0;
+    if (read <= 0) {
+        if (read < 0) {
+            AVB_LOGF_ERROR("read failed with errno=%d, str=%s\n", errno, strerror(errno));
+        }
+        skt_disconnect(pPvtData->pHalSocket);
+        pPvtData->pHalSocket = -1;
     }
 
     return (int)read;
@@ -241,7 +255,7 @@ static int skt_read(pvt_data_t *pPvtData, uint8_t* p, size_t len) {
 
 
 static int skt_write(pvt_data_t *pPvtData, const void* p, size_t len) {
-    ssize_t sent;
+    ssize_t sent = 0;
 
     if (pPvtData->pServerSocket < 0) {
         AVB_LOG_ERROR("invalid socket");
@@ -251,7 +265,7 @@ static int skt_write(pvt_data_t *pPvtData, const void* p, size_t len) {
     if (pPvtData->pHalSocket < 0) {
         pPvtData->pHalSocket = accept_server_socket(pPvtData->pServerSocket);
         if (pPvtData->pHalSocket < 0) {
-            AVB_LOG_WARNING("No hal socket opened");
+            AVB_LOG_DEBUG("No hal socket opened");
             return -1;
         }
     }
@@ -270,7 +284,7 @@ static int skt_write(pvt_data_t *pPvtData, const void* p, size_t len) {
   }
 
   // use non-blocking send, poll
-  int ms_timeout = SOCK_SEND_TIMEOUT_MS;
+  int ms_timeout = WRITE_POLL_MS;
   size_t count = 0;
   while (count < len) {
     do {
@@ -279,33 +293,34 @@ static int skt_write(pvt_data_t *pPvtData, const void* p, size_t len) {
 
     if (sent == -1) {
       if (errno != EAGAIN && errno != EWOULDBLOCK) {
-        AVB_LOGF_ERROR("write failed with error(%s)", strerror(errno));
-        return -1;
+        AVB_LOGF_DEBUG("write failed with error(%s)", strerror(errno));
+        skt_disconnect(pPvtData->pHalSocket);
+        pPvtData->pHalSocket = -1;
+        if (count) {
+          return count;
+        } else {
+          return -1;
+        }
       }
-      if (ms_timeout >= WRITE_POLL_MS) {
-        usleep(WRITE_POLL_MS * 1000);
-        ms_timeout -= WRITE_POLL_MS;
+      if (ms_timeout >= SOCK_SEND_TIMEOUT_MS) {
+        usleep(SOCK_SEND_TIMEOUT_MS * 1000);
+        ms_timeout -= SOCK_SEND_TIMEOUT_MS;
         continue;
       }
-      AVB_LOGF_ERROR("write timeout exceeded, sent %zu bytes", count);
-      return -1;
+      AVB_LOGF_DEBUG("write timeout exceeded, sent %zu bytes", count);
+      skt_disconnect(pPvtData->pHalSocket);
+      pPvtData->pHalSocket = -1;
+      if (count) {
+        return count;
+        } else {
+        return -1;
+      }
     }
     count += sent;
     p = (const uint8_t*)p + sent;
   }
   return (int)count;
 }
-
-static int skt_disconnect(int fd) {
-    AVB_LOGF_INFO("fd %d", fd);
-
-    if (fd != -1) {
-        shutdown(fd, SHUT_RDWR);
-        close(fd);
-    }
-    return 0;
-}
-
 
 void *halPollingThreadFn(void *pv) {
     pvt_data_t *pPvtData = (pvt_data_t *) pv;
@@ -339,11 +354,7 @@ void *halPollingThreadFn(void *pv) {
     while (pPvtData->pollingThreadRunning) {
         // read new data
         read = skt_read(pPvtData, buff, SOCKET_BUFFER_SIZE);
-        if (read == 0) {
-            continue;
-        } else if (read < 0) {
-            AVB_LOGF_ERROR("halPollingThreadFn - skt_read() error: %d, %s",
-                    read, strerror(read));
+        if (read <= 0) {
             continue;
         }
 
@@ -469,6 +480,11 @@ void openavbIntfAudioStreamCfgCB(media_q_t *pMediaQ, const char *name, const cha
             pPvtData->ignoreTimestamp = (tmp == 1);
         }
     }
+    else if (strcmp(name, "intf_nv_audio_source") == 0) {
+        if (strcmp(value, "voice") == 0) {
+            pPvtData->is_voice = true;
+        }
+    }
 
     passParamToMapModule(pMediaQ);
 
@@ -509,7 +525,7 @@ void openavbIntfAudioStreamTxInitCB(media_q_t *pMediaQ) {
         }
 
         int errResult;
-        THREAD_CREATE(halPollingThread, pPvtData->halPollingThread, NULL, halPollingThreadFn, pPvtData);
+        THREAD_CREATE(halPollThread, pPvtData->halPollingThread, NULL, halPollingThreadFn, pPvtData);
         THREAD_CHECK_ERROR(pPvtData->halPollingThread, "HAL polling Thread creation failed", errResult);
     }
 
@@ -517,15 +533,41 @@ void openavbIntfAudioStreamTxInitCB(media_q_t *pMediaQ) {
 }
 
 static bool readAudio(pvt_data_t *pPvtData, uint8_t *buffer, U32 buflen) {
+    static int underflow_count = 0;
+    int underflow_threshold = 3;
+
     MUTEX_LOCK_ALT(pPvtData->audioBufferMutex);
 
     // Check if we have enough data to fill request
     if (pPvtData->dataLeftInBuffer < buflen) {
         // No data available, don't try to send packets
+        if (pPvtData->dataLeftInBuffer == 0) {
+            // No data available, don't try to send packets
+            MUTEX_UNLOCK_ALT(pPvtData->audioBufferMutex);
+            return FALSE;
+        } else {
+            IF_LOG_INTERVAL(100) {
+                AVB_LOGF_ERROR("readAudio - buffer underflow - need %d bytes, have %d bytes - %s",
+                        buflen, pPvtData->dataLeftInBuffer, pPvtData->socketPath);
+            }
+            if (++underflow_count > underflow_threshold) {
+                AVB_LOGF_ERROR("readAudio - buffer underflow - threshold exceeded - need %d bytes, have %d bytes - %s",
+                        buflen, pPvtData->dataLeftInBuffer, pPvtData->socketPath);
+                memcpy(buffer, pPvtData->audioBuffer + pPvtData->audioBufferPos, pPvtData->dataLeftInBuffer);
+                memset(buffer + pPvtData->dataLeftInBuffer, 0, buflen - pPvtData->dataLeftInBuffer);
+                pPvtData->audioBufferPos = 0;
+                pPvtData->dataLeftInBuffer = 0;
+                underflow_count = 0;
+            } else {
+                MUTEX_UNLOCK_ALT(pPvtData->audioBufferMutex);
+                return FALSE;
+            }
+        }
         MUTEX_UNLOCK_ALT(pPvtData->audioBufferMutex);
-        return FALSE;
+        return TRUE;
     }
 
+    underflow_count = 0;
     // Still have enough data left in the buffer, use it
     memcpy(buffer, pPvtData->audioBuffer + pPvtData->audioBufferPos, buflen);
     pPvtData->audioBufferPos += buflen;
@@ -606,15 +648,21 @@ bool openavbIntfAudioStreamTxCB(media_q_t *pMediaQ) {
 // a listener. Any listener initialization can be done in this function.
 void openavbIntfAudioStreamRxInitCB(media_q_t *pMediaQ) {
     AVB_TRACE_ENTRY(AVB_TRACE_INTF);
-
     if (pMediaQ) {
         pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
         if (!pPvtData) {
             AVB_LOG_ERROR("Private interface module data not allocated.");
             return;
         }
-
         // Open data socket
+        pPvtData->pServerSocket = skt_connect(pPvtData->socketPath, SOCKET_BUFFER_SIZE);
+        if (pPvtData->pServerSocket < 0) {
+             AVB_LOG_ERROR("Failed to create data socket");
+             return;
+        }
+        else {
+            AVB_LOGF_INFO("connected to pServerSocket %d, socketPath %s",pPvtData->pServerSocket,pPvtData->socketPath);
+        }
     }
     AVB_TRACE_EXIT(AVB_TRACE_INTF);
 }
@@ -623,7 +671,7 @@ static bool consumeAudio(pvt_data_t *pPvtData, uint8_t *buffer, U32 buflen)
 {
     // Check buffer full
     if ((pPvtData->audioBufferPos + buflen) > AUDIO_BUFF_SIZE) {
-        AVB_LOG_ERROR("consumeAudio - out of buff space");
+        AVB_LOG_WARNING("consumeAudio - out of buff space");
         pPvtData->audioBufferPos = 0;
     }
 
@@ -631,17 +679,33 @@ static bool consumeAudio(pvt_data_t *pPvtData, uint8_t *buffer, U32 buflen)
     memcpy(pPvtData->audioBuffer + pPvtData->audioBufferPos, buffer, buflen);
     pPvtData->audioBufferPos += buflen;
 
-    // Check if we've accumulated enough data to send to receiver
-    if (pPvtData->audioBufferPos > SOCKET_BUFFER_SIZE) {
-        int writen = skt_write(pPvtData, pPvtData->audioBuffer, SOCKET_BUFFER_SIZE);
+    // Check if the audio source is voice
+    if (pPvtData->is_voice) {
+        // Send the data to receiver
+        int writen = skt_write(pPvtData, pPvtData->audioBuffer, buflen);
         if (writen <= 0) {
-            AVB_LOGF_ERROR("consumeAudio - skt_write() error: %d, %s",
+            AVB_LOGF_DEBUG("consumeAudio - skt_write() error: %d, %s",
                 writen, strerror(writen));
             return FALSE;
         }
+        //AVB_LOGF_INFO("consumeAudio -written %d bytes socket %s, server %d, Hal %d",writen,pPvtData->socketPath,pPvtData->pServerSocket, pPvtData->pHalSocket);
         // Move remaining data in buffer to beginning of buf.
         memmove(pPvtData->audioBuffer, pPvtData->audioBuffer+writen, pPvtData->audioBufferPos - writen);
         pPvtData->audioBufferPos -= writen;
+    } else {
+        // Check if we've accumulated enough data to send to receiver
+        if (pPvtData->audioBufferPos > SOCKET_BUFFER_SIZE) {
+            int writen = skt_write(pPvtData, pPvtData->audioBuffer, SOCKET_BUFFER_SIZE);
+            if (writen <= 0) {
+                 AVB_LOGF_DEBUG("consumeAudio - skt_write() error: %d, %s",
+                    writen, strerror(writen));
+                return FALSE;
+            }
+            //AVB_LOGF_INFO("consumeAudio -written %d bytes socket %s, server %d, Hal %d",writen,pPvtData->socketPath,pPvtData->pServerSocket, pPvtData->pHalSocket);
+            // Move remaining data in buffer to beginning of buf.
+            memmove(pPvtData->audioBuffer, pPvtData->audioBuffer+writen, pPvtData->audioBufferPos - writen);
+            pPvtData->audioBufferPos -= writen;
+        }
     }
 
     return TRUE;
@@ -763,6 +827,7 @@ extern DLL_EXPORT bool openavbIntfAudioStreamInitialize(media_q_t *pMediaQ, open
         pPvtData->pServerSocket = -1;
         pPvtData->pHalSocket = -1;
         pPvtData->pollingThreadRunning = 0;
+        pPvtData->is_voice = FALSE;
 
         pPvtData->intervalCounter = 0;
         pPvtData->dataLeftInBuffer = 0;

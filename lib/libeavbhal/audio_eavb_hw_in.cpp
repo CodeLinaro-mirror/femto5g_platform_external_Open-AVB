@@ -90,6 +90,9 @@ static int in_set_parameters(struct audio_stream *stream, const char *kvpairs) {
 
     char* saveptr = nullptr;
     char* kvpair = strtok_r(str, ";", &saveptr);
+    char* str_bus = NULL;
+    char* last_r;
+    int32_t bus_num = -1;
 
     while (kvpair) {
         char* eq = strchr(kvpair, '=');
@@ -100,16 +103,34 @@ static int in_set_parameters(struct audio_stream *stream, const char *kvpairs) {
         eq++;
         if (*eq == '\0') {
             // No value - skip to next pair
+            // Extract bus number from address
+            str_bus = strtok_r(kvpair, "BUS_", &last_r);
+            if (str_bus != NULL) {
+                bus_num = (int32_t)strtol(str_bus, (char **)NULL, 10);
+                ALOGI("%s: Bus number %d identified for the address", __func__, bus_num);
+                in->eavbCtx.bus = bus_num;
+                snprintf(in->eavbCtx.eavbSocketPath, MAX_PATH_LEN, "/data/misc/eavb/.eavb_in_%d", bus_num + 1);
+#ifdef USE_ECNR_THREAD
+                // create hal poll thread
+                ALOGI("%s: Creating ECNR HAL POLL THREAD", __func__);
+                eavb_halPollThread_init(&in->eavbCtx);
+#endif
+            }
             goto next_pair;
         }
 
-        if (strncmp(kvpair, KVPAIR_KEY_SOCKET_PATH, strlen(KVPAIR_KEY_SOCKET_PATH))) {
-            strlcpy(&in->eavbCtx.eavbSocketPath[0], eq, MAX_PATH_LEN);
+        if (0 == strncmp(kvpair, KVPAIR_KEY_SOCKET_PATH, strlen(KVPAIR_KEY_SOCKET_PATH))) {
+            snprintf(in->eavbCtx.eavbSocketPath, MAX_PATH_LEN, "/data/misc/eavb/.%s", eq);
+#ifdef USE_ECNR_THREAD
+            // create hal poll thread
+            eavb_halPollThread_init(&in->eavbCtx);
+#endif
         }
 
     next_pair:
         kvpair = strtok_r(NULL, ";", &saveptr);
     }
+	ALOGE("in socket path (%s)",in->eavbCtx.eavbSocketPath);
 
     free(str);
     return 0;
@@ -126,7 +147,7 @@ static int in_set_gain(struct audio_stream_in *stream, float gain) {
 
 static ssize_t in_read(struct audio_stream_in *stream, void* buffer, size_t bytes) {
     eavb_stream_in* in = (eavb_stream_in*) stream;
-    ALOGD("in_read: in=%p, in->ctx=%p, bytes: %zu", in, &in->eavbCtx, bytes);
+    ALOGI("in_read: in=%p, in->ctx=%p, bytes: %zu", in, &in->eavbCtx, bytes);
     return eavb_stream_read(&in->eavbCtx, buffer, bytes);
 }
 
@@ -163,7 +184,6 @@ int in_stream_init(eavb_stream_in *in, struct audio_config *config) {
 
     // initialize stream context
     return eavb_stream_ctx_init(&in->eavbCtx, config);
-
 }
 
 void in_stream_close(eavb_stream_in *in) {
