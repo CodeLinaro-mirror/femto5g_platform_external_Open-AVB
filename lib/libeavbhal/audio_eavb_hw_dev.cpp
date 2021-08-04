@@ -38,6 +38,35 @@
 
 #define MAX_NUM_STREAMS 16
 
+static int32_t out_get_bus_number(const char *address)
+{
+    int32_t bus_num = -1;
+    char *str = NULL;
+    char *last_r;
+    char local_address[AUDIO_DEVICE_MAX_ADDRESS_LEN] = {0};
+
+    /* return error for bus device with null address */
+    if (address == NULL) {
+        ALOGE("%s: null address for car stream", __func__);
+        return -1;
+    }
+
+    /* strtok will modify the original string. make a copy first */
+    strlcpy(local_address, address, AUDIO_DEVICE_MAX_ADDRESS_LEN);
+
+    /* extract bus number from address */
+    str = strtok_r(local_address, "BUS_",&last_r);
+    if (str != NULL) {
+        bus_num = (int32_t)strtol(str, (char **)NULL, 10);
+        ALOGI("%s: bus_num %d",__func__,bus_num);
+    } else {
+        ALOGE("%s: invalid bus address %s", __func__, address);
+    }
+
+    return bus_num;
+}
+
+
 static int adev_open_input_stream(struct audio_hw_device *device,
                                   audio_io_handle_t handle,
                                   audio_devices_t devices,
@@ -90,6 +119,7 @@ static int adev_open_output_stream(struct audio_hw_device *device,
                                    const char *address)
 {
     //eavb_audio_device* dev = (eavb_audio_device*) device;
+    int bus_num = 0;
     ALOGI("adev_open_output_stream...");
 
     *stream_out = NULL;
@@ -100,13 +130,40 @@ static int adev_open_output_stream(struct audio_hw_device *device,
 
     /* set output config values */
     if (config != nullptr) {
-        ALOGI("Output stream config: format=0x%x sample_rate=%d channel_mask=0x%x",
-            config->format, config->sample_rate, config->channel_mask);
+        ALOGI("Output stream config: format=0x%x sample_rate=%d channel_mask=0x%x address=%s flags=0x%x",
+            config->format, config->sample_rate, config->channel_mask, address, flags);
+    }
+
+    if (devices & AUDIO_DEVICE_OUT_BUS) {
+        ALOGI("Bus device init");
+        /* Extract bus number from address */
+        bus_num = out_get_bus_number(address);
+        switch(bus_num) {
+            case BUS_MEDIA:
+                ALOGI("Media stream init");
+                break;
+            case BUS_SYS_NOTIFICATION:
+                ALOGI("Sys notification stream init");
+                break;
+            case BUS_NAV_GUIDANCE:
+                ALOGI("Navigation guidance stream init");
+                break;
+            case BUS_PHONE:
+                ALOGI("Phone stream init");
+                break;
+            default:
+                ALOGE("%s: Unidentified bus %x not supported. Divert stream to media bus", __func__, bus_num);
+                bus_num = BUS_MEDIA;
+        }
     }
 
     int err = out_stream_init(out, config);
     if (0 == err) {
         ALOGD("adev_open_output_stream - success - out=%p, out->stream=%p", out, &out->stream);
+        if (devices & AUDIO_DEVICE_OUT_BUS) {
+            out->eavbCtx.bus = bus_num;
+            snprintf(out->eavbCtx.eavbSocketPath, MAX_PATH_LEN, "/data/misc/eavb/.eavb_out_%d", bus_num + 1);
+        }
         *stream_out = &out->stream;
         return 0;
     } else {
@@ -114,9 +171,6 @@ static int adev_open_output_stream(struct audio_hw_device *device,
         free(out);
         return -1;
     }
-
-
-
 }
 
 static void adev_close_output_stream(struct audio_hw_device *device,
