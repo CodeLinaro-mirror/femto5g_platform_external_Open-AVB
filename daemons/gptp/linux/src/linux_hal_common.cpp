@@ -498,6 +498,7 @@ OSTimerQueue *LinuxTimerQueueFactory::createOSTimerQueue
 	LinuxTimerQueue *ret = new LinuxTimerQueue();
 
 	if( !ret->init() ) {
+		delete ret;
 		return NULL;
 	}
 
@@ -1186,24 +1187,32 @@ bool LinuxNetworkInterfaceFactory::createInterface
 
 	if( !net_iface_l->net_lock.init()) {
 		GPTP_LOG_ERROR( "Failed to initialize network lock");
+		delete net_iface_l;
 		return false;
 	}
 
 	InterfaceName *ifname = dynamic_cast<InterfaceName *>(label);
 	if( ifname == NULL ){
 		GPTP_LOG_ERROR( "ifname == NULL");
+		delete net_iface_l;
+		delete ifname;
 		return false;
 	}
 
 	net_iface_l->sd_general = socket( PF_PACKET, SOCK_DGRAM, 0 );
 	if( net_iface_l->sd_general == -1 ) {
 		GPTP_LOG_ERROR( "failed to open general socket: %s", strerror(errno));
+		delete net_iface_l;
+		delete ifname;
 		return false;
 	}
 	net_iface_l->sd_event = socket( PF_PACKET, SOCK_DGRAM, 0 );
 	if( net_iface_l->sd_event == -1 ) {
 		GPTP_LOG_ERROR
 			( "failed to open event socket: %s ", strerror(errno));
+		close(net_iface_l->sd_general);
+		delete net_iface_l;
+		delete ifname;
 		return false;
 	}
 
@@ -1213,6 +1222,10 @@ bool LinuxNetworkInterfaceFactory::createInterface
 	if( err == -1 ) {
 		GPTP_LOG_ERROR
 			( "Failed to get interface address: %s", strerror( errno ));
+		close(net_iface_l->sd_general);
+		close(net_iface_l->sd_event);
+		delete net_iface_l;
+		delete ifname;
 		return false;
 	}
 
@@ -1222,6 +1235,10 @@ bool LinuxNetworkInterfaceFactory::createInterface
 	if( err == -1 ) {
 		GPTP_LOG_ERROR
 			( "Failed to get interface index: %s", strerror( errno ));
+		close(net_iface_l->sd_general);
+		close(net_iface_l->sd_event);
+		delete net_iface_l;
+		delete ifname;
 		return false;
 	}
 	ifindex = device.ifr_ifindex;
@@ -1238,6 +1255,10 @@ bool LinuxNetworkInterfaceFactory::createInterface
 		GPTP_LOG_ERROR
 			( "Unable to add PTP multicast addresses to port id: %u",
 			  ifindex );
+		close(net_iface_l->sd_general);
+		close(net_iface_l->sd_event);
+		delete net_iface_l;
+		delete ifname;
 		return false;
 	}
 
@@ -1250,6 +1271,10 @@ bool LinuxNetworkInterfaceFactory::createInterface
 		  sizeof( ifsock_addr ));
 	if( err == -1 ) {
 		GPTP_LOG_ERROR( "Call to bind() failed: %s", strerror(errno) );
+		close(net_iface_l->sd_general);
+		close(net_iface_l->sd_event);
+		delete net_iface_l;
+		delete ifname;
 		return false;
 	}
 
@@ -1257,11 +1282,19 @@ bool LinuxNetworkInterfaceFactory::createInterface
 		dynamic_cast <LinuxTimestamper *>(timestamper);
 	if(net_iface_l->timestamper == NULL) {
 		GPTP_LOG_ERROR( "timestamper == NULL" );
+		close(net_iface_l->sd_general);
+		close(net_iface_l->sd_event);
+		delete net_iface_l;
+		delete ifname;
 		return false;
 	}
 	if( !net_iface_l->timestamper->post_init
 		( ifindex, net_iface_l->sd_event, &net_iface_l->net_lock )) {
 		GPTP_LOG_ERROR( "post_init failed\n" );
+		close(net_iface_l->sd_general);
+		close(net_iface_l->sd_event);
+		delete net_iface_l;
+		delete ifname;
 		return false;
 	}
 	*net_iface = net_iface_l;

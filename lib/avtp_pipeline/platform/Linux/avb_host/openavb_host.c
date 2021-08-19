@@ -136,9 +136,17 @@ int main(int argc, char *argv[])
 		if (opt != EOF) {
 			switch (opt) {
 				case 'I':
+					if (optIfnameGlobal != NULL) {
+						free(optIfnameGlobal);
+					}
+
 					optIfnameGlobal = strdup(optarg);
 					break;
 				case 'e':
+					if (endpointIniFile != NULL) {
+						free(endpointIniFile);
+					}
+
 					endpointIniFile = strdup(optarg);
 					break;
 				case 'r':

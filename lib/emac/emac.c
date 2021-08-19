@@ -148,6 +148,11 @@ bool eventStop(eventConfigData_t *eventData) {
 	if (fdcount > MAX_PER_STREAM_FD) {
 		syslog(LOG_DEBUG,"FDs getting closed, current FD count is %d",fdcount);
 		fdcount -= MAX_PER_STREAM_FD;
+		if ( eventData->ifacename != NULL ) {
+			free(eventData->ifacename);
+			eventData->ifacename = NULL;
+		}
+
 		return true;
 	}
 
@@ -161,6 +166,11 @@ bool eventStop(eventConfigData_t *eventData) {
 
 	if (eventData->pps_fd < 0) {
 		syslog(LOG_DEBUG,"socket does not exists");
+		if ( eventData->ifacename != NULL ) {
+			free(eventData->ifacename);
+			eventData->ifacename = NULL;
+		}
+
 		return false;
 	}
 
@@ -173,6 +183,11 @@ bool eventStop(eventConfigData_t *eventData) {
 					"for non-destructive DWC_ETH_QOS_PRV_IOCTL");
 			close(eventData->pps_fd);
 			eventData->pps_fd = -1;
+			if ( eventData->ifacename != NULL ) {
+				free(eventData->ifacename);
+				eventData->ifacename = NULL;
+			}
+
 			return false;
 		}
 		else if (err == EOPNOTSUPP) {
@@ -181,12 +196,22 @@ bool eventStop(eventConfigData_t *eventData) {
 					"for provided configurations");
 			close(eventData->pps_fd);
 			eventData->pps_fd = -1;
+			if ( eventData->ifacename != NULL ) {
+				free(eventData->ifacename);
+				eventData->ifacename = NULL;
+			}
+
 			return false;
 		}
 		else {
 			syslog(LOG_DEBUG,"DWC_ETH_QOS_PRV_IOCTL failed");
 			close(eventData->pps_fd);
 			eventData->pps_fd = -1;
+			if ( eventData->ifacename != NULL ) {
+				free(eventData->ifacename);
+				eventData->ifacename = NULL;
+			}
+
 			return false;
 		}
 	}
@@ -203,7 +228,10 @@ bool eventStop(eventConfigData_t *eventData) {
 
 	fdcount = 0;
 	syslog(LOG_DEBUG,"All FDs closed, FD count is %d",fdcount);
-	free(eventData->ifacename);
+	if ( eventData->ifacename != NULL ) {
+		free(eventData->ifacename);
+		eventData->ifacename = NULL;
+	}
 
 	return true;
 }
