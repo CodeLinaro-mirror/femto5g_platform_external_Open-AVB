@@ -428,6 +428,13 @@ public:
         valueArray = (int64_t*)calloc(size, sizeof(int64_t));
     };
 
+        ~ValueAverage_int64()
+        {
+            if (valueArray) {
+                free(valueArray);
+            }
+        }
+
     void push(int64_t val) {
         valueArray[pos++] = val;
         if (count < size) {
@@ -461,6 +468,13 @@ public:
         count(0) {
         valueArray = (FrequencyRatio*)calloc(size, sizeof(FrequencyRatio));
     };
+
+        ~ValueAverage_FR()
+        {
+            if (valueArray) {
+                free(valueArray);
+            }
+        }
 
     void push(FrequencyRatio val) {
         valueArray[pos++] = val;
@@ -675,5 +689,11 @@ bool IEEE1588Clock::isBetterThan(PTPMessageAnnounce * msg)
 
 IEEE1588Clock::~IEEE1588Clock(void)
 {
-	// Do nothing
+    if (fup_info) {
+        delete fup_info;
+    }
+
+    if (fup_status) {
+        delete fup_status;
+    }
 }

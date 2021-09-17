@@ -489,12 +489,13 @@ void *config_server_socket_ThreadFn(void *pv)
                 }
             }
         }
+
+        if (client_fd > 0) {
+            skt_disconnect(client_fd);
+            client_fd = -1;
+        }
     }
 
-    if (client_fd > 0) {
-        skt_disconnect(client_fd);
-        client_fd = -1;
-    }
 
     if (config_server_fd != -1) {
         shutdown(config_server_fd, SHUT_RDWR);
@@ -824,6 +825,11 @@ void *in_eavbHalPollingThreadFn(void *pv) {
                     ALOGI("halPollingThreadRunning pctx->channelSelectBitMask %d channels ini %d channels %d socketbufsize %d readbufsize %d",
                           pctx->channelSelectBitMask, pctx->iniChannelCount, pctx->channels, sockbufsize,
                           rxreadbufsize);
+
+                    if (buffer) {
+                        free(buffer);
+                    }
+
                     // read new data
                     buffer = (void*) malloc(sockbufsize);
 
