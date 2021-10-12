@@ -120,7 +120,7 @@ typedef struct maap_info {
  * Function to initialize the pdu, header info and private data structure
  * maap_info
  */
-void Init(maap_info_t *, uint8_t *);
+void Init(maap_info_t *, uint8_t src_mac_adr[6]);
 
 /* Function to prepare ethernet packet */
 void prepare_ethpkt(maap_info_t *, msg_type_t);
@@ -136,7 +136,7 @@ double rand_frange(double , double);
 void generate_address(maap_info_t *);
 
 /* Compare the Mac address and return 1 if address are same else return 0 */
-int compare_mac(uint8_t *, uint8_t *);
+int compare_mac(uint8_t rcv_add[6], uint8_t req_addr[6]);
 
 /* Send MAAP_ANNOUNCE periodically with a delay of ANNOUNCE_TIMER */
 void *send_announce(void *);
