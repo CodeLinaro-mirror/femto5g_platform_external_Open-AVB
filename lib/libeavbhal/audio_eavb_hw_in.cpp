@@ -36,6 +36,13 @@
 #include <system/audio.h>
 #include "audio_eavb_hw.h"
 
+#ifdef USE_FE_INTERFACE
+extern int eavb_fd;
+
+extern "C" {
+    int qavb_receive(int fd, qavb_handler* hdr, qavb_buf* buff);
+};
+#endif
 
 static uint32_t in_get_sample_rate(const struct audio_stream *stream)
 {
@@ -147,6 +154,30 @@ static int in_set_gain(struct audio_stream_in *stream, float gain) {
 
 static ssize_t in_read(struct audio_stream_in *stream, void* buffer, size_t bytes) {
     eavb_stream_in* in = (eavb_stream_in*) stream;
+#ifdef USE_FE_INTERFACE
+    qavb_buf qavb_buffer;
+    int received = 0;
+
+    if (in->eavbCtx.qhdr.streamCtx != 0) {
+        if (NULL == in->eavbCtx.mmapbuffers) {
+            ALOGE("qavb application: Failed to get buffers");
+            return 0;
+        } else {
+            qavb_buffer.pbuf = (typeof(qavb_buffer.pbuf))in->eavbCtx.mmapbuffers;
+            qavb_buffer.hdr.payload_size = bytes;
+            received = qavb_receive(eavb_fd, &in->eavbCtx.qhdr, &qavb_buffer);
+
+            if (received > 0) {
+                memcpy (buffer, in->eavbCtx.mmapbuffers, received);
+                //ALOGI("in_read: in=%p, in->ctx=%p, bytes: %d", in, &in->eavbCtx, received);
+                return received;
+            } else {
+                return 0;
+            }
+        }
+    }
+
+#endif
     ALOGI("in_read: in=%p, in->ctx=%p, bytes: %zu", in, &in->eavbCtx, bytes);
     return eavb_stream_read(&in->eavbCtx, buffer, bytes);
 }

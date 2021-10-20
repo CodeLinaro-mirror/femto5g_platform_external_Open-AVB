@@ -36,6 +36,24 @@
 #include <system/audio.h>
 #include "audio_eavb_hw.h"
 
+#ifdef USE_FE_INTERFACE
+
+#include <sys/mman.h>
+#define VIRTIO_EAVB_DEV         "/dev/virt-eavb"
+#define MAX_MMAP_BUFFER_SIZE 7680
+int eavb_fd = -1;
+
+extern "C" {
+    int qavb_create_stream_remote(int fd, char* cfgfilepath, qavb_handler* hdr);
+    int qavb_destroy_stream(int fd, qavb_handler* hdr);
+    int qavb_get_stream_info(int fd, qavb_handler* hdr, qavb_stream_info* info);
+    int qavb_connect_stream(int fd, qavb_handler* hdr);
+    int qavb_disconnect_stream(int fd, qavb_handler* hdr);
+
+};
+
+#endif
+
 #define MAX_NUM_STREAMS 16
 
 static int32_t out_get_bus_number(const char *address)
@@ -78,16 +96,61 @@ static int adev_open_input_stream(struct audio_hw_device *device,
 {
     //eavb_audio_device* dev = (eavb_audio_device*) device;
     ALOGI("adev_open_input_stream...");
-
+    int err;
     //std::lock_guard<std::recursive_mutex> lock(*dev->mutex);
     eavb_stream_in *in = (eavb_stream_in *)calloc(1, sizeof(eavb_stream_in));
+#ifdef USE_FE_INTERFACE
+    char configfile[100] = "/etc/qavb_config/listenerPCM.ini";
+
+    if (eavb_fd == -1) {
+        eavb_fd = open(VIRTIO_EAVB_DEV, O_RDWR);
+        ALOGD("eavb_stream_ctx_init - VIRTIO_EAVB_DEV created %d %d", eavb_fd, errno);
+    }
+
+    if (!in->eavbCtx.initialized) {
+        in->eavbCtx.initialized = true;
+        err = qavb_create_stream_remote(eavb_fd, configfile, &in->eavbCtx.qhdr);
+
+        if (err != 0 || (in->eavbCtx.qhdr.streamCtx == 0)) {
+            ALOGE("eavb application: Failed to create stream, error = %d %d\n", err, errno);
+        }
+
+        err = qavb_get_stream_info(eavb_fd, &in->eavbCtx.qhdr, &in->eavbCtx.streamInfo);
+
+        if (err != 0) {
+            ALOGE("eavb application: Failed to get stream info, error = %d %d\n", err,
+                  errno);
+        }
+
+        in->eavbCtx.mmapbuffers = (uint8_t*)mmap(NULL, MAX_MMAP_BUFFER_SIZE,
+                                  PROT_READ | PROT_WRITE, MAP_SHARED, eavb_fd, 0);
+
+        if (in->eavbCtx.mmapbuffers == MAP_FAILED) {
+            ALOGE("debug: %s(%d)\n", __func__, __LINE__);
+        }
+
+        err = qavb_connect_stream(eavb_fd, &in->eavbCtx.qhdr);
+
+        if (err != 0) {
+            ALOGE("eavb application: Failed to qavb_connect_stream, error = %d %d\n", err,
+                  errno);
+        }
+
+        ALOGI("eavb application: qavb_connect_stream %d %p %s %llu", eavb_fd,
+              &in->eavbCtx.qhdr, configfile, in->eavbCtx.qhdr.streamCtx);
+    }
+
+#endif
+
     if (!in) {
         return -ENOMEM;
     }
 
-    int err = in_stream_init(in, config);
+    err = in_stream_init(in, config);
+
     if (0 == err) {
-        ALOGD("adev_open_input_stream - success - in=%p, in->stream=%p", in, &in->stream);
+        ALOGD("adev_open_input_stream - success - in=%p, in->stream=%p", in,
+              &in->stream);
         *stream_in = &in->stream;
     } else {
         free(in);
@@ -104,6 +167,15 @@ static void adev_close_input_stream(struct audio_hw_device *device,
     ALOGI("adev_close_input_stream %p", stream);
 
     //std::lock_guard<std::recursive_mutex> lock(*dev->mutex);
+#ifdef USE_FE_INTERFACE
+
+    if (in->eavbCtx.qhdr.streamCtx != 0) {
+        qavb_disconnect_stream(eavb_fd, &in->eavbCtx.qhdr);
+        qavb_destroy_stream(eavb_fd, &in->eavbCtx.qhdr);
+        in->eavbCtx.qhdr.streamCtx = 0;
+    }
+
+#endif
     in_stream_close(in);
     in_stream_destroy(in);
     free(in);
@@ -121,10 +193,13 @@ static int adev_open_output_stream(struct audio_hw_device *device,
     //eavb_audio_device* dev = (eavb_audio_device*) device;
     int bus_num = 0;
     ALOGI("adev_open_output_stream...");
-
+    int err;
     *stream_out = NULL;
     eavb_stream_out *out =
             (eavb_stream_out *)calloc(1, sizeof(eavb_stream_out));
+#ifdef USE_FE_INTERFACE
+	char configfile[100] = "/etc/qavb_config/talkerPCM.ini";
+#endif
     if (!out)
         return -ENOMEM;
 
@@ -141,6 +216,48 @@ static int adev_open_output_stream(struct audio_hw_device *device,
         switch(bus_num) {
             case BUS_MEDIA:
                 ALOGI("Media stream init");
+#ifdef USE_FE_INTERFACE
+
+                if (eavb_fd == -1) {
+                    eavb_fd = open(VIRTIO_EAVB_DEV, O_RDWR);
+                    ALOGD("eavb_stream_ctx_init - VIRTIO_EAVB_DEV created %d %d", eavb_fd, errno);
+                }
+
+                if (!out->eavbCtx.initialized) {
+                    out->eavbCtx.initialized = true;
+                    err = qavb_create_stream_remote(eavb_fd, configfile, &out->eavbCtx.qhdr);
+
+                    if (err != 0 || (out->eavbCtx.qhdr.streamCtx == 0)) {
+                        ALOGE("eavb application: Failed to create stream, error = %d %d\n", err, errno);
+                    }
+
+                    err = qavb_get_stream_info(eavb_fd, &out->eavbCtx.qhdr,
+                                               &out->eavbCtx.streamInfo);
+
+                    if (err != 0) {
+                        ALOGE("eavb application: Failed to get stream info, error = %d %d\n", err,
+                              errno);
+                    }
+
+                    out->eavbCtx.mmapbuffers = (uint8_t*)mmap(NULL, MAX_MMAP_BUFFER_SIZE,
+                                               PROT_READ | PROT_WRITE, MAP_SHARED, eavb_fd, 0);
+
+                    if (out->eavbCtx.mmapbuffers == MAP_FAILED) {
+                        ALOGE("debug: %s(%d)\n", __func__, __LINE__);
+                    }
+
+                    err = qavb_connect_stream(eavb_fd, &out->eavbCtx.qhdr);
+
+                    if (err != 0) {
+                        ALOGE("eavb application: Failed to qavb_connect_stream, error = %d %d\n", err,
+                              errno);
+                    }
+
+                    ALOGI("eavb application: qavb_connect_stream %d %p %s %llu", eavb_fd,
+                          &out->eavbCtx.qhdr, configfile, out->eavbCtx.qhdr.streamCtx);
+                }
+
+#endif
                 break;
             case BUS_SYS_NOTIFICATION:
                 ALOGI("Sys notification stream init");
@@ -157,7 +274,7 @@ static int adev_open_output_stream(struct audio_hw_device *device,
         }
     }
 
-    int err = out_stream_init(out, config);
+    err = out_stream_init(out, config);
     if (0 == err) {
         ALOGD("adev_open_output_stream - success - out=%p, out->stream=%p", out, &out->stream);
         if (devices & AUDIO_DEVICE_OUT_BUS) {
@@ -181,6 +298,15 @@ static void adev_close_output_stream(struct audio_hw_device *device,
     ALOGI("adev_close_output_stream - %p", stream);
 
     //std::lock_guard<std::recursive_mutex> lock(*dev->mutex);
+#ifdef USE_FE_INTERFACE
+
+    if (out->eavbCtx.qhdr.streamCtx != 0) {
+        qavb_disconnect_stream(eavb_fd, &out->eavbCtx.qhdr);
+        qavb_destroy_stream(eavb_fd, &out->eavbCtx.qhdr);
+        out->eavbCtx.qhdr.streamCtx = 0;
+    }
+
+#endif
     out_stream_close(out);
     out_stream_destroy(out);
 
