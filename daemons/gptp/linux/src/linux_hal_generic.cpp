@@ -191,6 +191,7 @@ int findPhcIndex( InterfaceLabel *iface_label ) {
 
 	if( ioctl( sd, SIOCETHTOOL, &ifr ) < 0 ) {
 		GPTP_LOG_ERROR("findPTPIndex: ioctl(SIOETHTOOL) failed");
+		close(sd);
 		return -1;
 	}
 

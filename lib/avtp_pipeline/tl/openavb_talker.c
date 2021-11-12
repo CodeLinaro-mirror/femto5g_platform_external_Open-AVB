@@ -138,7 +138,7 @@ bool talkerStartStream(tl_state_t *pTLState)
 
 	pTalkerData->sleepUsec = MICROSECONDS_PER_SECOND / pTalkerData->wakeRate;
 	pTalkerData->intervalNS = NANOSECONDS_PER_SECOND / pTalkerData->wakeRate;
-
+	pTalkerData->driftCurve = 0;
 	U32 SRKbps = ((unsigned long)pTalkerData->classRate * (unsigned long)pCfg->max_interval_frames * (unsigned long)pStream->frameLen * 8L) / 1000;
 	U32 DataKbps = ((unsigned long)pTalkerData->wakeRate * (unsigned long)pCfg->max_interval_frames * (unsigned long)pStream->frameLen * 8L) / 1000;
 
@@ -239,6 +239,12 @@ static inline bool talkerDoStream(tl_state_t *pTLState)
 	openavb_tl_cfg_t *pCfg = &pTLState->cfg;
 	talker_data_t *pTalkerData = pTLState->pPvtTalkerData;
 	bool bRet = FALSE;
+	avtp_smoothning_data avtpdata;
+	avtpdata.previousAvtpTime = pTalkerData->prevAVTPTime;
+	avtpdata.currentAVTPReference = 0;
+	avtpdata.intervalNS = pTalkerData->intervalNS;
+	avtpdata.wakeFrames = pTalkerData->wakeFrames;
+	avtpdata.driftCurve = pTalkerData->driftCurve;
 
 	if (pTLState->bStreaming) {
 		U64 nowNS;
@@ -253,7 +259,8 @@ static inline bool talkerDoStream(tl_state_t *pTLState)
 				// send the frames for this interval
 				int i;
 				for (i = pTalkerData->wakeFrames; i > 0; i--) {
-					if (IS_OPENAVB_SUCCESS(openavbAvtpTx(pTalkerData->avtpHandle, i == 1, pCfg->tx_blocking_in_intf)))
+					if (IS_OPENAVB_SUCCESS(openavbAvtpTx(pTalkerData->avtpHandle, i == 1,
+					                                     pCfg->tx_blocking_in_intf, i, &avtpdata)))
 						pTalkerData->cntFrames++;
 					else break;
 				}
@@ -263,7 +270,8 @@ static inline bool talkerDoStream(tl_state_t *pTLState)
 				if (eventWake(pEventConfigData) == true) {
 					int i;
 					for (i = pTalkerData->wakeFrames; i > 0; i--) {
-						if (IS_OPENAVB_SUCCESS(openavbAvtpTx(pTalkerData->avtpHandle,i == 1, pCfg->tx_blocking_in_intf)))
+						if (IS_OPENAVB_SUCCESS(openavbAvtpTx(pTalkerData->avtpHandle, i == 1,
+						                                     pCfg->tx_blocking_in_intf, i, &avtpdata)))
 							pTalkerData->cntFrames++;
 						else break;
 					}
@@ -272,9 +280,13 @@ static inline bool talkerDoStream(tl_state_t *pTLState)
 		}
 		else {
 			// Interface module block option
-			if (IS_OPENAVB_SUCCESS(openavbAvtpTx(pTalkerData->avtpHandle, TRUE, pCfg->tx_blocking_in_intf)))
+			if (IS_OPENAVB_SUCCESS(openavbAvtpTx(pTalkerData->avtpHandle, TRUE,
+			                                     pCfg->tx_blocking_in_intf, 1, &avtpdata)))
 				pTalkerData->cntFrames++;
 		}
+
+		pTalkerData->prevAVTPTime = avtpdata.currentAVTPReference;
+		pTalkerData->driftCurve = avtpdata.driftCurve;
 
 		if (pTalkerData->cntWakes++ % pTalkerData->wakeRate == 0) {
 			// time to service the endpoint IPC

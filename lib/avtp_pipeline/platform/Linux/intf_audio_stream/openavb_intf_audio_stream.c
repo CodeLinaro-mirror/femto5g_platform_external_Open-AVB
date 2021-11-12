@@ -65,6 +65,15 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 // sockets
 #define WRITE_POLL_MS 200
 #define READ_POLL_MS 200
+#define CONFIG_SOCKET_PATH "/data/misc/eavb/config_socket"
+#define SOCKET_PATH_MAX_LENGTH 100
+static int config_socket_client = -1;
+
+typedef struct {
+    char socketPath[SOCKET_PATH_MAX_LENGTH];
+    int audioChannelCount;
+} StreamConfigInfo;
+
 
 extern void *halPollingThreadFn(void *pv);
 #define halPollThread_THREAD_STK_SIZE THREAD_STACK_SIZE
@@ -108,6 +117,7 @@ typedef struct {
     uint64_t samplesIn;
     uint64_t samplesOut;
     uint64_t timestamp;
+    bool isStreamConfigSynced;
 
 } pvt_data_t;
 
@@ -187,8 +197,58 @@ static int skt_connect(const char* path, size_t buffer_sz) {
     return skt_fd;
 }
 
+static int config_skt_client_connect(const char* path)
+{
+    if (path == NULL || strlen(path) == 0) {
+        AVB_LOGF_ERROR("Error: Socket path (%s) not set", path);
+        return -1;
+    }
+
+    config_socket_client = socket(AF_LOCAL, SOCK_STREAM, 0);
+
+    if (config_socket_client < 0) {
+        return -1;
+    }
+
+    if (socket_local_client_connect(config_socket_client, path,
+                                    ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM) < 0) {
+        AVB_LOGF_ERROR("failed to connect (%s)", strerror(errno));
+        close(config_socket_client);
+        return -1;
+    }
+
+    AVB_LOGF_INFO("connected to server socket (%d), path (%s)",
+                  config_socket_client, path);
+    return 0;
+}
+
+static void send_config_to_eavb_hal(pvt_data_t *pPvtData)
+{
+    ssize_t sent = 0;
+
+    if ((pPvtData->isStreamConfigSynced == false) && (config_socket_client > 0)) {
+        StreamConfigInfo configInfo;
+        strlcpy(configInfo.socketPath, pPvtData->socketPath, SOCKET_PATH_MAX_LENGTH);
+        configInfo.audioChannelCount = pPvtData->audioChannels;
+
+        do {
+            sent = send(config_socket_client, (void*)&configInfo, sizeof(StreamConfigInfo),
+                        MSG_NOSIGNAL);
+        } while (sent == -1 && errno == EINTR);
+
+        AVB_LOGF_INFO("sent the config, socket %s channel count %d",
+                      configInfo.socketPath, configInfo.audioChannelCount);
+
+        if (sent > 0) {
+            pPvtData->isStreamConfigSynced = true;
+        } else {
+            AVB_LOG_ERROR("couldnt send config to eavb hal");
+        }
+    }
+}
+
 static int skt_disconnect(int fd) {
-    AVB_LOGF_INFO("fd %d", fd);
+    AVB_LOGF_INFO("skt_disconnect fd %d", fd);
 
     if (fd != -1) {
         shutdown(fd, SHUT_RDWR);
@@ -263,6 +323,7 @@ static int skt_write(pvt_data_t *pPvtData, const void* p, size_t len) {
     }
 
     if (pPvtData->pHalSocket < 0) {
+        send_config_to_eavb_hal(pPvtData);
         pPvtData->pHalSocket = accept_server_socket(pPvtData->pServerSocket);
         if (pPvtData->pHalSocket < 0) {
             AVB_LOG_DEBUG("No hal socket opened");
@@ -486,8 +547,9 @@ void openavbIntfAudioStreamCfgCB(media_q_t *pMediaQ, const char *name, const cha
         }
     }
 
+    pPvtData->isStreamConfigSynced = false;
     passParamToMapModule(pMediaQ);
-
+    send_config_to_eavb_hal(pPvtData);
     AVB_TRACE_EXIT(AVB_TRACE_INTF);
 }
 
@@ -516,6 +578,14 @@ void openavbIntfAudioStreamTxInitCB(media_q_t *pMediaQ) {
         if (!pPvtData) {
             AVB_LOG_ERROR("Private interface module data not allocated.");
             return;
+        }
+
+        if (config_socket_client < 0) {
+            config_skt_client_connect(CONFIG_SOCKET_PATH);
+        }
+
+        if (config_socket_client >= 0) {
+            send_config_to_eavb_hal(pPvtData);
         }
 
         pPvtData->pServerSocket = skt_connect(pPvtData->socketPath, SOCKET_BUFFER_SIZE);
@@ -654,6 +724,11 @@ void openavbIntfAudioStreamRxInitCB(media_q_t *pMediaQ) {
             AVB_LOG_ERROR("Private interface module data not allocated.");
             return;
         }
+
+        if (config_socket_client < 0) {
+            config_skt_client_connect(CONFIG_SOCKET_PATH);
+        }
+
         // Open data socket
         pPvtData->pServerSocket = skt_connect(pPvtData->socketPath, SOCKET_BUFFER_SIZE);
         if (pPvtData->pServerSocket < 0) {

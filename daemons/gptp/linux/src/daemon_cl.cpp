@@ -128,6 +128,24 @@ static inline int64_t pctns(struct ptp_clock_time t)
 	return t.sec * 1000000000LL + t.nsec;
 }
 
+#define CLEANUP_RESOURCES() {\
+                if( thread_factory != NULL ) delete thread_factory; \
+                if( default_factory != NULL ) delete default_factory; \
+                if( timerq_factory != NULL ) delete timerq_factory; \
+                if( lock_factory != NULL ) delete lock_factory; \
+                if( timer_factory != NULL ) delete timer_factory; \
+                if( condition_factory != NULL ) delete condition_factory; \
+                if( ipc != NULL ) delete ipc; \
+                if( ifname != NULL ) delete ifname; \
+                if( ipc_arg != NULL ) delete ipc_arg; \
+                if( timestamper != NULL ) delete timestamper; \
+                if( pGPTPPersist != NULL ) { \
+                    pGPTPPersist->closeStorage(); \
+                    delete pGPTPPersist;    \
+                    }\
+                }
+
+
 void print_usage( char *arg0 ) {
 	fprintf( stderr,
 			"%s <network interface> [-S] [-P] [-M <filename>] "
@@ -218,6 +236,12 @@ static void *wait_for_epoll_event(void *arg)
 
     GPTP_LOG_INFO("Added fd : %d to the epoll\n",sock);
     epoll_events = (struct epoll_event *) calloc(MAX_EVENTS, sizeof(ev));
+
+    if(NULL == epoll_events){
+        GPTP_LOG_ERROR("epoll_events alloc failed : %s\n",strerror(errno));
+        close(epoll_fd);
+        return NULL;
+    }
 
     while (1){
         int n, i;
@@ -342,7 +366,7 @@ int main(int argc, char **argv)
 {
 	PortInit_t portInit;
 	sigset_t set;
-	InterfaceName *ifname;
+	InterfaceName *ifname = NULL;
 	int sig;
 
 	bool syntonize = true;
@@ -359,6 +383,7 @@ int main(int argc, char **argv)
 	off_t restoredatacount = 0;
 	bool restorefailed = false;
 	LinuxIPCArg *ipc_arg = NULL;
+	EtherTimestamper *timestamper = NULL;
 	bool use_config_file = false;
 	char config_file_path[512];
 #ifdef RGPTP_ENABLED
@@ -376,6 +401,11 @@ int main(int argc, char **argv)
 		sigaddset( &block, SIGUSR1 );
 		if( pthread_sigmask( SIG_BLOCK, &block, NULL ) != 0 ) {
 			GPTP_LOG_ERROR("Failed to block SIGUSR1");
+
+			if ( thread_factory != NULL ) {
+				delete thread_factory;
+			}
+
 			return -1;
 		}
 	}
@@ -425,6 +455,7 @@ int main(int argc, char **argv)
 	if( argc < 2 ) {
 		printf( "Interface name required\n" );
 		print_usage( argv[0] );
+		CLEANUP_RESOURCES();
 		return -1;
 	}
 	ifname = new InterfaceName( argv[1], strlen(argv[1]) );
@@ -456,10 +487,13 @@ int main(int argc, char **argv)
 			else if( strcmp(argv[i] + 1,  "M" )  == 0 ) {
 				// Open file
 				if( i+1 < argc ) {
-					pGPTPPersist = makeLinuxGPTPPersistFile();
+					if (pGPTPPersist == NULL) {
+						pGPTPPersist = makeLinuxGPTPPersistFile();
+					}
+
 					if (pGPTPPersist) {
 						pGPTPPersist->initStorage(argv[i + 1]);
-				  }
+					}
 				}
 				else {
 					GPTP_LOG_ERROR( "Restore file must be specified on "
@@ -468,7 +502,9 @@ int main(int argc, char **argv)
 			}
 			else if( strcmp(argv[i] + 1,  "G") == 0 ) {
 				if( i+1 < argc ) {
-					ipc_arg = new LinuxIPCArg(argv[++i]);
+					if (ipc_arg == NULL) {
+						ipc_arg = new LinuxIPCArg(argv[++i]);
+					}
 				} else {
 					GPTP_LOG_ERROR( "Must specify group name on the command line\n" );
 				}
@@ -479,6 +515,7 @@ int main(int argc, char **argv)
 			else if( strcmp(argv[i] + 1,  "H") == 0 ) {
 				print_usage( argv[0] );
 				GPTP_LOG_UNREGISTER();
+				CLEANUP_RESOURCES();
 				return 0;
 			}
 			else if( strcmp(argv[i] + 1,  "R") == 0 ) {
@@ -508,6 +545,7 @@ int main(int argc, char **argv)
 						GPTP_LOG_ERROR("Too many values\n");
 						print_usage( argv[0] );
 						GPTP_LOG_UNREGISTER();
+						CLEANUP_RESOURCES();
 						return 0;
 					}
 					phy_delay[delay_count]=atoi(cli_inp_delay);
@@ -519,6 +557,7 @@ int main(int argc, char **argv)
 					GPTP_LOG_ERROR("All four delay values must be specified\n");
 					print_usage( argv[0] );
 					GPTP_LOG_UNREGISTER();
+					CLEANUP_RESOURCES();
 					return 0;
 				}
 				ether_phy_delay[LINKSPEED_1G].set_delay
@@ -603,7 +642,10 @@ int main(int argc, char **argv)
 		delete ipc;
 		ipc = NULL;
 	}
-	if( ipc_arg != NULL ) delete ipc_arg;
+
+	if ( ipc_arg != NULL ) {
+		delete ipc_arg;
+	}
 
 	if( pGPTPPersist ) {
 		uint32_t bufSize = 0;
@@ -615,9 +657,9 @@ int main(int argc, char **argv)
 	}
 
 #ifdef ARCH_INTELCE
-	EtherTimestamper *timestamper = new LinuxTimestamperIntelCE();
+	timestamper = new LinuxTimestamperIntelCE();
 #else
-	EtherTimestamper *timestamper = new LinuxTimestamperGeneric();
+	timestamper = new LinuxTimestamperGeneric();
 #endif
 
 	sigemptyset(&set);
@@ -628,6 +670,7 @@ int main(int argc, char **argv)
 	if (pthread_sigmask(SIG_BLOCK, &set, NULL) != 0) {
 		perror("pthread_sigmask()");
 		GPTP_LOG_UNREGISTER();
+		CLEANUP_RESOURCES();
 		return -1;
 	}
 
@@ -780,6 +823,7 @@ int main(int argc, char **argv)
 	if (!pPort->init_port()) {
 		GPTP_LOG_ERROR("failed to initialize port");
 		GPTP_LOG_UNREGISTER();
+		CLEANUP_RESOURCES();
 		return -1;
 	}
 
@@ -841,6 +885,7 @@ int main(int argc, char **argv)
 		if (sigwait(&set, &sig) != 0) {
 			perror("sigwait()");
 			GPTP_LOG_UNREGISTER();
+			CLEANUP_RESOURCES();
 			return -1;
 		}
 
@@ -873,7 +918,10 @@ int main(int argc, char **argv)
 #ifdef GPTP_AUTO_START
         gptpDaemonServDeInit();
 #endif
-	if( ipc ) delete ipc;
+
+	if ( ipc ) {
+		delete ipc;
+	}
 
 #ifdef RGPTP_ENABLED
 	if( rgptp ) {
@@ -881,6 +929,7 @@ int main(int argc, char **argv)
 	}
 #endif
 	GPTP_LOG_UNREGISTER();
+	CLEANUP_RESOURCES();
 	return 0;
 }
 
