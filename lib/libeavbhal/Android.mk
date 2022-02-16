@@ -21,6 +21,13 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_C_INCLUDES:= \
         $(LOCAL_PATH)
 
+ifeq ($(ENABLE_HYP), true)
+#uncomment the below if this feature has to be enabled
+#LOCAL_C_INCLUDES += vendor/qcom/opensource/avb-utils/libeavbfe
+#LOCAL_SHARED_LIBRARIES += libeavbfe
+#LOCAL_CFLAGS += -DUSE_FE_INTERFACE
+endif
+
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_C_INCLUDES)
 
 LOCAL_MODULE_TAGS := optional

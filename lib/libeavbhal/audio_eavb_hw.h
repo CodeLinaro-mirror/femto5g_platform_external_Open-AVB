@@ -36,6 +36,9 @@
 
 #include <unistd.h>
 #include <pthread.h>
+#ifdef USE_FE_INTERFACE
+#include "eavb_shared.h"
+#endif
 
 #ifndef PTHREAD_MUTEX_RECURSIVE
 #define PTHREAD_MUTEX_RECURSIVE PTHREAD_MUTEX_RECURSIVE_NP
@@ -55,6 +58,7 @@
 #define DEFAULT_SAMPLE_RATE 48000
 #define DEFAULT_CHANNEL_MASK AUDIO_CHANNEL_OUT_STEREO
 #define SINGLE_PCM_SAMPLE_SIZE 2
+
 
 #define USE_ECNR_THREAD
 
@@ -109,6 +113,13 @@ typedef struct {
     int32_t bus;
     uint64_t time1, time2;
     void *stereoBuffer;
+#ifdef USE_FE_INTERFACE
+    qavb_handler qhdr;
+    qavb_stream_info streamInfo;
+    qavb_buf qavb_buffer;
+    bool initialized;
+    uint8_t *mmapbuffers;
+#endif
 } eavb_stream_ctx;
 
 typedef struct {
