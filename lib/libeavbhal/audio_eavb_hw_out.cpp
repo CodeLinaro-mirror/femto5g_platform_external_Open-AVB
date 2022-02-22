@@ -35,6 +35,14 @@
 
 #include "audio_eavb_hw.h"
 
+#ifdef USE_FE_INTERFACE
+extern int eavb_fd;
+
+extern "C" {
+    int qavb_transmit(int fd, qavb_handler* hdr, qavb_buf* buff);
+};
+#endif
+
 static uint32_t out_get_sample_rate(const struct audio_stream *stream)
 {
     eavb_stream_out* out = (eavb_stream_out*) stream;
@@ -149,6 +157,27 @@ static ssize_t out_write(struct audio_stream_out *stream, const void* buffer,
 {
     eavb_stream_out* out = (eavb_stream_out*) stream;
     //ALOGD("out_write: out=%p, out->ctx=%p, bytes: %zu  bus_num: %d sample_rate: %d channels: %d", out, &out->eavbCtx, bytes, out->eavbCtx.bus, out->eavbCtx.rate, out->eavbCtx.channels);
+#ifdef USE_FE_INTERFACE
+
+    if (out->eavbCtx.qhdr.streamCtx != 0) {
+        if (NULL == out->eavbCtx.mmapbuffers) {
+            ALOGE("qavb application: Failed to get buffers");
+            return 0;
+        } else {
+            ALOGE("qavb application: copying buffers");
+            memset(&out->eavbCtx.qavb_buffer, 0, sizeof(out->eavbCtx.qavb_buffer));
+            out->eavbCtx.qavb_buffer.pbuf = (typeof(out->eavbCtx.qavb_buffer.pbuf))
+                                            out->eavbCtx.mmapbuffers;
+            memset(&out->eavbCtx.qavb_buffer.hdr, 0, sizeof(out->eavbCtx.qavb_buffer.hdr));
+            memcpy (out->eavbCtx.mmapbuffers, buffer, bytes);
+            out->eavbCtx.qavb_buffer.hdr.payload_size = bytes;
+        }
+
+        //ALOGD("out_write: out=%p, out->ctx=%p, bytes: %zu", out, &out->eavbCtx, bytes);
+        return   qavb_transmit(eavb_fd, &out->eavbCtx.qhdr, &out->eavbCtx.qavb_buffer);
+    }
+
+#endif
     return eavb_stream_write(&out->eavbCtx, buffer, bytes);
 }
 
