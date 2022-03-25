@@ -1,3 +1,4 @@
+OPT = -O2
 BUILD_DIR=.
 COMMON_DIR=../common
 INCFLAGS=$(COMMON_DIR)/maap_protocol.c 

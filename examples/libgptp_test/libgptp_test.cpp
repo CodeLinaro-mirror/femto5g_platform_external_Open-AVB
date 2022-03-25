@@ -163,6 +163,18 @@ void do_some_tests_ptp() {
     }
 }
 
+void do_some_tests_gptp_mono() {
+    int i=0;
+    uint64_t ptp_time = 0;
+	uint64_t mono_time = 0;
+	printf("do_some_tests_gptp_mono");
+    for(i=0;i<10;i++){
+        if(gptpGetCurgPtpMonotonicPair(&ptp_time,&mono_time)){
+            printf("ns ptp_time %" PRIu64 "ns mono_time %" PRIu64 "\n",ptp_time,mono_time);
+        }
+    }
+}
+
 #ifdef RGPTP_CLNT_ENABLED
 static void rgptp_test(void) {
     bool rgptp_avail = false;
@@ -326,6 +338,10 @@ int main(int argc, char *argv[])
             printf("\n\n\n====================PTP based test=====================\n\n\n");
             do_some_tests_ptp();
         }
+		else if(argv[1][0] == 'm') {
+			 printf("\n\n\n====================gPTP Monotonic pair based test=====================\n\n\n");
+            do_some_tests_gptp_mono();
+		}
 #ifdef RGPTP_CLNT_ENABLED
         else if(argv[1][0] == 'r') {
             rgptp_test();

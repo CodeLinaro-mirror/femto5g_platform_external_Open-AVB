@@ -36,11 +36,20 @@
 
 #include "ipcdef.hpp"
 
+#if AVB_FEATURE_GVM_MODE
+#define SHM_SIZE 0x1000
+#else
 #define SHM_SIZE (sizeof(gPtpTimeData) + sizeof(pthread_mutex_t))   /*!< Shared memory size*/
+#endif
+
+#ifdef AVB_FEATURE_GVM_MODE
+#define SHM_NAME  "/dev/gptp_shm"     /*!< Shared memory name*/
+#else
 #ifdef ANDROID
 #define SHM_NAME  "/dev/ptpshm"     /*!< Shared memory name*/
 #else
 #define SHM_NAME  "/ptp"        /*!< Shared memory name*/
+#endif
 #endif
 
 #endif /*LINUXPIC_HPP*/
