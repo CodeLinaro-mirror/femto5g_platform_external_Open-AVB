@@ -4,13 +4,16 @@ CPPFLAGS= -fpic -g -I../../daemons/gptp/linux/src -I../../daemons/gptp/common
 ifeq ($(GPTP_AUTO_START),1)
 	CPPFLAGS += -DGPTP_AUTO_START
 endif
+ifeq ($(AVB_FEATURE_GVM_MODE),1)
+	CPPFLAGS += -DAVB_FEATURE_GVM_MODE
+endif
 ifeq ($(SYSTEMD_SUPPORT_INCLUDED),1)
 	CPPFLAGS += -DSYSTEMD
 endif
 ifeq ($(RGPTP_CLNT_ENABLED),1)
 	CPPFLAGS += -DRGPTP_CLNT_ENABLED
 endif
-LDFLAGS= -shared -lrt
+LDFLAGS= -shared -lrt -lpthread
 
 SOURCES= gptp_helper.cpp
 OBJECTS= gptp_helper.o

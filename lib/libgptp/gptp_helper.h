@@ -73,6 +73,10 @@ bool gptpGetPtpTimeFromMonoTime(uint64_t *gptp_time_ns, uint64_t time_mono_ns);
 /* Get current PTP time in nanoseconds */
 bool gptpGetCurPtpTime(uint64_t *gptp_time_ns);
 
+/* Get current PTP time and monolithic time in nanoseconds */
+bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur, uint64_t *mono_time_cur);
+
+
 bool gptpInit(void);
 
 bool gptpDeinit(void);
