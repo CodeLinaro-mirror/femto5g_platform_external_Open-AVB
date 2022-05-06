@@ -161,6 +161,63 @@ static void x_openavbMediaQIncrementTail(media_q_info_t *pMediaQInfo)
 	AVB_TRACE_EXIT(AVB_TRACE_MEDIAQ_DETAIL);
 }
 
+
+void x_openavbMediaQClear(media_q_t *pMediaQ)
+{
+	if (pMediaQ) {
+		if (pMediaQ->pPvtMediaQInfo) {
+			media_q_info_t *pMediaQInfo = (media_q_info_t *)(pMediaQ->pPvtMediaQInfo);
+
+			if (pMediaQInfo->threadSafeOn) {
+				MEDIAQ_LOCK();
+			}
+
+			if (pMediaQInfo->itemCount > 0) {
+				while (pMediaQInfo->tail > -1) {
+					media_q_item_t *pTail = &pMediaQInfo->pItems[pMediaQInfo->tail];
+
+					if (pTail) {
+						// If head not set, set it now
+						if (pMediaQInfo->head == -1) {
+							pMediaQInfo->head = pMediaQInfo->tail;
+						}
+
+						pTail->readIdx = 0;     // Reset read index
+						pTail->dataLen = 0;     // Clears out the data
+						x_openavbMediaQIncrementTail(pMediaQInfo);
+					}
+				}
+			}
+
+			if (pMediaQInfo->threadSafeOn) {
+				MEDIAQ_UNLOCK();
+			}
+		}
+	}
+}
+
+
+void openavbTailTimeCheck(media_q_t *pMediaQ, U64 time)
+{
+	if (pMediaQ) {
+		if (pMediaQ->pPvtMediaQInfo) {
+			media_q_info_t *pMediaQInfo = (media_q_info_t *)(pMediaQ->pPvtMediaQInfo);
+
+			if (pMediaQInfo->itemCount > 0) {
+				if (pMediaQInfo->tail > -1) {
+					media_q_item_t *pTail = &pMediaQInfo->pItems[pMediaQInfo->tail];
+
+					if (pTail->pAvtpTime->timeNsec + NANOSECONDS_PER_SECOND < time
+					        || pTail->pAvtpTime->timeNsec - NANOSECONDS_PER_SECOND > time) {
+						AVB_LOG_INFO("reset mediaq as it contains old elements");
+						x_openavbMediaQClear(pMediaQ);
+					}
+				}
+			}
+		}
+	}
+}
+
 	
 // CORE_TODO: May need to add mutex protection when merging with OSAL/HAL branch.
 void x_openavbMediaQPurgeStaleTail(media_q_t *pMediaQ)

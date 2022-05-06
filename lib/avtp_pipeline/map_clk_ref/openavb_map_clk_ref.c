@@ -579,8 +579,26 @@ bool openavbMapClkRefRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 
 		while (((pAVTPDataUnit + CRF_TIMESTAMP_SIZE) <=
 			pAVTPDataUnitEnd)) {
+			U64 timeinCrf = ntohll(*(U64*)pAVTPDataUnit);
+			avtp_time_t currTime;
+			openavbAvtpTimeSetToWallTime(&currTime);
+
+			if (currTime.timeNsec + NANOSECONDS_PER_SECOND < timeinCrf
+			        || currTime.timeNsec - NANOSECONDS_PER_SECOND > timeinCrf) {
+				AVB_LOGF_INFO("crf not in range so dropping crftime %" PRIu64 " curr %" PRIu64
+				              "", timeinCrf, currTime.timeNsec);
+				return FALSE;
+			}
+
+			openavbTailTimeCheck(pMediaQ, timeinCrf);
 			// Get item pointer in media queue
 			media_q_item_t *pMediaQItem = openavbMediaQHeadLock(pMediaQ);
+
+			if (pMediaQItem == NULL)      {
+				AVB_LOG_ERROR("Media queue full so remove older timestamp from queue");
+				openavbMediaQTailPull(pMediaQ);
+				pMediaQItem = openavbMediaQHeadLock(pMediaQ);
+			}
 
 			// If we need to restart the clock, then we need an empty
 			// media Q item, and we need to set the restart clock flag on that
@@ -621,7 +639,7 @@ bool openavbMapClkRefRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 					// place it in the media queue item.
 					openavbAvtpTimeSetToU64Timestamp(
 						pMediaQItem->pAvtpTime,
-						ntohll(*(U64*)pAVTPDataUnit));
+						timeinCrf);
 
 					// Set timestamp valid and timestamp
 					// uncertain flags
@@ -633,7 +651,25 @@ bool openavbMapClkRefRxCB(media_q_t *pMediaQ, U8 *pData, U32 dataLen)
 
 					// Set the timestamp interval
 					pItemPubMapData->timestampInterval =
-						timestampInterval;
+					    timestampInterval;
+				} else {
+					if (pMediaQItem->pAvtpTime->timeNsec + NANOSECONDS_PER_SECOND < timeinCrf
+					        || pMediaQItem->pAvtpTime->timeNsec - NANOSECONDS_PER_SECOND > timeinCrf) {
+						AVB_LOGF_INFO("crf packet timestamp reset %" PRIu64 " ",
+					              pMediaQItem->pAvtpTime->timeNsec);
+						pMediaQItem->dataLen = 0;
+						openavbAvtpTimeSetToU64Timestamp(
+						    pMediaQItem->pAvtpTime,
+						    timeinCrf);
+						openavbAvtpTimeSetTimestampValid(
+						    pMediaQItem->pAvtpTime, TRUE);
+						openavbAvtpTimeSetTimestampUncertain(
+						    pMediaQItem->pAvtpTime,
+						    tsUncertain);
+						// Set the timestamp interval
+						pItemPubMapData->timestampInterval =
+						    timestampInterval;
+					}
 				}
 
 				while (((pAVTPDataUnit +

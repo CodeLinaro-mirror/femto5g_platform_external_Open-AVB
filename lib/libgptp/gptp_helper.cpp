@@ -75,6 +75,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include <sys/un.h>
 #endif
 #include "gptp_helper.h"
+#include <atomic>
 
 pthread_mutex_t gInitMutex = PTHREAD_MUTEX_INITIALIZER;
 #define LOCK()  	pthread_mutex_lock(&gInitMutex)
@@ -140,12 +141,15 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 {
 	if (NULL == gptp_shm_fd)
 		return false;
+#ifdef AVB_FEATURE_GVM_MODE
+	*gptp_shm_fd = open( SHM_NAME, O_RDWR, 0);
+#else
 #ifdef ANDROID
 	*gptp_shm_fd = open( SHM_NAME, O_RDWR | O_CREAT, 0);
 #else
 	*gptp_shm_fd = shm_open(SHM_NAME, O_RDWR, 0);
 #endif
-
+#endif
 	if (*gptp_shm_fd == -1) {
 		perror("shm_open()");
 		return false;
@@ -158,11 +162,16 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 	if (*gptp_mmap == (char *)-1) {
 		perror("mmap()");
 		*gptp_mmap = NULL;
+#ifdef AVB_FEATURE_GVM_MODE
+		close(*gptp_shm_fd);
+		unlink(SHM_NAME );
+#else
 #ifdef ANDROID
 		close(*gptp_shm_fd);
 		unlink(SHM_NAME );
 #else
 		shm_unlink(SHM_NAME);
+#endif
 #endif
 		return false;
 	}
@@ -185,12 +194,38 @@ static void gptpMemDeinit(int gptp_shm_fd, char *gptp_mmap)
 static int gptpScaling(gPtpTimeData * td, char *memory_offset_buffer)
 {
 	if ((td == NULL)||(memory_offset_buffer == NULL))
+	{
+		printf("gptpScaling failure %p %p\n",td,memory_offset_buffer);
 		return false;
+	}
 
+#ifndef AVB_FEATURE_GVM_MODE
 	pthread_mutex_lock((pthread_mutex_t *) memory_offset_buffer);
 	memcpy(td, memory_offset_buffer + sizeof(pthread_mutex_t), sizeof(*td));
 	pthread_mutex_unlock((pthread_mutex_t *) memory_offset_buffer);
+#else
+	int buf_offset = 0;
+	std::atomic<uint32_t> *seq0;
+	std::atomic<uint32_t> *seq1;
+	uint32_t a,b;
+	gPtpTimeData *ptimedata;
+	int count = 0;
+	buf_offset += (2 * sizeof(std::atomic<uint32_t>));
 
+	seq0 = (std::atomic<uint32_t> *)memory_offset_buffer;
+	seq1 = (std::atomic<uint32_t> *)(memory_offset_buffer + sizeof(std::atomic<uint32_t>));
+	ptimedata   = (gPtpTimeData *) (memory_offset_buffer + buf_offset);
+
+	do {
+	a = seq0->load();
+	b = seq1->load();
+
+	memcpy(td, ptimedata, sizeof(*td));
+	count++;
+
+	}while((a!=b || a!=seq0->load() || b != seq1->load())&&count<3);
+
+#endif
 	return true;
 }
 
@@ -538,6 +573,55 @@ bool gptpGetCurPtpTime(uint64_t *gptp_time_cur) {
     *gptp_time_cur = (ts.tv_sec)*1000000000LL + ts.tv_nsec;
 
     return true;
+}
+
+
+bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur, uint64_t *mono_time_cur) {
+
+	uint64_t *gptp_mem;
+    uint64_t *mono_mem;
+	struct timespec ts;
+	std::atomic<uint32_t> *seq0;
+	std::atomic<uint32_t> *seq1;
+	uint32_t a,b;
+	int count = 0;
+
+    ts.tv_sec = ts.tv_nsec = 0;
+    *gptp_time_cur = 0;
+	*mono_time_cur =0;
+
+    if (!bInitialized) {
+	return false;
+    }
+
+#ifdef AVB_FEATURE_GVM_MODE
+	seq0 = (std::atomic<uint32_t> *)gPtpMmap;
+	seq1 = (std::atomic<uint32_t> *)(gPtpMmap + sizeof(std::atomic<uint32_t>));
+
+	do {
+	a = seq0->load();
+	b = seq1->load();
+    if (clock_gettime(gPtpClockid, &ts)) {
+	printf("clock_gettime failed");
+	return false;
+    }
+
+	if(ts.tv_sec == 0 && ts.tv_nsec == 0) {
+	printf("gptp time read taking longer time\n");
+	return false;
+	}
+
+	gptp_mem = (uint64_t *) (gPtpMmap + 0x1000 - 3*sizeof(uint64_t));
+	mono_mem = (uint64_t *) (gPtpMmap + 0x1000 - 4*sizeof(uint64_t));
+	*gptp_time_cur = *gptp_mem;
+	*mono_time_cur = *mono_mem;
+	count++;
+
+	}while((a!=b || a!=seq0->load() || b != seq1->load())&&count<3);
+#endif
+
+	return true;
+
 }
 
 
