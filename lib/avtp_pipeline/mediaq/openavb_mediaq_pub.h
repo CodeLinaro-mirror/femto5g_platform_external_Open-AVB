@@ -362,4 +362,15 @@ U32 openavbMediaQCountItems(media_q_t *pMediaQ, bool ignoreTimestamp);
  */
 bool openavbMediaQAnyReadyItems(media_q_t *pMediaQ, bool ignoreTimestamp);
 
+/** Check if tail of the media queue is within the timeline range.
+ *
+ * Check if there are any MediaQ items which are out of range.
+ *
+ * \param pMediaQ A pointer to the media_q_t structure.
+ * \param time timestamp for checking the current timeline
+ *
+ */
+
+void openavbTailTimeCheck(media_q_t *pMediaQ, U64 time);
+
 #endif  // OPENAVB_MEDIA_Q_PUB_H
