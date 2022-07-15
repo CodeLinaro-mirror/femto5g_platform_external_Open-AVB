@@ -20,6 +20,7 @@
 #define __AVBTP_H__
 
 #include <inttypes.h>
+#include <stdbool.h>
 
 #define VALID		1
 #define INVALID		0
@@ -110,9 +111,6 @@ typedef struct {
 	uint64_t local_time;
 } gPtpTimeData;
 
-#ifndef false
-typedef enum { false = 0, true = 1 } bool;
-#endif
 
 bool gptp_hw_curr_time(uint64_t *system_time, uint64_t *device_time);
 
