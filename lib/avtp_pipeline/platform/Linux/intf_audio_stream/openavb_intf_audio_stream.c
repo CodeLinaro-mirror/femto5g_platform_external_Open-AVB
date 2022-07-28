@@ -68,6 +68,7 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #define CONFIG_SOCKET_PATH "/data/misc/eavb/config_socket"
 #define SOCKET_PATH_MAX_LENGTH 100
 static int config_socket_client = -1;
+static pthread_mutex_t config_client_lock = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct {
     char socketPath[SOCKET_PATH_MAX_LENGTH];
@@ -214,6 +215,7 @@ static int config_skt_client_connect(const char* path)
                                     ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM) < 0) {
         AVB_LOGF_ERROR("failed to connect (%s)", strerror(errno));
         close(config_socket_client);
+        config_socket_client = -1;
         return -1;
     }
 
@@ -247,6 +249,17 @@ static void send_config_to_eavb_hal(pvt_data_t *pPvtData)
     }
 }
 
+static void cleanup_config_skt_client() {
+    pthread_mutex_lock(&config_client_lock);
+
+    if (config_socket_client > 0) {
+        close(config_socket_client);
+        config_socket_client = -1;
+    }
+
+    pthread_mutex_unlock(&config_client_lock);
+}
+
 static int skt_disconnect(int fd) {
     AVB_LOGF_INFO("skt_disconnect fd %d", fd);
 
@@ -266,10 +279,21 @@ static int skt_read(pvt_data_t *pPvtData, uint8_t* p, size_t len) {
         return -1;
     }
 
+    if (pPvtData->isStreamConfigSynced == false) {
+        pthread_mutex_lock(&config_client_lock);
+
+        if (config_socket_client < 0) {
+            config_skt_client_connect(CONFIG_SOCKET_PATH);
+        }
+
+        send_config_to_eavb_hal(pPvtData);
+        pthread_mutex_unlock(&config_client_lock);
+    }
+
     if (pPvtData->pHalSocket < 0) {
         pPvtData->pHalSocket = accept_server_socket(pPvtData->pServerSocket);
         if (pPvtData->pHalSocket < 0) {
-            AVB_LOG_WARNING("No hal socket opened");
+            AVB_LOG_WARNING("No hal socket opened in skt_read");
             return -1;
         }
     }
@@ -308,6 +332,8 @@ static int skt_read(pvt_data_t *pPvtData, uint8_t* p, size_t len) {
         }
         skt_disconnect(pPvtData->pHalSocket);
         pPvtData->pHalSocket = -1;
+        cleanup_config_skt_client();
+        pPvtData->isStreamConfigSynced = false;
     }
 
     return (int)read;
@@ -322,11 +348,21 @@ static int skt_write(pvt_data_t *pPvtData, const void* p, size_t len) {
         return -1;
     }
 
-    if (pPvtData->pHalSocket < 0) {
+    if (pPvtData->isStreamConfigSynced == false) {
+        pthread_mutex_lock(&config_client_lock);
+
+        if (config_socket_client < 0) {
+            config_skt_client_connect(CONFIG_SOCKET_PATH);
+        }
+
         send_config_to_eavb_hal(pPvtData);
+        pthread_mutex_unlock(&config_client_lock);
+    }
+
+	if (pPvtData->pHalSocket < 0) {
         pPvtData->pHalSocket = accept_server_socket(pPvtData->pServerSocket);
         if (pPvtData->pHalSocket < 0) {
-            AVB_LOG_DEBUG("No hal socket opened");
+            AVB_LOG_DEBUG("No hal socket opened in skt_write");
             return -1;
         }
     }
@@ -357,6 +393,9 @@ static int skt_write(pvt_data_t *pPvtData, const void* p, size_t len) {
         AVB_LOGF_DEBUG("write failed with error(%s)", strerror(errno));
         skt_disconnect(pPvtData->pHalSocket);
         pPvtData->pHalSocket = -1;
+        cleanup_config_skt_client();
+        pPvtData->isStreamConfigSynced = false;
+
         if (count) {
           return count;
         } else {
@@ -371,6 +410,8 @@ static int skt_write(pvt_data_t *pPvtData, const void* p, size_t len) {
       AVB_LOGF_DEBUG("write timeout exceeded, sent %zu bytes", count);
       skt_disconnect(pPvtData->pHalSocket);
       pPvtData->pHalSocket = -1;
+      cleanup_config_skt_client();
+      pPvtData->isStreamConfigSynced = false;
       if (count) {
         return count;
         } else {
@@ -580,12 +621,15 @@ void openavbIntfAudioStreamTxInitCB(media_q_t *pMediaQ) {
             return;
         }
 
-        if (config_socket_client < 0) {
-            config_skt_client_connect(CONFIG_SOCKET_PATH);
-        }
+        if (pPvtData->isStreamConfigSynced == false) {
+            pthread_mutex_lock(&config_client_lock);
 
-        if (config_socket_client >= 0) {
+            if (config_socket_client < 0) {
+                config_skt_client_connect(CONFIG_SOCKET_PATH);
+            }
+
             send_config_to_eavb_hal(pPvtData);
+            pthread_mutex_unlock(&config_client_lock);
         }
 
         pPvtData->pServerSocket = skt_connect(pPvtData->socketPath, SOCKET_BUFFER_SIZE);
@@ -725,8 +769,15 @@ void openavbIntfAudioStreamRxInitCB(media_q_t *pMediaQ) {
             return;
         }
 
-        if (config_socket_client < 0) {
-            config_skt_client_connect(CONFIG_SOCKET_PATH);
+        if (pPvtData->isStreamConfigSynced == false) {
+            pthread_mutex_lock(&config_client_lock);
+
+            if (config_socket_client < 0) {
+                config_skt_client_connect(CONFIG_SOCKET_PATH);
+            }
+
+            send_config_to_eavb_hal(pPvtData);
+            pthread_mutex_unlock(&config_client_lock);
         }
 
         // Open data socket

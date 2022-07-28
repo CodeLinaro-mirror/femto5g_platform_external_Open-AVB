@@ -163,6 +163,11 @@ void do_some_tests_ptp() {
     }
 }
 
+void callback_handler(struct gptp_update update)
+{
+	printf("callback_handler:: got callback %" PRIu64 " %" PRId64 " \n",update.curr_gptp_time,update.clock_adjust);
+}
+
 void do_some_tests_gptp_mono() {
     int i=0;
     uint64_t ptp_time = 0;
@@ -266,7 +271,7 @@ int main(int argc, char *argv[])
         printf("GPTP Scaling Not Available\n");
         return 0;
     }
-
+#ifndef AVB_FEATURE_GVM_MODE
 #ifdef GPTP_AUTO_START
     while(1){
         test_vec_time = systemTime(CLOCK_REALTIME);
@@ -318,7 +323,7 @@ int main(int argc, char *argv[])
     } else {
         printf("Monotonic time test failed\n");
     }
-
+#endif
     if (gptpGetCurPtpTime(&test_gptp_time)) {
             printf("gptp time %" PRIu64 ".%" PRIu64 "\n",
 					test_gptp_time/1000000000UL, test_gptp_time%1000000000UL);
@@ -348,6 +353,18 @@ int main(int argc, char *argv[])
         }
 #endif
     }
+	else if (argc == 3) {
+
+		if(argv[1][0] == 'm') {
+			printf("\n\n\n====================gPTP Monotonic pair based test=====================\n\n\n");
+			int sleepduration = atoi(argv[2]);
+			gptpRegisterCallback(&callback_handler);
+			do_some_tests_gptp_mono();
+			sleep(sleepduration);
+			do_some_tests_gptp_mono();
+			gptpRegisterCallback(NULL);
+			}
+		}
 #ifdef RGPTP_CLNT_ENABLED
     if (argc == 3) {
         if(argv[1][0] == 's') {
