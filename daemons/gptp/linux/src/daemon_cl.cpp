@@ -645,6 +645,7 @@ int main(int argc, char **argv)
 
 	if ( ipc_arg != NULL ) {
 		delete ipc_arg;
+		ipc_arg = NULL;
 	}
 
 	if( pGPTPPersist ) {
@@ -921,6 +922,7 @@ int main(int argc, char **argv)
 
 	if ( ipc ) {
 		delete ipc;
+		ipc = NULL;
 	}
 
 #ifdef RGPTP_ENABLED

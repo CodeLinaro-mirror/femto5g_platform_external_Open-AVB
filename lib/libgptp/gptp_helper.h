@@ -76,6 +76,16 @@ bool gptpGetCurPtpTime(uint64_t *gptp_time_ns);
 /* Get current PTP time and monolithic time in nanoseconds */
 bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur, uint64_t *mono_time_cur);
 
+struct gptp_update {
+	uint64_t curr_gptp_time;
+	int64_t clock_adjust;
+};
+
+
+typedef void(*GPTP_UPDATE_NOTIFY_CALLBACK)(struct gptp_update update);
+
+bool gptpRegisterCallback(GPTP_UPDATE_NOTIFY_CALLBACK fn_ptr);
+
 
 bool gptpInit(void);
 

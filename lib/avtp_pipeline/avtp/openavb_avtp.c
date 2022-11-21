@@ -146,7 +146,7 @@ static void smoothenTimestamp(avtp_stream_t *pStream, U8 *pHdr, int count,
 						if (delta > permissibleDelta * 100) {
 							/* We shouldnt be seeing this print, if we see then we need to check
 							if there is huge delays happening in the system */
-							AVB_LOGF_INFO("resetting the timeline as delta is too high1 %lu", delta);
+							AVB_LOGF_DEBUG("resetting the timeline as delta is too high1 %lu", delta);
 							expectedAVTPref = avtpdata->currentAVTPReference;
 						} else if (delta > permissibleDelta * 2) {
 							avtpdata->driftCurve++;
@@ -158,7 +158,7 @@ static void smoothenTimestamp(avtp_stream_t *pStream, U8 *pHdr, int count,
 						if (delta > permissibleDelta * 100) {
 							/* We shouldnt be seeing this print, if we see then we need to check
 							if there is huge delays happening in the system */
-							AVB_LOGF_INFO("resetting the timeline as delta is too high2 %lu", delta);
+							AVB_LOGF_DEBUG("resetting the timeline as delta is too high2 %lu", delta);
 							expectedAVTPref = avtpdata->currentAVTPReference;
 						} else if (delta > permissibleDelta * 2) {
 							avtpdata->driftCurve--;
@@ -172,7 +172,7 @@ static void smoothenTimestamp(avtp_stream_t *pStream, U8 *pHdr, int count,
 						if (delta > permissibleDelta * 100) {
 							/* We shouldnt be seeing this print, if we see then we need to check
 							if there is huge delays happening in the system */
-							AVB_LOGF_INFO("resetting the timeline as delta is too high3 %lu", delta);
+							AVB_LOGF_DEBUG("resetting the timeline as delta is too high3 %lu", delta);
 							expectedAVTPref = avtpdata->currentAVTPReference;
 						} else if (delta > permissibleDelta * 2) {
 							avtpdata->driftCurve--;
@@ -182,7 +182,7 @@ static void smoothenTimestamp(avtp_stream_t *pStream, U8 *pHdr, int count,
 						delta = ((U32) - 1) - (delta);
 
 						if (delta > permissibleDelta * 100) {
-							AVB_LOGF_INFO("resetting the timeline as delta is too high4 %lu", delta);
+							AVB_LOGF_DEBUG("resetting the timeline as delta is too high4 %lu", delta);
 							expectedAVTPref = avtpdata->currentAVTPReference;
 						} else if (delta > permissibleDelta * 2) {
 							avtpdata->driftCurve++;

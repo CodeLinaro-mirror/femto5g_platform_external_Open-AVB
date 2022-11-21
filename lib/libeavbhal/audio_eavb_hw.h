@@ -113,6 +113,7 @@ typedef struct {
     int32_t bus;
     uint64_t time1, time2;
     void *stereoBuffer;
+    int pipefd[2];
 #ifdef USE_FE_INTERFACE
     qavb_handler qhdr;
     qavb_stream_info streamInfo;

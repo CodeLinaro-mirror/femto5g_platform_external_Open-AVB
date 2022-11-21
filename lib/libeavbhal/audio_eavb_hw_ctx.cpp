@@ -61,6 +61,7 @@
 #define MONO_CHANNEL 1
 pthread_t server_thread_id;
 bool context_initialized = false;
+static pthread_mutex_t config_lock = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct {
     char socketPath[SOCKET_PATH_MAX_LENGTH];
@@ -205,10 +206,12 @@ static int calc_audiotime_usec(eavb_stream_ctx* ctx, int bytes) {
            ctx->rate);
 }
 
-static void MonoToStereo(const void *monoBuffer, const void *stereoBuffer, size_t len, uint32_t channelcount)
+static void MonoToStereo(const void *monoBuffer, const void *stereoBuffer,
+                         size_t blen, uint32_t channelcount)
 {
     int16_t* localsrcbufptr = (int16_t*)monoBuffer;
     int16_t* localdestbufptr = (int16_t*)stereoBuffer;
+    int len = static_cast<int>(blen);
 
     while (len > 0)
     {
@@ -221,10 +224,11 @@ static void MonoToStereo(const void *monoBuffer, const void *stereoBuffer, size_
     }
 }
 
-static void StereoToMono(const void *buffer, size_t len, uint32_t channelcount)
+static void StereoToMono(const void *buffer, size_t blen, uint32_t channelcount)
 {
     int16_t* localsrcbufptr = (int16_t*)buffer;
     int16_t* localdestbufptr = (int16_t*)buffer;
+    int len = static_cast<int>(blen);
 
     while(len > 0)
     {
@@ -429,13 +433,15 @@ void *config_server_socket_ThreadFn(void *pv)
     int client_fd = -1;
     int len = -1;
     StreamConfigInfo configInfo;
-    context_initialized = true;
     config_server_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+    pthread_mutex_lock(&config_lock);
 
     for (int i = 0; i < MAX_NUMBER_OF_CHANNELS; i++) {
         streamConfigInfos[i].audioChannelCount = -1;
         memset(streamConfigInfos[i].socketPath, 0, SOCKET_PATH_MAX_LENGTH);
     }
+
+    pthread_mutex_unlock(&config_lock);
 
     if (config_server_fd < 0) {
         ALOGE("failed to create socket");
@@ -446,7 +452,9 @@ void *config_server_socket_ThreadFn(void *pv)
                                  ANDROID_SOCKET_NAMESPACE_ABSTRACT) < 0) {
         ALOGE("failed to connect (%s)", strerror(errno));
         close(config_server_fd);
+        pthread_mutex_lock(&config_lock);
         context_initialized = false;
+        pthread_mutex_unlock(&config_lock);
         return NULL;
     }
 
@@ -455,7 +463,9 @@ void *config_server_socket_ThreadFn(void *pv)
         if (listen(config_server_fd, 1) < 0) {
             ALOGE("listen failed %s", strerror(errno));
             close(config_server_fd);
+            pthread_mutex_lock(&config_lock);
             context_initialized = false;
+            pthread_mutex_unlock(&config_lock);
             return NULL;
         }
 
@@ -477,6 +487,7 @@ void *config_server_socket_ThreadFn(void *pv)
                 ALOGD("data read from config socket, socket path %s channel count %d",
                       configInfo.socketPath,
                       configInfo.audioChannelCount);
+                pthread_mutex_lock(&config_lock);
 
                 for (int i = 0; i < MAX_NUMBER_OF_CHANNELS; i++) {
                     if ((streamConfigInfos[i].audioChannelCount == -1)
@@ -487,6 +498,8 @@ void *config_server_socket_ThreadFn(void *pv)
                         break;
                     }
                 }
+
+                pthread_mutex_unlock(&config_lock);
             }
         }
 
@@ -509,11 +522,24 @@ void *config_server_socket_ThreadFn(void *pv)
 
 static void config_socket_create()
 {
+    pthread_mutex_lock(&config_lock);
+    int res = 0;
+
     if (context_initialized == true) {
+        pthread_mutex_unlock(&config_lock);
         return;
     }
 
-    pthread_create(&server_thread_id, NULL, config_server_socket_ThreadFn, NULL);
+    context_initialized = true;
+    res = pthread_create(&server_thread_id, NULL, config_server_socket_ThreadFn,
+                         NULL);
+
+    if (res != 0) {
+        context_initialized = false;
+        ALOGE("failed to create config server thread");
+    }
+
+    pthread_mutex_unlock(&config_lock);
     return;
 }
 
@@ -523,10 +549,11 @@ int eavb_stream_write(eavb_stream_ctx *ctx, const void* buffer, size_t bytes) {
 
     if (ctx->eavbFd < 0) {
         ctx->eavbFd = skt_connect(ctx->eavbSocketPath, AUDIO_STREAM_OUTPUT_BUFFER_SZ);
+
         if (ctx->eavbFd < 0) {
             if (ctx->printErrorOnce == 0) {
                 ALOGD("Error opening data socket (%s) - check if openavb is running",
-                    ctx->eavbSocketPath);
+                      ctx->eavbSocketPath);
                 ctx->printErrorOnce = 1;
             }
             goto finish;
@@ -534,23 +561,35 @@ int eavb_stream_write(eavb_stream_ctx *ctx, const void* buffer, size_t bytes) {
             // reset once successfully connected
             ctx->printErrorOnce = 0;
         }
-        if (ctx->iniChannelCount == 0) {
-            for(int i=0; i < MAX_NUMBER_OF_CHANNELS; i++) {
-                if(strcmp(ctx->eavbSocketPath,streamConfigInfos[i].socketPath) == 0) {
-                    ctx->iniChannelCount = streamConfigInfos[i].audioChannelCount;
-                    if (ctx->bus == BUS_NAV_GUIDANCE || ctx->bus == BUS_PHONE) {
-                        if (ctx->channels != ctx->iniChannelCount) {
-                            if (ctx->channels == MONO_CHANNEL) {
-                                if (ctx->stereoBuffer) {
-                                    free(ctx->stereoBuffer);
-                                }
-                                ctx->stereoBuffer = (void*) malloc(bytes * 2);
+    }
+
+    if (ctx->iniChannelCount == 0) {
+        pthread_mutex_lock(&config_lock);
+
+        for (int i = 0; i < MAX_NUMBER_OF_CHANNELS; i++) {
+            if (strcmp(ctx->eavbSocketPath, streamConfigInfos[i].socketPath) == 0) {
+                ctx->iniChannelCount = streamConfigInfos[i].audioChannelCount;
+
+                if (ctx->bus == BUS_NAV_GUIDANCE || ctx->bus == BUS_PHONE) {
+                    if (ctx->channels != ctx->iniChannelCount) {
+                        if (ctx->channels == MONO_CHANNEL) {
+                            if (ctx->stereoBuffer) {
+                                free(ctx->stereoBuffer);
                             }
+
+                            ctx->stereoBuffer = (void*) malloc(bytes * 2);
                         }
                     }
-                    break;
                 }
+
+                break;
             }
+        }
+
+        pthread_mutex_unlock(&config_lock);
+
+        if (ctx->iniChannelCount == 0) {
+            goto finish;
         }
     }
 
@@ -697,9 +736,26 @@ int eavb_stream_ctx_init(eavb_stream_ctx *ctx, struct audio_config *config) {
 void eavb_stream_ctx_destroy(eavb_stream_ctx *ctx) {
     ALOGD("eavb_stream_ctx_destroy - ctx=%p", ctx);
 #ifdef USE_ECNR_THREAD
+
     // exit ECNR Poll thread
-    ctx->halPollingThreadRunning = false;
-    usleep(1000);
+    if (ctx->halPollingThreadRunning == true) {
+        ctx->halPollingThreadRunning = false;
+        char data = '1';
+        write(ctx->pipefd[1], &data, 1);
+
+        pthread_join(ctx->halPollingThread, NULL);
+
+        if (ctx->pipefd[0] != -1) {
+            close(ctx->pipefd[0]);
+        }
+
+        if (ctx->pipefd[1] != -1) {
+            close(ctx->pipefd[1]);
+        }
+
+        return;
+    }
+
 #endif
     if (ctx->eavbFd >= 0) {
         skt_disconnect(ctx->eavbFd);
@@ -713,11 +769,29 @@ void eavb_stream_ctx_destroy(eavb_stream_ctx *ctx) {
 }
 
 #ifdef USE_ECNR_THREAD
-void eavb_halPollThread_init(eavb_stream_ctx *halctx) {
-    pthread_create(&halctx->halPollingThread, NULL, in_eavbHalPollingThreadFn, halctx);
-
+void eavb_halPollThread_init(eavb_stream_ctx *halctx)
+{
+    int res = 0;
     // make thread running
     halctx->halPollingThreadRunning = true;
+    halctx->pipefd[0] = -1;
+    halctx->pipefd[1] = -1;
+
+    if (pipe(halctx->pipefd) == -1) {
+        ALOGE("pipe create error");
+        halctx->halPollingThreadRunning = false;
+        return;
+    } else {
+        ALOGD("pipe create successful");
+    }
+
+    res = pthread_create(&halctx->halPollingThread, NULL, in_eavbHalPollingThreadFn,
+                         halctx);
+
+    if (res != 0) {
+        halctx->halPollingThreadRunning = false;
+        ALOGE("failed to hal polling thread");
+    }
 
     return;
 }
@@ -751,7 +825,7 @@ void channelSelectionFn(void *buffer, int len, uint32_t bitmask,
 }
 void *in_eavbHalPollingThreadFn(void *pv) {
     eavb_stream_ctx *pctx = (eavb_stream_ctx *) pv;
-    size_t len = -1;
+    int len = -1;
     void *buffer = NULL;
     struct timespec semwait_timeout;
     int rxreadbufsize;
@@ -764,12 +838,15 @@ void *in_eavbHalPollingThreadFn(void *pv) {
         usleep(20);
     }
 
+    ALOGD("in_eavbHalPollingThreadFn:: connected %s", pctx->eavbSocketPath);
     sem_init(&pctx->circ_buff_count_sem, 0, 0);
     sem_init(&pctx->circ_buff_space_left_sem, 0, 1);
 
     // keep polling until avb stream is stopped
     while (pctx->halPollingThreadRunning) {
         if (pctx->iniChannelCount == 0) {
+            pthread_mutex_lock(&config_lock);
+
             for (int i = 0; i < MAX_NUMBER_OF_CHANNELS; i++) {
                 if (strcmp(pctx->eavbSocketPath, streamConfigInfos[i].socketPath) == 0) {
                     pctx->iniChannelCount = streamConfigInfos[i].audioChannelCount;
@@ -832,19 +909,52 @@ void *in_eavbHalPollingThreadFn(void *pv) {
 
                     // read new data
                     buffer = (void*) malloc(sockbufsize);
+                    memset(buffer, 0, sockbufsize);
 
                     if (circ_buff_init(&pctx->circ_buff, AUDIO_STREAM_INPUT_BUFFER_SZ,
                                        rxreadbufsize) < 0) {
+                        pthread_mutex_unlock(&config_lock);
                         goto cleanup;
                     }
 
                     break;
                 }
             }
+
+            pthread_mutex_unlock(&config_lock);
         }
 
         if (pctx->eavbFd > 0 && buffer != NULL) {
-            len = skt_read(pctx->eavbFd, buffer, sockbufsize);
+            fd_set readfds;
+            FD_ZERO(&readfds);
+            FD_SET(pctx->eavbFd, &readfds);
+            FD_SET(pctx->pipefd[0], &readfds);
+
+            do {
+                len = select((pctx->pipefd[0] > pctx->eavbFd ? pctx->pipefd[0] : pctx->eavbFd) +
+                             1, &readfds, NULL, NULL, NULL);
+            } while (len == -1 && errno == EINTR);
+
+            if (len == -1) {
+                ALOGE("select failed errno=%d, errno=(%s)\n", errno, strerror(errno));
+                skt_disconnect(pctx->eavbFd);
+                pctx->eavbFd = -1;
+                continue;
+            }
+
+            if (FD_ISSET(pctx->pipefd[0], &readfds)) {
+                char buf;
+                read(pctx->pipefd[0], &buf, 1);
+
+                if (buf == '1') {
+                    ALOGD("close polling thread");
+                    goto cleanup;
+                }
+            }
+
+            if (FD_ISSET(pctx->eavbFd, &readfds)) {
+                len = skt_read(pctx->eavbFd, buffer, sockbufsize);
+            }
 
             if (len <= 0) {
                 skt_disconnect(pctx->eavbFd);
@@ -876,7 +986,7 @@ void *in_eavbHalPollingThreadFn(void *pv) {
                 usleep(1000);
             }
         } else {
-            while (pctx->eavbFd <= 0) {
+            while (pctx->eavbFd <= 0 && pctx->halPollingThreadRunning) {
                 pctx->eavbFd = skt_connect(pctx->eavbSocketPath, AUDIO_STREAM_INPUT_BUFFER_SZ);
                 usleep(20);
             }
@@ -889,8 +999,8 @@ void *in_eavbHalPollingThreadFn(void *pv) {
 
 cleanup:
     ALOGI("closing ECNR poll thread");
-    pctx->eavbFd = -1;
     close(pctx->eavbFd);
+    pctx->eavbFd = -1;
 
     if (buffer) {
         free(buffer);
