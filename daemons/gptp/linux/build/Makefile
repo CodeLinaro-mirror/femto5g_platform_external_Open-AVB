@@ -121,6 +121,7 @@ ifeq ($(RGPTP_ENABLED),1)
 	LDFLAGS_G += -lqrtr
 	OBJ_FILES += $(OBJ_DIR)/rgptp.o
 	HEADER_FILES += $(SRC_DIR)/rgptp.hpp
+	CFLAGS_G += -DGPIO_CHIP
 endif
 
 ifeq ($(SYSTEMD_SUPPORT_INCLUDED),1)
