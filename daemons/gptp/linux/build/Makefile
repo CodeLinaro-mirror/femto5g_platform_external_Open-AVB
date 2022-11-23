@@ -118,6 +118,7 @@ endif
 
 ifeq ($(RGPTP_ENABLED),1)
 	INCPATHS := -I${PKG_CONFIG_SYSROOT_DIR}/usr/include/qmi-framework-vendor
+	INCPATHS += -I${PKG_CONFIG_SYSROOT_DIR}/usr/include/qmi-framework
 	LDFLAGS_G += -lqrtr
 	OBJ_FILES += $(OBJ_DIR)/rgptp.o
 	HEADER_FILES += $(SRC_DIR)/rgptp.hpp
