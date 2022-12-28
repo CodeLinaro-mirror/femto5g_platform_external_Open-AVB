@@ -76,7 +76,9 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #endif
 #include "gptp_helper.h"
 #include <atomic>
-
+#ifdef __cplusplus
+extern "C" {
+#endif
 pthread_mutex_t gInitMutex = PTHREAD_MUTEX_INITIALIZER;
 #define LOCK()  	pthread_mutex_lock(&gInitMutex)
 #define UNLOCK()	pthread_mutex_unlock(&gInitMutex)
@@ -687,5 +689,9 @@ bool rgptpDeinit(void) {
     rgptp_clkid = -1;
 
     return true;
+}
+#endif
+
+#ifdef __cplusplus
 }
 #endif
