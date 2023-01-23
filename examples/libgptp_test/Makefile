@@ -9,9 +9,11 @@ LDFLAGS=-L../../lib/libgptp
 
 ifeq ($(GPTP_AUTO_START),1)
 	CFLAGS += -DGPTP_AUTO_START
+	CPPFLAGS += -DGPTP_AUTO_START
 endif
 ifeq ($(RGPTP_CLNT_ENABLED),1)
 	CFLAGS += -DRGPTP_CLNT_ENABLED
+	CPPFLAGS += -DRGPTP_CLNT_ENABLED
 endif
 
 all: libgptp_test
