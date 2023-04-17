@@ -78,6 +78,9 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include <atomic>
 #include <limits.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 pthread_mutex_t gInitMutex = PTHREAD_MUTEX_INITIALIZER;
 #define LOCK()  	pthread_mutex_lock(&gInitMutex)
 #define UNLOCK()	pthread_mutex_unlock(&gInitMutex)
@@ -231,17 +234,23 @@ static int gptpScaling(gPtpTimeData * td, char *memory_offset_buffer)
 	uint32_t a,b;
 	gPtpTimeData *ptimedata;
 	int count = 0;
+	char *dest = (char*)td;
+	char *src = NULL;
 	buf_offset += (2 * sizeof(std::atomic<uint32_t>));
 
 	seq0 = (std::atomic<uint32_t> *)memory_offset_buffer;
 	seq1 = (std::atomic<uint32_t> *)(memory_offset_buffer + sizeof(std::atomic<uint32_t>));
 	ptimedata   = (gPtpTimeData *) (memory_offset_buffer + buf_offset);
-
+	src = (char *)ptimedata;
 	do {
 	a = seq0->load();
 	b = seq1->load();
 
-	memcpy(td, ptimedata, sizeof(*td));
+	//memcpy(td, ptimedata, sizeof(*td)); //commented due to bus error issue
+	for(int i=0; i<sizeof(gPtpTimeData); i++ )
+	{
+	    dest[i] = *(volatile char *)(&src[i]);
+	}
 	count++;
 
 	}while((a!=b || a!=seq0->load() || b != seq1->load())&&count<3);
@@ -798,5 +807,9 @@ bool rgptpDeinit(void) {
     rgptp_clkid = -1;
 
     return true;
+}
+#endif
+
+#ifdef __cplusplus
 }
 #endif
