@@ -225,6 +225,7 @@ typedef struct {
     // True, if it's a modem
     // Otherwise mic/headset
     bool isVoiceCall;
+    float volume_level;
 } pvt_data_t;
 
 typedef enum {
@@ -538,6 +539,7 @@ void get_out_device_id (avb_pal_out_device_id_t outDeviceId,
     }
 }
 
+
 // Each configuration name value pair for this mapping will result in this callback being called.
 void openavbIntfPalCfgCB(media_q_t *pMediaQ, const char *name,
                          const char *value)
@@ -772,6 +774,14 @@ void openavbIntfPalCfgCB(media_q_t *pMediaQ, const char *name,
             get_out_device_id(outDeviceId, &(pPvtData->devices));
             pPvtData->deviceId = pPvtData->devices.id;
             AVB_LOGF_INFO("out device id= %d", pPvtData->deviceId);
+        } else if (strcmp(name, "intf_nv_pal_volume_level") == 0) {
+            pPvtData->volume_level = strtof(value, &pEnd);
+            AVB_LOGF_INFO("intf_nv_pal_volume_level: %f \n", pPvtData->volume_level);
+
+            if (pPvtData->volume_level < 0 || pPvtData->volume_level > 1) {
+                AVB_LOG_INFO("volume level has to be between 0.0 to 1.0. setting the default value of 0.4");
+                pPvtData->volume_level = 0.4f;
+            }
         }
     }
 
@@ -883,7 +893,7 @@ void openavbIntfPalTxInitCB(media_q_t *pMediaQ)
             AVB_LOG_INFO("Voice Call setup.");
         } else {
             memset(&pPvtData->stream_attr, 0, sizeof(pPvtData->stream_attr));
-            pPvtData->stream_attr.type = PAL_STREAM_LOW_LATENCY;
+            pPvtData->stream_attr.type = PAL_STREAM_DEEP_BUFFER;
             pPvtData->stream_attr.info.opt_stream_info.version = 1;
             pPvtData->stream_attr.info.opt_stream_info.duration_us = -1;
             pPvtData->stream_attr.info.opt_stream_info.has_video = false;
@@ -958,7 +968,40 @@ void openavbIntfPalTxInitCB(media_q_t *pMediaQ)
             return;
         }
 
-        pal_stream_start(pPvtData->pcmHandle);
+        errval = pal_stream_start(pPvtData->pcmHandle);
+
+        if (errval != 0) {
+            AVB_LOGF_ERROR("stream_start failed, returned %d ", errval);
+            return -1;
+        }
+
+        struct pal_volume_data* volume_data = (struct pal_volume_data *) calloc(1,
+                                              sizeof(uint32_t) + (pPvtData->audioChannels * sizeof(struct
+                                                      pal_channel_vol_kv)));
+
+        if (volume_data == NULL) {
+            AVB_LOG_ERROR("Unable to set volume");
+        } else {
+            if (pPvtData->audioChannels == 1) {
+                volume_data->no_of_volpair = 1;
+                volume_data->volume_pair[0].channel_mask = PAL_CHMAP_CHANNEL_FL;
+                volume_data->volume_pair[0].vol = pPvtData->volume_level;
+            } else {
+                volume_data->no_of_volpair = 2;
+                volume_data->volume_pair[0].channel_mask = PAL_CHMAP_CHANNEL_FL;
+                volume_data->volume_pair[0].vol = pPvtData->volume_level;
+                volume_data->volume_pair[1].channel_mask = PAL_CHMAP_CHANNEL_FR;
+                volume_data->volume_pair[1].vol = pPvtData->volume_level;
+            }
+
+            errval = pal_stream_set_volume(pPvtData->pcmHandle, volume_data);
+
+            if (errval) {
+                AVB_LOGF_ERROR("Pal Stream volume Error (%x)", errval);
+            }
+
+            AVB_LOG_INFO("Pal Stream volume is set");
+        }
     }
 
     AVB_TRACE_EXIT(AVB_TRACE_INTF);
@@ -1314,7 +1357,40 @@ void openavbIntfPalRxInitCB(media_q_t *pMediaQ)
             return -1;
         }
 
-        pal_stream_start(pPvtData->pcmHandle);
+        errval = pal_stream_start(pPvtData->pcmHandle);
+
+        if (errval != 0) {
+            AVB_LOGF_ERROR("stream_start failed, returned %d ", errval);
+            return -1;
+        }
+
+        struct pal_volume_data* volume_data = (struct pal_volume_data *) calloc(1,
+                                              sizeof(uint32_t) + (pPvtData->audioChannels * sizeof(struct
+                                                      pal_channel_vol_kv)));
+
+        if (volume_data == NULL) {
+            AVB_LOG_ERROR("Unable to set volume");
+        } else {
+            if (pPvtData->audioChannels == 1) {
+                volume_data->no_of_volpair = 1;
+                volume_data->volume_pair[0].channel_mask = PAL_CHMAP_CHANNEL_FL;
+                volume_data->volume_pair[0].vol = pPvtData->volume_level;
+            } else {
+                volume_data->no_of_volpair = 2;
+                volume_data->volume_pair[0].channel_mask = PAL_CHMAP_CHANNEL_FL;
+                volume_data->volume_pair[0].vol = pPvtData->volume_level;
+                volume_data->volume_pair[1].channel_mask = PAL_CHMAP_CHANNEL_FR;
+                volume_data->volume_pair[1].vol = pPvtData->volume_level;
+            }
+
+            errval = pal_stream_set_volume(pPvtData->pcmHandle, volume_data);
+
+            if (errval) {
+                AVB_LOGF_ERROR("Pal Stream volume Error (%x)", errval);
+            }
+
+            AVB_LOG_INFO("Pal Stream volume is set");
+        }
     }
 
     AVB_TRACE_EXIT(AVB_TRACE_INTF);
@@ -1522,6 +1598,7 @@ extern DLL_EXPORT bool openavbIntfPalInitialize(media_q_t *pMediaQ,
         MUTEX_CREATE(pPvtData->mtxActualMinusRefFrames, mta);
         MUTEX_LOG_ERR("Error creating mutex");
         pPvtData->ch2Fd = 0;
+        pPvtData->volume_level = 1.0f;
     }
 
     AVB_TRACE_EXIT(AVB_TRACE_INTF);
