@@ -866,6 +866,8 @@ void openavbIntfPalTxInitCB(media_q_t *pMediaQ)
 
     if (pMediaQ) {
         pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
+        media_q_pub_map_uncmp_audio_info_t *pPubMapUncmpAudioInfo =
+            pMediaQ->pPubMapInfo;
 
         if (!pPvtData) {
             AVB_LOG_ERROR("Private interface module data not allocated.");
@@ -956,7 +958,7 @@ void openavbIntfPalTxInitCB(media_q_t *pMediaQ)
         }
 
         pPvtData->inBufSize =
-            1920; //pPvtData->audioChannels * (pPvtData->audioBitDepth / 8); //hardcoded based on bala's input
+            pPubMapUncmpAudioInfo->itemSize; //previously had hardcoded to 1920
         pPvtData->inBufCount = 4;
         errval = pal_stream_set_buffer_size(pPvtData->pcmHandle,
                                             (size_t*)&pPvtData->inBufSize, pPvtData->inBufCount,
@@ -1248,6 +1250,8 @@ void openavbIntfPalRxInitCB(media_q_t *pMediaQ)
     int errval = 0;
 
     if (pMediaQ) {
+        media_q_pub_map_uncmp_audio_info_t *pPubMapUncmpAudioInfo =
+            pMediaQ->pPubMapInfo;
         pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
 
         if (!pPvtData) {
@@ -1344,8 +1348,7 @@ void openavbIntfPalRxInitCB(media_q_t *pMediaQ)
             AVB_LOG_INFO("pcm open success");
         }
 
-        pPvtData->outBufSize =
-            1024;//pPvtData->audioChannels * (pPvtData->audioBitDepth / 8); //based on bala's input
+        pPvtData->outBufSize = pPubMapUncmpAudioInfo->itemSize; //previously set to 1024
         pPvtData->outBufCount = 4;
         errval = pal_stream_set_buffer_size(pPvtData->pcmHandle,
                                             (size_t*)&pPvtData->inBufSize, pPvtData->inBufCount,
