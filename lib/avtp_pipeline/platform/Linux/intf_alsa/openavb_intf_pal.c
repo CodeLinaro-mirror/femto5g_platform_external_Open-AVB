@@ -550,6 +550,7 @@ void openavbIntfPalCfgCB(media_q_t *pMediaQ, const char *name,
         char *pEnd;
         long tmp;
         U32 val;
+        U32 VoiceCall = 0;
         avb_pal_in_device_id_t      inDeviceId = 0;
         avb_pal_out_device_id_t     outDeviceId = 0;
         pvt_data_t *pPvtData = pMediaQ->pPvtIntfInfo;
@@ -757,12 +758,24 @@ void openavbIntfPalCfgCB(media_q_t *pMediaQ, const char *name,
             AVB_LOGF_INFO("intf_nv_alsa_stop_threshold = %d", pPvtData->alsaStopThreshold);
         } else if (strcmp(name, "intf_nv_is_voice_call") ==
                    0) {
-            pPvtData->isVoiceCall = strtol(value,
-                                           &pEnd, 10);
-            AVB_LOGF_INFO("intf_nv_is_voice_call = %d", pPvtData->isVoiceCall);
+            VoiceCall = strtol(value, &pEnd, 10);
+
+            if (VoiceCall != 0 && VoiceCall != 1) {
+                AVB_LOG_ERROR("intf_nv_is_voice_call has to be 0 or 1. setting the default value as 0");
+                pPvtData->isVoiceCall = 0;
+            } else {
+                pPvtData->isVoiceCall = VoiceCall;
+                AVB_LOGF_INFO("intf_nv_is_voice_call = %d", pPvtData->isVoiceCall);
+            }
         } else if (strcmp(name, "intf_nv_pal_in_device_id") ==
                    0) {
             inDeviceId = strtol(value, &pEnd, 10);
+
+            if (inDeviceId < 0 || inDeviceId > 18) {
+                AVB_LOG_ERROR("intf_nv_pal_in_device_id has to be in between 0 to 18. setting the default value as 3");
+                inDeviceId = 3;
+            }
+
             AVB_LOGF_INFO("intf_nv_pal_in_device_id = %d", inDeviceId);
             get_in_device_id(inDeviceId, &(pPvtData->devices));
             pPvtData->deviceId = pPvtData->devices.id;
@@ -770,6 +783,12 @@ void openavbIntfPalCfgCB(media_q_t *pMediaQ, const char *name,
         } else if (strcmp(name, "intf_nv_pal_out_device_id") ==
                    0) {
             outDeviceId = strtol(value, &pEnd, 10);
+
+            if (outDeviceId < 0 || outDeviceId > 17) {
+                AVB_LOG_ERROR("intf_nv_pal_out_device_id has to be in between 0 to 17. setting the default value as 3\n");
+                outDeviceId = 3;
+            }
+
             AVB_LOGF_INFO("intf_nv_pal_out_device_id = %d", outDeviceId);
             get_out_device_id(outDeviceId, &(pPvtData->devices));
             pPvtData->deviceId = pPvtData->devices.id;
