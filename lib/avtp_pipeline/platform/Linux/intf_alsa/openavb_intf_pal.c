@@ -976,8 +976,7 @@ void openavbIntfPalTxInitCB(media_q_t *pMediaQ)
             AVB_LOG_INFO("pcm open success");
         }
 
-        pPvtData->inBufSize =
-            pPubMapUncmpAudioInfo->itemSize; //previously had hardcoded to 1920
+        pPvtData->inBufSize = 1920;
         pPvtData->inBufCount = 4;
         errval = pal_stream_set_buffer_size(pPvtData->pcmHandle,
                                             (size_t*)&pPvtData->inBufSize, pPvtData->inBufCount,
