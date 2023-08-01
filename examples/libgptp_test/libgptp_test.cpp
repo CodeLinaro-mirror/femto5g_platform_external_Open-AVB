@@ -45,6 +45,9 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <unistd.h>
 #include <gptp_helper.h>
 
+#define CLOCKFD 3
+#define FD_TO_CLOCKID(fd)	((~(clockid_t) (fd) << 3) | CLOCKFD)
+
 uint64_t systemTime(int clock)
 {
     uint64_t ret;
@@ -178,6 +181,39 @@ void do_some_tests_gptp_mono() {
             printf("ns ptp_time %" PRIu64 "ns mono_time %" PRIu64 "\n",ptp_time,mono_time);
         }
     }
+}
+
+void get_gptp_time()
+{
+    struct timespec ts;
+    static clockid_t gPtpClockid = -1;
+    uint64_t curr_gptp_time;
+#ifdef AVB_FEATURE_GVM_MODE
+
+    int gptp_phc_fd = open("/dev/ptp0", O_RDWR );
+
+    if( gptp_phc_fd == -1 ||
+        (gPtpClockid = FD_TO_CLOCKID(gptp_phc_fd)) == -1 ) {
+        printf("Failed to open PTP clock device error 0x%x(%s)\n", errno, strerror(errno));
+        return;
+    }
+
+    if (clock_gettime(gPtpClockid, &ts)) {
+        printf("clock_gettime failed 0x%x (%s)\n", errno, strerror(errno));
+        close(gptp_phc_fd);
+        return;
+    }
+
+    if(ts.tv_sec == 0 && ts.tv_nsec == 0) {
+        printf("gptp time read taking longer time\n");
+        close(gptp_phc_fd);
+        return;
+    }
+    curr_gptp_time = (ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+    printf("current gptp time = %ld\n", curr_gptp_time);
+    close(gptp_phc_fd);
+#endif
+    return;
 }
 
 #ifdef RGPTP_CLNT_ENABLED
@@ -349,7 +385,10 @@ int main(int argc, char *argv[])
 		else if(argv[1][0] == 'm') {
 			 printf("\n\n\n====================gPTP Monotonic pair based test=====================\n\n\n");
             do_some_tests_gptp_mono();
-		}
+		} else if (argv[1][0] == 'g') {
+            printf("\n\n=======================clock_gettime based test=========================\n\n");
+            get_gptp_time();
+        }
 #ifdef RGPTP_CLNT_ENABLED
         else if(argv[1][0] == 'r') {
             rgptp_test();

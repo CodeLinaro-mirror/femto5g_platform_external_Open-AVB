@@ -722,8 +722,8 @@ bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur, uint64_t *mono_time_cu
 	a = seq0->load();
 	b = seq1->load();
     if (clock_gettime(gPtpClockid, &ts)) {
-	printf("clock_gettime failed");
-	return false;
+	    printf("clock_gettime failed 0x%x (%s)", errno, strerror(errno));
+	    return false;
     }
 
 	if(ts.tv_sec == 0 && ts.tv_nsec == 0) {
