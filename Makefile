@@ -22,11 +22,25 @@ gptp:
 gptp_clean:
 	$(call descend,daemons/gptp/linux/build/,clean)
 
+gptp_install: FORCE
+ifeq ($(ENABLE_GPTP),1)
+	mkdir -p $(DESTDIR)$(bindir)
+	install -m 0755 daemons/gptp/linux/build/obj/qgptp $(DESTDIR)$(bindir)
+endif
+
 libgptp:
 	$(call descend,lib/libgptp)
 
 libgptp_clean:
 	$(call descend,lib/libgptp/,clean)
+
+libgptp_install: FORCE
+ifeq ($(ENABLE_LIBGPTP),1)
+	mkdir -p $(DESTDIR)$(libdir)
+	mkdir -p $(DESTDIR)$(includedir)
+	install -m 0755 lib/libgptp/*.so $(DESTDIR)$(libdir)
+	install -m 0644 lib/libgptp/gptp_helper.h ${DESTDIR}${includedir}
+endif
 
 libgptp_test:
 	$(call descend,examples/$@)
@@ -34,7 +48,15 @@ libgptp_test:
 libgptp_test_clean:
 	$(call descend,examples/libgptp_test/,clean)
 
+libgptp_test_install: FORCE
+ifeq ($(ENABLE_LIBGPTP_TEST),1)
+	mkdir -p $(DESTDIR)$(bindir)
+	install -m 0755 examples/libgptp_test/libgptp_test $(DESTDIR)$(bindir)
+endif
+
 all: gptp libgptp libgptp_test
+
+install: gptp_install libgptp_install libgptp_test_install
 
 clean: gptp_clean libgptp_clean libgptp_test_clean
 
