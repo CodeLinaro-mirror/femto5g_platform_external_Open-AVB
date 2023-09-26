@@ -22,6 +22,12 @@ LOCAL_CFLAGS += -DAVB_FEATURE_GVM_MODE=1
 LOCAL_SHARED_LIBRARIES := libuhab libion
 endif
 endif
+
+ifeq ($(TARGET_BOARD_SUFFIX),_gvm)
+LOCAL_CFLAGS += -DAVB_FEATURE_GVM_MODE=1
+LOCAL_SHARED_LIBRARIES := libuhab libion
+endif
+
 LOCAL_CLANG := true
 
 LOCAL_MODULE_TAGS := optional

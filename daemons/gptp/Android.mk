@@ -10,6 +10,10 @@ LOCAL_CFLAGS += -DAVB_FEATURE_GVM_MODE=1
 endif
 endif
 
+ifeq ($(TARGET_BOARD_SUFFIX),_gvm)
+LOCAL_CFLAGS += -DAVB_FEATURE_GVM_MODE=1
+endif
+
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/common \
                     $(LOCAL_PATH)/linux/src
 
