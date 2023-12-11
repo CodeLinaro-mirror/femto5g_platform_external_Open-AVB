@@ -66,6 +66,7 @@ OBJ_FILES = $(OBJ_DIR)/ptp_message.o\
 		 $(OBJ_DIR)/linux_hal_persist_file.o\
 		 $(OBJ_DIR)/gptp_log.o\
 		 $(OBJ_DIR)/platform.o \
+		 $(OBJ_DIR)/qgptp_rmgr.o \
 		 $(OBJ_DIR)/ini.o \
 		 $(OBJ_DIR)/gptp_cfg.o
 
@@ -88,6 +89,7 @@ HEADER_FILES = $(COMMON_DIR)/ether_port.hpp\
 		$(COMMON_DIR)/gptp_cfg.hpp\
 		$(COMMON_DIR)/gptp_log.hpp\
 		$(SRC_DIR)/linux_ipc.hpp\
+		$(SRC_DIR)/qgptp_rmgr.h\
 		$(SRC_DIR)/linux_hal_common.hpp\
 		$(SRC_DIR)/linux_hal_persist_file.hpp\
 		$(SRC_DIR)/platform.hpp
@@ -156,6 +158,9 @@ ifeq ($(RGPTP_ENABLED),1)
 $(OBJ_DIR)/rgptp.o: $(SRC_DIR)/rgptp.cpp $(HEADER_FILES)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SRC_DIR)/rgptp.cpp -o $(OBJ_DIR)/rgptp.o $(INCPATHS)
 endif
+
+$(OBJ_DIR)/qgptp_rmgr.o: $(SRC_DIR)/qgptp_rmgr.cpp $(HEADER_FILES)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SRC_DIR)/qgptp_rmgr.cpp -o $(OBJ_DIR)/qgptp_rmgr.o $(INCPATHS)
 
 $(OBJ_DIR)/linux_hal_common.o: $(SRC_DIR)/linux_hal_common.cpp $(HEADER_FILES)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SRC_DIR)/linux_hal_common.cpp -o $(OBJ_DIR)/linux_hal_common.o

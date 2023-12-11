@@ -29,10 +29,15 @@
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
-  Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+******************************************************************************/
 
-  Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
-  SPDX-License-Identifier: BSD-3-Clause-Clear
+/******************************************************************************
+
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+
 ******************************************************************************/
 
 #ifndef LINUX_HAL_COMMON_HPP
@@ -53,13 +58,14 @@
 
 #include <list>
 
-#define ONE_WAY_PHY_DELAY 400	/*!< One way phy delay. TX or RX phy delay default value*/
-#define P8021AS_MULTICAST "\x01\x80\xC2\x00\x00\x0E"	/*!< Default multicast address*/
-#define PTP_DEVICE "/dev/ptpXX"			/*!< Default PTP device */
-#define PTP_DEVICE_IDX_OFFS 8			/*!< PTP device index offset*/
-#define CLOCKFD 3						/*!< Clock file descriptor */
-#define FD_TO_CLOCKID(fd)       ((~(clockid_t) (fd) << 3) | CLOCKFD)	/*!< Converts an FD to CLOCKID */
-#define SET_PTP_DATA				101
+#define ONE_WAY_PHY_DELAY 400   /*!< One way phy delay. TX or RX phy delay default value*/
+#define P8021AS_MULTICAST "\x01\x80\xC2\x00\x00\x0E"    /*!< Default multicast address*/
+#define PTP_DEVICE "/dev/ptpXX"         /*!< Default PTP device */
+#define PTP_DEVICE_IDX_OFFS 8           /*!< PTP device index offset*/
+#define CLOCKFD 3                       /*!< Clock file descriptor */
+#define FD_TO_CLOCKID(fd)       ((~(clockid_t) (fd) << 3) | CLOCKFD)    /*!< Converts an FD to CLOCKID */
+#define IF_NAMESIZE 16
+#define SET_PTP_DATA                101
 
 struct timespec;
 
@@ -86,158 +92,169 @@ typedef struct TicketingLockPrivate * TicketingLockPrivate_t;
  * waiting until the result its ticket is equal to the value of the release
  * counter. It releases the lock by incrementing the release counter.
  */
-class TicketingLock {
-public:
-	/**
-	 * @brief  Lock mechanism.
-	 * Gets a ticket and try locking the process.
-	 * @param  got [out] If non-null, it is set to TRUE when the lock is acquired. FALSE otherwise.
-	 * @return TRUE when successfully got the lock, FALSE otherwise.
-	 */
-	bool lock( bool *got = NULL );
+class TicketingLock
+{
+    public:
+        /**
+         * @brief  Lock mechanism.
+         * Gets a ticket and try locking the process.
+         * @param  got [out] If non-null, it is set to TRUE when the lock is acquired. FALSE otherwise.
+         * @return TRUE when successfully got the lock, FALSE otherwise.
+         */
+        bool lock( bool *got = NULL );
 
-	/**
-	 * @brief  Unlock mechanism. Increments the release counter and unblock other threads
-	 * waiting for a condition flag.
-	 * @return TRUE in case of success, FALSE otherwise.
-	 */
-	bool unlock();
+        /**
+         * @brief  Unlock mechanism. Increments the release counter and unblock other threads
+         * waiting for a condition flag.
+         * @return TRUE in case of success, FALSE otherwise.
+         */
+        bool unlock();
 
-	/**
-	 * @brief Initializes all flags and counters. Create private structures.
-	 * @return TRUE in case of success, FALSE otherwise.
-	 */
-	bool init();
+        /**
+         * @brief Initializes all flags and counters. Create private structures.
+         * @return TRUE in case of success, FALSE otherwise.
+         */
+        bool init();
 
-	/**
-	 * @brief Default constructor sets some flags to false that will be initialized on
-	 * the init method. Protects against using lock/unlock without calling init.
-	 */
-	TicketingLock();
+        /**
+         * @brief Default constructor sets some flags to false that will be initialized on
+         * the init method. Protects against using lock/unlock without calling init.
+         */
+        TicketingLock();
 
-	/**
-	 * @brief Deletes the object and private structures.
-	 */
-	~TicketingLock();
-private:
-	bool init_flag;
-	TicketingLockPrivate_t _private;
-	bool in_use;
-	uint8_t cond_ticket_issue;
-	uint8_t cond_ticket_serving;
+        /**
+         * @brief Deletes the object and private structures.
+         */
+        ~TicketingLock();
+    private:
+        bool init_flag;
+        TicketingLockPrivate_t _private;
+        bool in_use;
+        uint8_t cond_ticket_issue;
+        uint8_t cond_ticket_serving;
 };
 
 /**
  * @brief LinuxTimestamper: Provides a generic hardware
  * timestamp interface for linux based systems.
  */
-class LinuxTimestamper : public EtherTimestamper {
-public:
-	/**
-	 * @brief Destructor
-	 */
-	virtual ~LinuxTimestamper() = 0;
+class LinuxTimestamper : public EtherTimestamper
+{
+    public:
+        char iface_name[IF_NAMESIZE];
+        /**
+         * @brief Destructor
+         */
+        virtual ~LinuxTimestamper() = 0;
 
-	/**
-	 * @brief  Provides a generic method for initializing timestamp interfaces
-	 * @param  ifindex Network device interface index
-	 * @param  sd Socket descriptor
-	 * @param  lock [in] Pointer to ticketing Lock object
-	 * @return TRUE if success, FALSE in case of error
-	 */
-	virtual bool post_init( int ifindex, int sd, TicketingLock *lock ) = 0;
+        /**
+         * @brief  Provides a generic method for initializing timestamp interfaces
+         * @param  ifindex Network device interface index
+         * @param  sd Socket descriptor
+         * @param  lock [in] Pointer to ticketing Lock object
+         * @return TRUE if success, FALSE in case of error
+         */
+        virtual bool post_init( int ifindex, int sd, TicketingLock *lock ) = 0;
+
+        virtual void setifacename(const char *ifname)
+        {
+            PLAT_strlcpy(iface_name, ifname, IF_NAMESIZE);
+        }
 };
 
 /**
  * @brief Provides a Linux network generic interface
  */
-class LinuxNetworkInterface : public OSNetworkInterface {
-	friend class LinuxNetworkInterfaceFactory;
-private:
-	LinkLayerAddress local_addr;
-	int sd_event;
-	int sd_general;
-	LinuxTimestamper *timestamper;
-	int ifindex;
+class LinuxNetworkInterface : public OSNetworkInterface
+{
+        friend class LinuxNetworkInterfaceFactory;
+    private:
+        LinkLayerAddress local_addr;
+        int sd_event;
+        int sd_general;
+        LinuxTimestamper *timestamper;
+        int ifindex;
 
-	TicketingLock net_lock;
-public:
-	/**
-	 * @brief Sends a packet to a remote address
-	 * @param addr [in] Remote link layer address
-	 * @param etherType [in] The EtherType of the message in host order
-	 * @param payload [in] Data buffer
-	 * @param length Size of data buffer
-	 * @param timestamp TRUE if to use the event socket with the PTP multicast address. FALSE if to use
-	 * a general socket.
-	 * @return net_fatal if error, net_success if success
-	 */
-	virtual net_result send
-	( LinkLayerAddress *addr, uint16_t etherType, uint8_t *payload, size_t length,
-	  bool timestamp );
+        TicketingLock net_lock;
+    public:
+        /**
+         * @brief Sends a packet to a remote address
+         * @param addr [in] Remote link layer address
+         * @param etherType [in] The EtherType of the message in host order
+         * @param payload [in] Data buffer
+         * @param length Size of data buffer
+         * @param timestamp TRUE if to use the event socket with the PTP multicast address. FALSE if to use
+         * a general socket.
+         * @return net_fatal if error, net_success if success
+         */
+        virtual net_result send
+        ( LinkLayerAddress *addr, uint16_t etherType, uint8_t *payload, size_t length,
+          bool timestamp );
 
-	/**
-	 * @brief  Receives a packet from a remote address
-	 * @param  addr [in] Remote link layer address
-	 * @param  payload [out] Data buffer
-	 * @param  length [out] Size of received data buffer
-	 * @return net_succeed in case of successful reception, net_trfail in case there is
-	 * an error on the transmit side, net_fatal if error on reception
-	 */
-	virtual net_result nrecv
-	( LinkLayerAddress *addr, uint8_t *payload, size_t &length );
+        /**
+         * @brief  Receives a packet from a remote address
+         * @param  addr [in] Remote link layer address
+         * @param  payload [out] Data buffer
+         * @param  length [out] Size of received data buffer
+         * @return net_succeed in case of successful reception, net_trfail in case there is
+         * an error on the transmit side, net_fatal if error on reception
+         */
+        virtual net_result nrecv
+        ( LinkLayerAddress *addr, uint8_t *payload, size_t &length );
 
-	/**
-	 * @brief  Disables rx socket descriptor rx queue
-	 * @return void
-	 */
-	void disable_rx_queue();;
+        /**
+         * @brief  Disables rx socket descriptor rx queue
+         * @return void
+         */
+        void disable_rx_queue();;
 
-	/**
-	 * @brief  Clears and enables the rx socket descriptor
-	 * @return void
-	 */
-	void clear_reenable_rx_queue();
+        /**
+         * @brief  Clears and enables the rx socket descriptor
+         * @return void
+         */
+        void clear_reenable_rx_queue();
 
-	/**
-	 * @brief  Gets the local link layer address
-	 * @param  addr [out] Pointer to the LinkLayerAddress object
-	 * @return void
-	 */
-	virtual void getLinkLayerAddress( LinkLayerAddress *addr ) {
-		*addr = local_addr;
-	}
+        /**
+         * @brief  Gets the local link layer address
+         * @param  addr [out] Pointer to the LinkLayerAddress object
+         * @return void
+         */
+        virtual void getLinkLayerAddress( LinkLayerAddress *addr )
+        {
+            *addr = local_addr;
+        }
 
-	/**
-	 * @brief Get speed of network link
-	 *
-	 * @param [in] sd	Open socket descriptor
-	 * @param [out] speed	Link speed in kb/sec
-	 * @return false on error
-	 */
-	bool getLinkSpeed( int sd, uint32_t *speed );
+        /**
+         * @brief Get speed of network link
+         *
+         * @param [in] sd   Open socket descriptor
+         * @param [out] speed   Link speed in kb/sec
+         * @return false on error
+         */
+        bool getLinkSpeed( int sd, uint32_t *speed );
 
-	/**
-	 * @brief Watch for net link changes.
-	 */
-	virtual void watchNetLink( CommonPort *pPort );
+        /**
+         * @brief Watch for net link changes.
+         */
+        virtual void watchNetLink( CommonPort *pPort );
 
-	/**
-	 * @brief Gets the payload offset
-	 * @return payload offset
-	 */
-	virtual unsigned getPayloadOffset() {
-		return 0;
-	}
-	/**
-	 * @brief Destroys the network interface
-	 */
-	~LinuxNetworkInterface();
-protected:
-	/**
-	 * @brief Default constructor
-	 */
-	LinuxNetworkInterface() {};
+        /**
+         * @brief Gets the payload offset
+         * @return payload offset
+         */
+        virtual unsigned getPayloadOffset()
+        {
+            return 0;
+        }
+        /**
+         * @brief Destroys the network interface
+         */
+        ~LinuxNetworkInterface();
+    protected:
+        /**
+         * @brief Default constructor
+         */
+        LinuxNetworkInterface() {};
 };
 
 /**
@@ -254,70 +271,75 @@ typedef LinuxLockPrivate * LinuxLockPrivate_t;
 /**
  * @brief Extends OSLock generic interface to Linux
  */
-class LinuxLock : public OSLock {
-	friend class LinuxLockFactory;
-private:
-	OSLockType type;
-	LinuxLockPrivate_t _private;
-protected:
-	/**
-	 * @brief Default constructor.
-	 */
-	LinuxLock() {
-		_private = NULL;
-	}
+class LinuxLock : public OSLock
+{
+        friend class LinuxLockFactory;
+    private:
+        OSLockType type;
+        LinuxLockPrivate_t _private;
+    protected:
+        /**
+         * @brief Default constructor.
+         */
+        LinuxLock()
+        {
+            _private = NULL;
+        }
 
-	/**
-	 * @brief Initializes all mutexes and locks
-	 * @param type OSLockType enumeration. If oslock_recursive then set pthreads
-	 * attributes to PTHREAD_MUTEX_RECURSIVE
-	 * @return If successful, returns oslock_ok. Returns oslock_fail otherwise
-	 */
-	bool initialize( OSLockType type );
+        /**
+         * @brief Initializes all mutexes and locks
+         * @param type OSLockType enumeration. If oslock_recursive then set pthreads
+         * attributes to PTHREAD_MUTEX_RECURSIVE
+         * @return If successful, returns oslock_ok. Returns oslock_fail otherwise
+         */
+        bool initialize( OSLockType type );
 
-	/**
-	 * @brief Destroys mutexes if lock is still valid
-	 */
-	~LinuxLock();
+        /**
+         * @brief Destroys mutexes if lock is still valid
+         */
+        ~LinuxLock();
 
-	/**
-	 * @brief  Provides a simple lock mechanism.
-	 * @return oslock_fail if lock has failed, oslock_ok otherwise.
-	 */
-	OSLockResult lock();
+        /**
+         * @brief  Provides a simple lock mechanism.
+         * @return oslock_fail if lock has failed, oslock_ok otherwise.
+         */
+        OSLockResult lock();
 
-	/**
-	 * @brief Provides a simple trylock mechanism.
-	 * @return oslock_fail if lock has failed, oslock_ok otherwise.
-	 */
-	OSLockResult trylock();
+        /**
+         * @brief Provides a simple trylock mechanism.
+         * @return oslock_fail if lock has failed, oslock_ok otherwise.
+         */
+        OSLockResult trylock();
 
-	/**
-	 * @brief  Provides a simple unlock mechanism.
-	 * @return oslock_fail if unlock has failed, oslock_ok otherwise.
-	 */
-	OSLockResult unlock();
+        /**
+         * @brief  Provides a simple unlock mechanism.
+         * @return oslock_fail if unlock has failed, oslock_ok otherwise.
+         */
+        OSLockResult unlock();
 };
 
 /**
  * @brief Provides a factory pattern for LinuxLock class
  */
-class LinuxLockFactory:public OSLockFactory {
-public:
-	/**
-	 * @brief Creates the locking mechanism
-	 * @param type OSLockType enumeration
-	 * @return Pointer to OSLock object
-	 */
-	OSLock * createLock( OSLockType type ) const
-	{
-		LinuxLock *lock = new LinuxLock();
-		if (lock->initialize(type) != oslock_ok) {
-			delete lock;
-			lock = NULL;
-		}
-		return lock;
-	}
+class LinuxLockFactory: public OSLockFactory
+{
+    public:
+        /**
+         * @brief Creates the locking mechanism
+         * @param type OSLockType enumeration
+         * @return Pointer to OSLock object
+         */
+        OSLock * createLock( OSLockType type ) const
+        {
+            LinuxLock *lock = new LinuxLock();
+
+            if (lock->initialize(type) != oslock_ok) {
+                delete lock;
+                lock = NULL;
+            }
+
+            return lock;
+        }
 };
 
 struct LinuxConditionPrivate;
@@ -329,65 +351,68 @@ typedef struct LinuxConditionPrivate * LinuxConditionPrivate_t;
 /**
  * @brief Extends OSCondition class to Linux
  */
-class LinuxCondition : public OSCondition {
-	friend class LinuxConditionFactory;
-private:
-	LinuxConditionPrivate_t _private;
-protected:
+class LinuxCondition : public OSCondition
+{
+        friend class LinuxConditionFactory;
+    private:
+        LinuxConditionPrivate_t _private;
+    protected:
 
-	/**
-	 * @brief Initializes locks and mutex conditions
-	 * @return TRUE if it is ok, FALSE in case of error
-	 */
-	bool initialize();
-public:
+        /**
+         * @brief Initializes locks and mutex conditions
+         * @return TRUE if it is ok, FALSE in case of error
+         */
+        bool initialize();
+    public:
 
-	/**
-	 * @brief Counts up the amount of times we call the locking
-	 * mechanism
-	 * @return TRUE after incrementing the counter.
-	 */
-	bool wait_prelock();
+        /**
+         * @brief Counts up the amount of times we call the locking
+         * mechanism
+         * @return TRUE after incrementing the counter.
+         */
+        bool wait_prelock();
 
-	/**
-	 * @brief  Waits until the ready signal condition is met and decrements
-	 * the counter.
-	 */
-	bool wait();
+        /**
+         * @brief  Waits until the ready signal condition is met and decrements
+         * the counter.
+         */
+        bool wait();
 
-	/**
-	 * @brief  Unblock all threads that are busy waiting for a condition
-	 * @return TRUE
-	 */
-	bool signal();
+        /**
+         * @brief  Unblock all threads that are busy waiting for a condition
+         * @return TRUE
+         */
+        bool signal();
 
-	/*
-	 * Default constructor
-	 */
-	~LinuxCondition();
+        /*
+         * Default constructor
+         */
+        ~LinuxCondition();
 
-	/*
-	 * Destructor: Deletes internal variables
-	 */
-	LinuxCondition() {
-		_private = NULL;
-	}
+        /*
+         * Destructor: Deletes internal variables
+         */
+        LinuxCondition()
+        {
+            _private = NULL;
+        }
 };
 
 /**
  * @brief Implements factory design pattern for LinuxCondition class
  */
-class LinuxConditionFactory : public OSConditionFactory {
-public:
-	/**
-	 * @brief Creates LinuxCondition objects
-	 * @return Pointer to the OSCondition object in case of success. NULL otherwise
-	 */
-	OSCondition *createCondition() const
-	{
-		LinuxCondition *result = new LinuxCondition();
-		return result->initialize() ? result : NULL;
-	}
+class LinuxConditionFactory : public OSConditionFactory
+{
+    public:
+        /**
+         * @brief Creates LinuxCondition objects
+         * @return Pointer to the OSCondition object in case of success. NULL otherwise
+         */
+        OSCondition *createCondition() const
+        {
+            LinuxCondition *result = new LinuxCondition();
+            return result->initialize() ? result : NULL;
+        }
 };
 
 struct LinuxTimerQueueActionArg;
@@ -413,122 +438,127 @@ typedef struct LinuxTimerQueuePrivate * LinuxTimerQueuePrivate_t;
 /**
  * @brief Extends OSTimerQueue to Linux
  */
-class LinuxTimerQueue : public OSTimerQueue {
-	friend class LinuxTimerQueueFactory;
-	friend void *LinuxTimerQueueHandler( void * arg );
-private:
-	LinuxTimerQueueMap_t timerQueueMap;
-	int key;
-	bool stop;
-	LinuxTimerQueuePrivate_t _private;
-	OSLock *lock;
-	void LinuxTimerQueueAction( LinuxTimerQueueActionArg *arg );
-protected:
-	/**
-	 * @brief Default constructor
-	 */
-	LinuxTimerQueue() {
-		_private = NULL;
-	}
+class LinuxTimerQueue : public OSTimerQueue
+{
+        friend class LinuxTimerQueueFactory;
+        friend void *LinuxTimerQueueHandler( void * arg );
+    private:
+        LinuxTimerQueueMap_t timerQueueMap;
+        int key;
+        bool stop;
+        LinuxTimerQueuePrivate_t _private;
+        OSLock *lock;
+        void LinuxTimerQueueAction( LinuxTimerQueueActionArg *arg );
+    protected:
+        /**
+         * @brief Default constructor
+         */
+        LinuxTimerQueue()
+        {
+            _private = NULL;
+        }
 
-	/**
-	 * @brief Initializes internal variables
-	 * @return TRUE if success, FALSE otherwise.
-	 */
-	virtual bool init();
-public:
-	/**
-	 * @brief Deletes pre-allocated internal variables.
-	 */
-	~LinuxTimerQueue();
+        /**
+         * @brief Initializes internal variables
+         * @return TRUE if success, FALSE otherwise.
+         */
+        virtual bool init();
+    public:
+        /**
+         * @brief Deletes pre-allocated internal variables.
+         */
+        ~LinuxTimerQueue();
 
-	/**
-	 * @brief Add an event to the timer queue
-	 * @param micros Time in microsseconds
-	 * @param type  Event type
-	 * @param func Callback
-	 * @param arg inner argument of type event_descriptor_t
-	 * @param rm when true, allows elements to be deleted from the queue
-	 * @param event [inout] Pointer to the event
-	 * @param oneshot true for onetime timeout and false periodic timeout
-	 * @param timer_handle [inout] handle to new created timer
-	 * @return TRUE success, FALSE fail
-	 */
-	bool addEvent
-	( unsigned long micros, int type, ostimerq_handler func,
-	  void **arg, bool rm, unsigned *event,
-	  bool oneshot, timer_t **timer_handle );
+        /**
+         * @brief Add an event to the timer queue
+         * @param micros Time in microsseconds
+         * @param type  Event type
+         * @param func Callback
+         * @param arg inner argument of type event_descriptor_t
+         * @param rm when true, allows elements to be deleted from the queue
+         * @param event [inout] Pointer to the event
+         * @param oneshot true for onetime timeout and false periodic timeout
+         * @param timer_handle [inout] handle to new created timer
+         * @return TRUE success, FALSE fail
+         */
+        bool addEvent
+        ( unsigned long micros, int type, ostimerq_handler func,
+          void **arg, bool rm, unsigned *event,
+          bool oneshot, timer_t **timer_handle );
 
-	/**
-	 * @brief Removes an event from the timer queue
-	 * @param type Event type
-	 * @param event [inout] Pointer to the event
-	 * @return TRUE success, FALSE fail
-	 */
-	bool cancelEvent( int type, unsigned *event );
+        /**
+         * @brief Removes an event from the timer queue
+         * @param type Event type
+         * @param event [inout] Pointer to the event
+         * @return TRUE success, FALSE fail
+         */
+        bool cancelEvent( int type, unsigned *event );
 
-	/**
-	 * @brief Removes timer from the timer queue
-	 * @param handle to timer
-	 * @return TRUE success, FALSE fail
-	 */
-	bool cancelTimer( timer_t **time_handle );
+        /**
+         * @brief Removes timer from the timer queue
+         * @param handle to timer
+         * @return TRUE success, FALSE fail
+         */
+        bool cancelTimer( timer_t **time_handle );
 };
 
 /**
  * @brief Implements factory design pattern for linux
  */
-class LinuxTimerQueueFactory : public OSTimerQueueFactory {
-public:
-	/**
-	 * @brief Creates Linux timer queue
-	 * @param clock [in] Pointer to IEEE15588Clock type
-	 * @return Pointer to OSTimerQueue
-	 */
-	virtual OSTimerQueue *createOSTimerQueue( IEEE1588Clock *clock );
+class LinuxTimerQueueFactory : public OSTimerQueueFactory
+{
+    public:
+        /**
+         * @brief Creates Linux timer queue
+         * @param clock [in] Pointer to IEEE15588Clock type
+         * @return Pointer to OSTimerQueue
+         */
+        virtual OSTimerQueue *createOSTimerQueue( IEEE1588Clock *clock );
 };
 
 /**
  * @brief Extends the OSTimer generic class to Linux
  */
-class LinuxTimer : public OSTimer {
-	friend class LinuxTimerFactory;
- public:
-	/**
-	 * @brief Sleeps for a given amount of time in microsseconds
-	 * @param  micros Time in micro-seconds
-	 * @return -1 if error, micros (input argument) if success
-	 */
-	virtual unsigned long sleep(unsigned long micros);
- protected:
-	/**
-	 * @brief Destroys linux timer
-	 */
-	LinuxTimer() {};
+class LinuxTimer : public OSTimer
+{
+        friend class LinuxTimerFactory;
+    public:
+        /**
+         * @brief Sleeps for a given amount of time in microsseconds
+         * @param  micros Time in micro-seconds
+         * @return -1 if error, micros (input argument) if success
+         */
+        virtual unsigned long sleep(unsigned long micros);
+    protected:
+        /**
+         * @brief Destroys linux timer
+         */
+        LinuxTimer() {};
 };
 
 /**
  * @brief Provides factory design pattern for LinuxTimer
  */
-class LinuxTimerFactory : public OSTimerFactory {
- public:
-	 /**
-	  * @brief  Creates the linux timer
-	  * @return Pointer to OSTimer object
-	  */
-	virtual OSTimer *createTimer() const
-	{
-		return new LinuxTimer();
-	}
+class LinuxTimerFactory : public OSTimerFactory
+{
+    public:
+        /**
+         * @brief  Creates the linux timer
+         * @return Pointer to OSTimer object
+         */
+        virtual OSTimer *createTimer() const
+        {
+            return new LinuxTimer();
+        }
 };
 
 /**
  * @brief Provides the default arguments for the OSThread class
  */
 struct OSThreadArg {
-	OSThreadFunction func;  /*!< Callback function */
-	void *arg;	/*!< Input arguments */
-	OSThreadExitCode ret; /*!< Return code */
+    OSThreadFunction func;  /*!< Callback function */
+    void *arg;  /*!< Input arguments */
+    OSThreadExitCode ret; /*!< Return code */
 };
 
 /**
@@ -547,218 +577,234 @@ typedef LinuxThreadPrivate * LinuxThreadPrivate_t;
 /**
  * @brief Extends OSThread class to Linux
  */
-class LinuxThread : public OSThread {
-	friend class LinuxThreadFactory;
- private:
-	LinuxThreadPrivate_t _private;
-	OSThreadArg *arg_inner;
- public:
-	/**
-	 * @brief  Starts a new thread
-	 * @param  function Callback to the thread to be started
-	 * @param  arg Function's parameters
-	 * @return TRUE if no error during init, FALSE otherwise
-	 */
-	virtual bool start(OSThreadFunction function, void *arg);
+class LinuxThread : public OSThread
+{
+        friend class LinuxThreadFactory;
+    private:
+        LinuxThreadPrivate_t _private;
+        OSThreadArg *arg_inner;
+    public:
+        /**
+         * @brief  Starts a new thread
+         * @param  function Callback to the thread to be started
+         * @param  arg Function's parameters
+         * @return TRUE if no error during init, FALSE otherwise
+         */
+        virtual bool start(OSThreadFunction function, void *arg);
 
-	/**
-	 * @brief  Joins a new thread
-	 * @param  exit_code Callback's return code
-	 * @return TRUE if ok, FALSE if error.
-	 */
-	virtual bool join(OSThreadExitCode & exit_code);
-	virtual ~LinuxThread();
- protected:
-	LinuxThread();
+        /**
+         * @brief  Joins a new thread
+         * @param  exit_code Callback's return code
+         * @return TRUE if ok, FALSE if error.
+         */
+        virtual bool join(OSThreadExitCode & exit_code);
+        virtual ~LinuxThread();
+    protected:
+        LinuxThread();
 };
 
 /**
  * @brief Provides factory design pattern for LinuxThread class
  */
-class LinuxThreadFactory:public OSThreadFactory {
- public:
-	 /**
-	  * @brief Creates a new LinuxThread
-	  * @return Pointer to LinuxThread object
-	  */
-	 OSThread *createThread() const {
-		 return new LinuxThread();
-	 }
+class LinuxThreadFactory: public OSThreadFactory
+{
+    public:
+        /**
+         * @brief Creates a new LinuxThread
+         * @return Pointer to LinuxThread object
+         */
+        OSThread *createThread() const
+        {
+            return new LinuxThread();
+        }
 };
 
 /**
  * @brief Extends OSNetworkInterfaceFactory for LinuxNetworkInterface
  */
-class LinuxNetworkInterfaceFactory : public OSNetworkInterfaceFactory {
-public:
-	/**
-	 * @brief  Creates a new interface
-	 * @param net_iface [out] Network interface. Created internally.
-	 * @param label [in] Label to be cast to the interface's name internally
-	 * @param timestamper [in] Pointer to a hardware timestamp object
-	 * @return TRUE if no error during interface creation, FALSE otherwise
-	 */
-	virtual bool createInterface
-	( OSNetworkInterface **net_iface, InterfaceLabel *label,
-	  CommonTimestamper *timestamper );
+class LinuxNetworkInterfaceFactory : public OSNetworkInterfaceFactory
+{
+    public:
+        /**
+         * @brief  Creates a new interface
+         * @param net_iface [out] Network interface. Created internally.
+         * @param label [in] Label to be cast to the interface's name internally
+         * @param timestamper [in] Pointer to a hardware timestamp object
+         * @return TRUE if no error during interface creation, FALSE otherwise
+         */
+        virtual bool createInterface
+        ( OSNetworkInterface **net_iface, InterfaceLabel *label,
+          CommonTimestamper *timestamper );
 };
 
 /**
  * @brief Extends IPC ARG generic interface to linux
  */
-class LinuxIPCArg : public OS_IPC_ARG {
-private:
-	char *group_name;
-public:
-	/**
-	 * @brief  Initializes IPCArg object
-	 * @param group_name [in] Group's name
-	 */
-	LinuxIPCArg( char *group_name ) {
-		int len = strnlen(group_name,16);
-		this->group_name = new char[len+1];
-		PLAT_strlcpy( this->group_name, group_name, len+1 );
-	}
-	/**
-	 * @brief Destroys IPCArg internal variables
-	 */
-	virtual ~LinuxIPCArg() {
-		delete group_name;
-	}
-	friend class LinuxSharedMemoryIPC;
+class LinuxIPCArg : public OS_IPC_ARG
+{
+    private:
+        char *group_name;
+    public:
+        /**
+         * @brief  Initializes IPCArg object
+         * @param group_name [in] Group's name
+         */
+        LinuxIPCArg( char *group_name )
+        {
+            int len = strnlen(group_name, 16);
+            this->group_name = new char[len + 1];
+            PLAT_strlcpy( this->group_name, group_name, len + 1 );
+        }
+        /**
+         * @brief Destroys IPCArg internal variables
+         */
+        virtual ~LinuxIPCArg()
+        {
+            delete group_name;
+        }
+        friend class LinuxSharedMemoryIPC;
 };
 
-#define DEFAULT_GROUPNAME "vnw"		/*!< Default groupname for the shared memory interface*/
+#define DEFAULT_GROUPNAME "vnw"     /*!< Default groupname for the shared memory interface*/
 
 /**
  * @brief Linux shared memory interface
  */
-class LinuxSharedMemoryIPC:public OS_IPC {
-private:
-	int shm_fd;
-	int gptp_fd;
-	char *master_offset_buffer;
-	int err;
-public:
-	/**
-	 * @brief Initializes the internal flags
-	 */
-	LinuxSharedMemoryIPC() {
-		shm_fd = 0;
-		err = 0;
-		master_offset_buffer = NULL;
-	};
-	/**
-	 * @brief Destroys and unlinks shared memory
-	 */
-	~LinuxSharedMemoryIPC();
+class LinuxSharedMemoryIPC: public OS_IPC
+{
+    private:
+        int shm_fd;
+        int gptp_fd;
+        char *master_offset_buffer;
+        int err;
+    public:
+        /**
+         * @brief Initializes the internal flags
+         */
+        LinuxSharedMemoryIPC()
+        {
+            shm_fd = 0;
+            err = 0;
+            master_offset_buffer = NULL;
+        };
+        /**
+         * @brief Destroys and unlinks shared memory
+         */
+        ~LinuxSharedMemoryIPC();
 
-	/**
-	 * @brief  Initializes shared memory with DEFAULT_GROUPNAME case arg is null
-	 * @param  barg Groupname of the shared memory
-	 * @return TRUE if no error, FALSE otherwise
-	 */
-	virtual bool init( OS_IPC_ARG *barg = NULL );
+        /**
+         * @brief  Initializes shared memory with DEFAULT_GROUPNAME case arg is null
+         * @param  barg Groupname of the shared memory
+         * @return TRUE if no error, FALSE otherwise
+         */
+        virtual bool init( OS_IPC_ARG *barg = NULL );
 
-	/**
-	 * @brief Updates IPC values
-	 *
-	 * @param ml_phoffset Master to local phase offset
-	 * @param ls_phoffset Local to slave phase offset
-	 * @param ml_freqoffset Master to local frequency offset
-	 * @param ls_freqoffset Local to slave frequency offset
-	 * @param local_time Local time
-	 * @param sync_count Count of syncs
-	 * @param pdelay_count Count of pdelays
-	 * @param port_state Port's state
-	 * @param asCapable asCapable flag
-	 *
-	 * @return TRUE
-	 */
-	virtual bool update(
-		int64_t ml_phoffset,
-		int64_t ls_phoffset,
-		int64_t lq_phoffset,
-		FrequencyRatio ml_freqoffset,
-		FrequencyRatio ls_freqoffset,
-		FrequencyRatio lq_freqoffset,
-		uint64_t local_time,
-		uint32_t sync_count,
-		uint32_t pdelay_count,
-		PortState port_state,
-		bool asCapable );
+        /**
+         * @brief Updates IPC values
+         *
+         * @param ml_phoffset Master to local phase offset
+         * @param ls_phoffset Local to slave phase offset
+         * @param ml_freqoffset Master to local frequency offset
+         * @param ls_freqoffset Local to slave frequency offset
+         * @param local_time Local time
+         * @param sync_count Count of syncs
+         * @param pdelay_count Count of pdelays
+         * @param port_state Port's state
+         * @param asCapable asCapable flag
+         *
+         * @return TRUE
+         */
+        virtual bool update(
+            int64_t ml_phoffset,
+            int64_t ls_phoffset,
+            int64_t lq_phoffset,
+            FrequencyRatio ml_freqoffset,
+            FrequencyRatio ls_freqoffset,
+            FrequencyRatio lq_freqoffset,
+            uint64_t local_time,
+            uint32_t sync_count,
+            uint32_t pdelay_count,
+            PortState port_state,
+            bool asCapable );
 
-	/**
-	 * @brief Updates grandmaster IPC values
-	 *
-	 * @param gptp_grandmaster_id Current grandmaster id (all 0's if no grandmaster selected)
-	 * @param gptp_domain_number gPTP domain number
-	 *
-	 * @return TRUE
-	 */
-	virtual bool update_grandmaster(
-		uint8_t gptp_grandmaster_id[],
-		uint8_t gptp_domain_number );
+        /**
+         * @brief Updates grandmaster IPC values
+         *
+         * @param gptp_grandmaster_id Current grandmaster id (all 0's if no grandmaster selected)
+         * @param gptp_domain_number gPTP domain number
+         *
+         * @return TRUE
+         */
+        virtual bool update_grandmaster(
+            uint8_t gptp_grandmaster_id[],
+            uint8_t gptp_domain_number );
 
-	/**
-	 * @brief Updates network interface IPC values
-	 *
-	 * @param  clock_identity  The clock identity of the interface
-	 * @param  priority1  The priority1 field of the grandmaster functionality of the interface, or 0xFF if not supported
-	 * @param  clock_class  The clockClass field of the grandmaster functionality of the interface, or 0xFF if not supported
-	 * @param  offset_scaled_log_variance  The offsetScaledLogVariance field of the grandmaster functionality of the interface, or 0x0000 if not supported
-	 * @param  clock_accuracy  The clockAccuracy field of the grandmaster functionality of the interface, or 0xFF if not supported
-	 * @param  priority2  The priority2 field of the grandmaster functionality of the interface, or 0xFF if not supported
-	 * @param  domain_number  The domainNumber field of the grandmaster functionality of the interface, or 0 if not supported
-	 * @param  log_sync_interval  The currentLogSyncInterval field of the grandmaster functionality of the interface, or 0 if not supported
-	 * @param  log_announce_interval  The currentLogAnnounceInterval field of the grandmaster functionality of the interface, or 0 if not supported
-	 * @param  log_pdelay_interval  The currentLogPDelayReqInterval field of the grandmaster functionality of the interface, or 0 if not supported
-	 * @param  port_number  The portNumber field of the interface, or 0x0000 if not supported
-	 *
-	 * @return TRUE
-	 */
-	virtual bool update_network_interface(
-		uint8_t  clock_identity[],
-		uint8_t  priority1,
-		uint8_t  clock_class,
-		int16_t  offset_scaled_log_variance,
-		uint8_t  clock_accuracy,
-		uint8_t  priority2,
-		uint8_t  domain_number,
-		int8_t   log_sync_interval,
-		int8_t   log_announce_interval,
-		int8_t   log_pdelay_interval,
-		uint16_t port_number );
-   /**
-    * @brief Updates GmIdentity IPC values
-    * @return TRUE
-    */
-    virtual bool updateGmId(ClockIdentity& id, uint16_t portNumber);
+        /**
+         * @brief Updates network interface IPC values
+         *
+         * @param  clock_identity  The clock identity of the interface
+         * @param  priority1  The priority1 field of the grandmaster functionality of the interface, or 0xFF if not supported
+         * @param  clock_class  The clockClass field of the grandmaster functionality of the interface, or 0xFF if not supported
+         * @param  offset_scaled_log_variance  The offsetScaledLogVariance field of the grandmaster functionality of the interface, or 0x0000 if not supported
+         * @param  clock_accuracy  The clockAccuracy field of the grandmaster functionality of the interface, or 0xFF if not supported
+         * @param  priority2  The priority2 field of the grandmaster functionality of the interface, or 0xFF if not supported
+         * @param  domain_number  The domainNumber field of the grandmaster functionality of the interface, or 0 if not supported
+         * @param  log_sync_interval  The currentLogSyncInterval field of the grandmaster functionality of the interface, or 0 if not supported
+         * @param  log_announce_interval  The currentLogAnnounceInterval field of the grandmaster functionality of the interface, or 0 if not supported
+         * @param  log_pdelay_interval  The currentLogPDelayReqInterval field of the grandmaster functionality of the interface, or 0 if not supported
+         * @param  port_number  The portNumber field of the interface, or 0x0000 if not supported
+         *
+         * @return TRUE
+         */
+        virtual bool update_network_interface(
+            uint8_t  clock_identity[],
+            uint8_t  priority1,
+            uint8_t  clock_class,
+            int16_t  offset_scaled_log_variance,
+            uint8_t  clock_accuracy,
+            uint8_t  priority2,
+            uint8_t  domain_number,
+            int8_t   log_sync_interval,
+            int8_t   log_announce_interval,
+            int8_t   log_pdelay_interval,
+            uint16_t port_number );
+        /**
+         * @brief Updates GmIdentity IPC values
+         * @return TRUE
+         */
+        virtual bool updateGmId(ClockIdentity& id, uint16_t portNumber);
 
-	/**
-    * @brief Updates sync status
-    * @return TRUE
-    */
-	virtual bool updateSyncStatus(bool is_sync, PortState port_state);
+        /**
+        * @brief Updates sync status
+        * @return TRUE
+        */
+        virtual bool updateSyncStatus(bool is_sync, PortState port_state);
 
-	/**
-    * @brief Updates Qtimer to monotonic time offset
-    * @return TRUE
-    */
+        /**
+        * @brief Updates Proxy Mode status
+        * @param proxy_value - Proxy status
+        * @return Implementation dependent
+        */
+        virtual bool setProxyMode(int32_t proxy_value);
 
-	virtual bool updateQtimeToMonoOffset(int64_t offset);
+        /**
+        * @brief Updates Qtimer to monotonic time offset
+        * @return TRUE
+        */
 
-	/**
-	 * @brief unmaps and unlink shared memory
-	 * @return void
-	 */
-	void stop();
+        virtual bool updateQtimeToMonoOffset(int64_t offset);
 
-	/**
-	 * @brief Get sync status
-	 * @return true or false
-	 */
-	virtual bool getSyncStatus(void);
+        /**
+         * @brief unmaps and unlink shared memory
+         * @return void
+         */
+        void stop();
+
+        /**
+         * @brief Get sync status
+         * @return true or false
+         */
+        virtual bool getSyncStatus(void);
 };
 
 
