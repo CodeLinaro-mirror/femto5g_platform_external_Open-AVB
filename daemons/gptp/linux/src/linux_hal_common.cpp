@@ -29,6 +29,10 @@
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
+  Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+  Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+  SPDX-License-Identifier: BSD-3-Clause-Clear
 ******************************************************************************/
 
 #include <linux_hal_common.hpp>
@@ -61,6 +65,11 @@
 #include <linux/rtnetlink.h>
 #include <linux/sockios.h>
 #include <gptp_cfg.hpp>
+
+struct ptp_lib {
+      bool status;
+      int32_t port_status;
+};
 
 Timestamp tsToTimestamp(struct timespec *ts)
 {
@@ -913,7 +922,12 @@ LinuxSharedMemoryIPC::~LinuxSharedMemoryIPC() {
 #else
     shm_unlink(SHM_NAME);
 #endif
-
+#ifdef LE_SHARED_MEM
+    if (gptp_fd != -1) {
+        close(gptp_fd);
+        gptp_fd = -1;
+    }
+#endif
 }
 
 bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
@@ -948,6 +962,14 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
 		GPTP_LOG_ERROR( "shm_open(): %s", strerror(errno) );
 		goto exit_error;
 	}
+
+#ifdef LE_SHARED_MEM
+	gptp_fd = open("/dev/gptp", O_RDWR );
+
+	if (gptp_fd == -1) {
+		GPTP_LOG_ERROR( "open(): %s", strerror(errno) );
+	}
+#endif
 	(void) umask(oldumask);
 	if (fchown(shm_fd, -1, grp != NULL ? grp->gr_gid : 0) < 0) {
 		GPTP_LOG_ERROR("shm_open(): Failed to set ownership");
@@ -988,6 +1010,13 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
     unlink( SHM_NAME );
 #else
     shm_unlink( SHM_NAME );
+#endif
+
+#ifdef LE_SHARED_MEM
+    if (gptp_fd != -1) {
+        close(gptp_fd);
+        gptp_fd = -1;
+    }
 #endif
 
  exit_error:
@@ -1054,6 +1083,7 @@ bool LinuxSharedMemoryIPC::updateGmId(ClockIdentity& id, uint16_t portNumber) {
 
 bool LinuxSharedMemoryIPC::updateSyncStatus(bool is_sync , PortState port_state) {
        int buf_offset = 0;
+       int ret;
        char *shm_buffer = master_offset_buffer;
        gPtpTimeData *ptimedata;
        if (shm_buffer != NULL) {
@@ -1066,6 +1096,23 @@ bool LinuxSharedMemoryIPC::updateSyncStatus(bool is_sync , PortState port_state)
                /* unlock */
                pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
        }
+
+#ifdef LE_SHARED_MEM
+       struct ptp_lib ptp_status;
+       ptp_status.status = is_sync;
+       ptp_status.port_status = port_state;
+
+       ret = ioctl(gptp_fd, SET_PTP_DATA, (uint32_t*)&ptp_status);
+       if (ret)
+       {
+           GPTP_LOG_ERROR("set PTP status in kernel failed 0x%x (%s)\n", errno, strerror(errno));
+           if (gptp_fd != -1) {
+               close(gptp_fd);
+               gptp_fd = -1;
+           }
+       }
+       GPTP_LOG_DEBUG("set PTP status updated in kernel: %d port_status %d\n", ptp_status.status, ptp_status.port_status);
+#endif
        return true;
 }
 
@@ -1169,6 +1216,13 @@ void LinuxSharedMemoryIPC::stop() {
         unlink( SHM_NAME );
 #else
     	shm_unlink(SHM_NAME);
+#endif
+
+#ifdef LE_SHARED_MEM
+        if (gptp_fd != -1) {
+            close(gptp_fd);
+            gptp_fd = -1;
+        }
 #endif
 	}
 }

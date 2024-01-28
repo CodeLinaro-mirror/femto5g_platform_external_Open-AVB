@@ -29,6 +29,10 @@
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
+  Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+  Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+  SPDX-License-Identifier: BSD-3-Clause-Clear
 ******************************************************************************/
 
 #ifndef LINUX_HAL_COMMON_HPP
@@ -55,6 +59,8 @@
 #define PTP_DEVICE_IDX_OFFS 8			/*!< PTP device index offset*/
 #define CLOCKFD 3						/*!< Clock file descriptor */
 #define FD_TO_CLOCKID(fd)       ((~(clockid_t) (fd) << 3) | CLOCKFD)	/*!< Converts an FD to CLOCKID */
+#define SET_PTP_DATA				101
+
 struct timespec;
 
 /**
@@ -630,6 +636,7 @@ public:
 class LinuxSharedMemoryIPC:public OS_IPC {
 private:
 	int shm_fd;
+	int gptp_fd;
 	char *master_offset_buffer;
 	int err;
 public:

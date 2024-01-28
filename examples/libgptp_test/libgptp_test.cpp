@@ -25,6 +25,11 @@ BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
 OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
 ============================================================================ */
 #include <errno.h>
 #include <inttypes.h>
@@ -273,6 +278,7 @@ int main(int argc, char *argv[])
         return 0;
     }
     printf("Real time test start...\n");
+#ifndef LE_GVM
 #ifndef AVB_FEATURE_GVM_MODE
 #ifdef GPTP_AUTO_START
     while(1){
@@ -327,6 +333,17 @@ int main(int argc, char *argv[])
         printf("Monotonic time test failed\n");
     }
 #endif
+#else // LE_GVM
+    struct ptp_lib ptp_data;
+    if (gptpGetSatusAndCurPtpTime(&ptp_data)) {
+        test_gptp_time = (ptp_data.tv_sec)*1000000000LL + ptp_data.tv_nsec;
+        printf("gptp status %d port status %d gptp time %" PRIu64 ".%" PRIu64 "\n",
+                ptp_data.status, ptp_data.port_status, test_gptp_time/1000000000UL, test_gptp_time%1000000000UL);
+    } else {
+        printf("GPTP time test failed\n");
+    }
+
+#endif // END LE_GVM
     if (gptpGetCurPtpTime(&test_gptp_time)) {
             printf("gptp time %" PRIu64 ".%" PRIu64 "\n",
 					test_gptp_time/1000000000UL, test_gptp_time%1000000000UL);
@@ -334,6 +351,7 @@ int main(int argc, char *argv[])
         printf("GPTP time test failed\n");
     }
 
+#ifndef LE_GVM
     if (argc == 2) {
         if (argv[1][0] == 'q') {
             printf("\n\n\n====================QTIMER based test=====================\n\n\n");
@@ -386,7 +404,7 @@ int main(int argc, char *argv[])
         }
 	}
 #endif
-
+#endif // END LE_GVM
     if(!gptpDeinit()) {
         printf("GPTP deinit failed\n");
     }

@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+
+[Unit]
+Description= Load ptp dlkm service
+AssertPathExists=/lib/modules/
+
+[Service]
+Restart=on-failure
+RemainAfterExit=yes
+ExecStart=/bin/sh -c '/sbin/insmod /lib/modules/$(uname -r)/extra/ptp.ko'
+ExecStop=/bin/sh -c '/sbin/rmmod ptp'
+
+[Install]
+WantedBy=multi-user.target

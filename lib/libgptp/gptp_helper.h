@@ -53,6 +53,11 @@ Attributions: The inih library portion of the source code is licensed from
 Brush Technology and Ben Hoyt - Copyright (c) 2009, Brush Technology and Copyright (c) 2009, Ben Hoyt.
 Complete license and copyright information can be found at
 https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
+
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
 ============================================================================ */
 
 #ifndef __GPTP_HELPER_H__
@@ -79,11 +84,22 @@ bool gptpGetCurPtpTime(uint64_t *gptp_time_ns);
 /* Get current PTP time and monolithic time in nanoseconds */
 bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur, uint64_t *mono_time_cur);
 
+/* Get current gptp status, port status and gptp time */
+bool gptpGetSatusAndCurPtpTime(struct ptp_lib *ptp_data);
+
 struct gptp_update {
 	uint64_t curr_gptp_time;
 	int64_t clock_adjust;
 };
 
+struct ptp_lib {
+    bool status;
+    int32_t port_status;
+    int32_t tv_sec;
+    int32_t tv_nsec;
+};
+
+#define GET_PTP_DATA 				100
 
 typedef void(*GPTP_UPDATE_NOTIFY_CALLBACK)(struct gptp_update update);
 

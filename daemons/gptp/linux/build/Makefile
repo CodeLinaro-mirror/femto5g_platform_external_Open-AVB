@@ -133,6 +133,11 @@ ifeq ($(GPTP_AUTO_START),1)
 	CFLAGS_G += -DGPTP_AUTO_START
 endif
 
+ifeq ($(LE_SHARED_MEM),1)
+    CFLAGS_G += -DLE_SHARED_MEM
+    CPPFLAGS_G += -DLE_SHARED_MEM
+endif
+
 LDFLAGS_G += -lpthread -lrt
 
 CFLAGS = $(CFLAGS_G)

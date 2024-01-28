@@ -29,6 +29,11 @@
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
+  Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+  Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+  SPDX-License-Identifier: BSD-3-Clause-Clear
+
 ******************************************************************************/
 
 #include <ieee1588.hpp>
@@ -41,6 +46,7 @@
 #include <avbts_osnet.hpp>
 #include <avbts_oscondition.hpp>
 #include <ether_tstamper.hpp>
+#include <linux_hal_common.hpp>
 
 #include <gptp_log.hpp>
 
@@ -50,6 +56,7 @@
 
 #include <stdlib.h>
 
+extern LinuxSharedMemoryIPC *ipc;
 LinkLayerAddress EtherPort::other_multicast(OTHER_MULTICAST);
 LinkLayerAddress EtherPort::pdelay_multicast(PDELAY_MULTICAST);
 LinkLayerAddress EtherPort::test_status_multicast
@@ -478,6 +485,11 @@ bool EtherPort::_processEvent( Event e )
 		ret = true;
 		break;
 	case LINKDOWN:
+#ifdef LE_SHARED_MEM
+        if ( ipc ) {
+            ipc->updateSyncStatus(false, PTP_DISABLED);
+        }
+#endif
 		stopPDelay();
 		if (automotive_profile) {
 			GPTP_LOG_EXCEPTION("LINK DOWN");

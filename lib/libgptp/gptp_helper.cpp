@@ -53,6 +53,11 @@ Attributions: The inih library portion of the source code is licensed from
 Brush Technology and Ben Hoyt - Copyright (c) 2009, Brush Technology and Copyright (c) 2009, Ben Hoyt.
 Complete license and copyright information can be found at
 https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
+
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
 ============================================================================ */
 #include <linux/ptp_clock.h>
 #include <sys/mman.h>
@@ -118,6 +123,10 @@ static clockid_t rgptp_clkid = -1;
 #ifdef GPTP_AUTO_START
 static pthread_t thread_id;
 static int sock = -1;
+#endif
+
+#ifdef LE_GVM
+static int gptp_fd = -1;
 #endif
 
 GPTP_UPDATE_NOTIFY_CALLBACK gptp_update_callback = NULL;
@@ -670,9 +679,52 @@ bool gptpGetTime(uint64_t *gptp_time_sys, uint64_t time_sys_ns) {
 }
 
 
+#ifdef LE_GVM
+/* public API to query gptp status, port status and current gptp time */
+bool gptpGetSatusAndCurPtpTime(struct ptp_lib *ptp_data) {
+
+    int ret = 0;
+
+    if (gptp_fd != -1) {
+        ret = ioctl(gptp_fd, GET_PTP_DATA, ptp_data);
+        if (ret)
+        {
+            printf(" Ioctl failed to get ptp data 0x%x (%s)\n", errno, strerror(errno));
+            close(gptp_fd);
+            gptp_fd = -1;
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    return true;
+}
+#endif
+
+
 /* public API to query current gptp time */
 bool gptpGetCurPtpTime(uint64_t *gptp_time_cur) {
 
+#ifdef LE_GVM
+    int ret = 0;
+    struct ptp_lib ptp_data;
+
+    if (gptp_fd != -1) {
+        ret = ioctl(gptp_fd, GET_PTP_DATA, &ptp_data);
+        if (ret)
+        {
+            printf(" Ioctl failed to get ptp data 0x%x (%s)\n", errno, strerror(errno));
+            close(gptp_fd);
+            gptp_fd = -1;
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    *gptp_time_cur = (ptp_data.tv_sec)*1000000000LL + ptp_data.tv_nsec;
+#else
     struct timespec ts;
 
     ts.tv_sec = ts.tv_nsec = 0;
@@ -687,6 +739,7 @@ bool gptpGetCurPtpTime(uint64_t *gptp_time_cur) {
     }
 
     *gptp_time_cur = (ts.tv_sec)*1000000000LL + ts.tv_nsec;
+#endif
 
     return true;
 }
@@ -748,6 +801,15 @@ bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur, uint64_t *mono_time_cu
 
 /* public API to init gptp time scaling */
 bool gptpInit(void) {
+#ifdef LE_GVM
+    gptp_fd = open("/dev/gptp", O_RDWR);
+    if ( gptp_fd == -1 ) {
+        printf("Failed to open /dev/gptp error 0x%x(%s)\n", errno,
+                strerror(errno));
+        return false;
+    }
+    return true;
+#else
 #ifdef GPTP_AUTO_START
 	gptpDaemonClientInit();
 	return true;
@@ -760,16 +822,24 @@ bool gptpInit(void) {
 	UNLOCK();
 	return bInitialized;
 #endif
+#endif
 }
 
 /* public API to deinit gptp time scaling */
 bool gptpDeinit(void) {
+#ifdef LE_GVM
+    if (gptp_fd != -1) {
+        close(gptp_fd);
+        gptp_fd = -1;
+    }
+#else
 	gptpMemDeinit(gPtpShmFd, gPtpMmap);
 	gptpClkDeInit(gptpPhcFd);
 #ifdef GPTP_AUTO_START
 	gptpDaemonClientDeInit();
 #endif
 	bInitialized = false;
+#endif
 	return true;
 }
 

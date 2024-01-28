@@ -29,6 +29,10 @@
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
+  Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+  Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+  SPDX-License-Identifier: BSD-3-Clause-Clear
  ******************************************************************************/
 
 #include "ieee1588.hpp"
@@ -105,6 +109,7 @@ static int gptp_client[MAX_CLIENTS_COUNT] = {-1};
 
 // gptp logcat support
 extern gptplogcat_t gptplogcat;
+LinuxSharedMemoryIPC *ipc;
 
 
 #define MAX_NSEC 1000000000
@@ -450,7 +455,7 @@ int main(int argc, char **argv)
 	LinuxLockFactory *lock_factory = new LinuxLockFactory();
 	LinuxTimerFactory *timer_factory = new LinuxTimerFactory();
 	LinuxConditionFactory *condition_factory = new LinuxConditionFactory();
-	LinuxSharedMemoryIPC *ipc = new LinuxSharedMemoryIPC();
+	ipc = new LinuxSharedMemoryIPC();
 	/* Create Low level network interface object */
 	if( argc < 2 ) {
 		printf( "Interface name required\n" );
@@ -921,6 +926,9 @@ int main(int argc, char **argv)
 #endif
 
 	if ( ipc ) {
+#ifdef LE_SHARED_MEM
+		ipc->updateSyncStatus(false, PTP_DISABLED);
+#endif
 		delete ipc;
 		ipc = NULL;
 	}
