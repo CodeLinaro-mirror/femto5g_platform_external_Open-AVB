@@ -154,6 +154,7 @@ class IEEE1588Clock
         Timestamp _prev_local_time;
         Timestamp _prev_system_time;
         Timestamp _prev_q_time;
+        Timestamp _prev_boot_time;
 
         OS_IPC *ipc;
 
@@ -609,7 +610,8 @@ class IEEE1588Clock
          */
         FrequencyRatio calcLocalSystemClockRateDifference
         ( Timestamp local_time, Timestamp system_time, Timestamp mono_time,
-          FrequencyRatio* local_mono_freq_offset);
+          Timestamp boot_time,
+          FrequencyRatio* local_mono_freq_offset, FrequencyRatio* local_boot_freq_offset);
 
         /**
          * @brief  Sets the master offset, sintonyze and adjusts the frequency offset
@@ -630,7 +632,9 @@ class IEEE1588Clock
           int64_t local_system_offset, Timestamp system_time,
           FrequencyRatio local_system_freq_offset,
           int64_t local_q_offset, Timestamp q_time,
-          FrequencyRatio local_mono_freq_offset, unsigned sync_count,
+          FrequencyRatio local_q_freq_offset,
+          int64_t local_boot_offset, Timestamp boot_time,
+          FrequencyRatio local_boot_freq_offset, unsigned sync_count,
           unsigned pdelay_count, PortState port_state, bool asCapable );
 
         /**

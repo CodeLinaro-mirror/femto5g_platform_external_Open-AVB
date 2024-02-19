@@ -980,13 +980,16 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
     Timestamp sync_arrival;
     Timestamp system_time(0, 0, 0);
     Timestamp q_time(0, 0, 0);
+    Timestamp boot_time(0, 0, 0);
     Timestamp device_time(0, 0, 0);
     signed long long local_system_offset;
     signed long long local_q_offset;
+    signed long long local_boot_offset;
     signed long long scalar_offset;
     FrequencyRatio local_clock_adjustment;
     FrequencyRatio local_system_freq_offset;
-    FrequencyRatio local_mono_freq_offset;
+    FrequencyRatio local_q_freq_offset;
+    FrequencyRatio local_boot_freq_offset;
     FrequencyRatio master_local_freq_offset;
     int64_t correction;
     int32_t scaledLastGmFreqChange = 0;
@@ -1078,10 +1081,10 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
 
         if (0 < scalar_offset) {
             port->sct_buffer->status.gptp_status = GPTP_STATUS_SYNCHRONIZED |
-                    GPTP_STATUS_LEAP_FUTURE;
+                                                   GPTP_STATUS_LEAP_FUTURE;
         } else {
             port->sct_buffer->status.gptp_status = GPTP_STATUS_SYNCHRONIZED |
-                    GPTP_STATUS_LEAP_PAST;
+                                                   GPTP_STATUS_LEAP_PAST;
         }
 
         port->sct_buffer->status.gmTimeBaseIndicator = tlv.getGmTimeBaseIndicator();
@@ -1096,7 +1099,7 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
     /* Otherwise synchronize clock with approximate time from Sync message */
     uint32_t local_clock, nominal_clock_rate;
     uint32_t device_sync_time_offset;
-    port->getDeviceTime(system_time, q_time, device_time, local_clock,
+    port->getDeviceTime(system_time, q_time, device_time, boot_time, local_clock,
                         nominal_clock_rate);
     GPTP_LOG_VERBOSE
     ( "Device Time = %llu,System Time = %llu",
@@ -1130,15 +1133,19 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
         local_system_freq_offset =
             port->getClock()
             ->calcLocalSystemClockRateDifference
-            ( device_time, system_time, q_time, &local_mono_freq_offset );
+            ( device_time, system_time, q_time, boot_time, &local_q_freq_offset,
+              &local_boot_freq_offset );
         local_system_offset =
             TIMESTAMP_TO_NS(system_time) - TIMESTAMP_TO_NS(device_time);
         local_q_offset =
             TIMESTAMP_TO_NS(q_time) - TIMESTAMP_TO_NS(device_time);
+        local_boot_offset =
+            TIMESTAMP_TO_NS(boot_time) - TIMESTAMP_TO_NS(device_time);
         port->getClock()->setMasterOffset
         ( port, scalar_offset, sync_arrival, local_clock_adjustment,
           local_system_offset, system_time, local_system_freq_offset,
-          local_q_offset, q_time, local_mono_freq_offset,
+          local_q_offset, q_time, local_q_freq_offset,
+          local_boot_offset, boot_time, local_boot_freq_offset,
           port->getSyncCount(), port->getPdelayCount(),
           port->getPortState(), port->getAsCapable() );
         port->syncDone();
@@ -1148,6 +1155,27 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
                                     (SYNC_RECEIPT_TIMEOUT_MULTIPLIER *
                                      ((double) pow((double)2, port->getSyncInterval()) *
                                       1000000000.0)));
+    } else if ( port->getPortState() == PTP_MASTER ) {
+        local_system_freq_offset =
+            port->getClock()
+            ->calcLocalSystemClockRateDifference
+            ( device_time, system_time, q_time, boot_time, &local_q_freq_offset,
+              &local_boot_freq_offset );
+        local_system_offset =
+            TIMESTAMP_TO_NS(system_time) - TIMESTAMP_TO_NS(device_time);
+        local_q_offset =
+            TIMESTAMP_TO_NS(q_time) - TIMESTAMP_TO_NS(device_time);
+        local_boot_offset =
+            TIMESTAMP_TO_NS(boot_time) - TIMESTAMP_TO_NS(device_time);
+        port->getClock()->setMasterOffset
+        ( port, 0, device_time, 1.0,
+          local_system_offset, system_time,
+          local_system_freq_offset,
+          local_q_offset, q_time,
+          local_q_freq_offset,
+          local_boot_offset, boot_time,
+          local_boot_freq_offset, port->getSyncCount(),
+          port->getPdelayCount(), port->getPortState(), port->getAsCapable() );
     }
 
     uint16_t lastGmTimeBaseIndicator;

@@ -430,7 +430,7 @@ typedef struct {
     syncMesaurementData_t syncData;
     pDelayMeasurementData_t delayData;
     gptpStatsType_t status;
-	syncInterval_t syncInterval;
+    syncInterval_t syncInterval;
 } sct_gptp_data;
 
 /**
@@ -1208,6 +1208,7 @@ class CommonPort
          */
         void getDeviceTime
         ( Timestamp &system_time, Timestamp &mono_time, Timestamp &device_time,
+          Timestamp &boot_time,
           uint32_t &local_clock, uint32_t & nominal_clock_rate );
 
         /**

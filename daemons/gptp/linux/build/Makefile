@@ -31,7 +31,7 @@
 ALTERNATE_LINUX_INCPATH=$(HOME)/header/include/
 
 CFLAGS_G = -Wall -g -fsigned-char -I. -I../../common -I../src \
-	-I$(ALTERNATE_LINUX_INCPATH) -DUSE_GLIB -DPTP_SW_QTIMER=1 `pkg-config --cflags glib-2.0`
+	-I$(ALTERNATE_LINUX_INCPATH) -DUSE_GLIB -DPTP_SW_QTIMER=1 -DPTP_SW_BOOTTIME=1 `pkg-config --cflags glib-2.0`
 
 # Check to see if PTP cross-timestamping is supported in hardware/driver
 # and, if so, add flag to compile in support

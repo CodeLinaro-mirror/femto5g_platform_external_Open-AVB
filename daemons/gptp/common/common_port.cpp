@@ -558,6 +558,7 @@ bool CommonPort::processSyncAnnounceTimeout( Event e )
     portId.getPortNumber(&portNumber);
     Timestamp system_time;
     Timestamp q_time;
+    Timestamp boot_time;
     Timestamp device_time;
     uint32_t local_clock, nominal_clock_rate;
 
@@ -599,10 +600,10 @@ bool CommonPort::processSyncAnnounceTimeout( Event e )
     clock_quality = getClock()->getClockQuality();
     getClock()->setGrandmasterClockIdentity(clock_identity, portNumber);
     setPortState( PTP_MASTER );
-    getDeviceTime( system_time, q_time, device_time,
+    getDeviceTime( system_time, q_time, device_time, boot_time,
                    local_clock, nominal_clock_rate );
     (void) clock->calcLocalSystemClockRateDifference
-    ( device_time, system_time, q_time, nullptr );
+    ( device_time, system_time, q_time, boot_time, nullptr, nullptr );
     setQualifiedAnnounce( NULL );
     clock->addEventTimerLocked
     ( this, SYNC_INTERVAL_TIMEOUT_EXPIRES,
@@ -736,14 +737,17 @@ bool CommonPort::processEvent( Event e )
             {
                 Timestamp system_time;
                 Timestamp q_time;
+                Timestamp boot_time;
                 Timestamp device_time;
                 uint32_t local_clock, nominal_clock_rate;
                 FrequencyRatio local_system_freq_offset = 1;
                 FrequencyRatio local_q_freq_offset = 1;
+                FrequencyRatio local_boot_freq_offset = 1;
                 int64_t local_system_offset;
                 int64_t local_q_offset;
+                int64_t local_boot_offset;
                 getDeviceTime
-                ( system_time, q_time, device_time,
+                ( system_time, q_time, device_time, boot_time,
                   local_clock, nominal_clock_rate );
                 GPTP_LOG_VERBOSE
                 ( "port::processEvent(): System time: %u,%u "
@@ -758,15 +762,21 @@ bool CommonPort::processEvent( Event e )
                 local_q_offset =
                     TIMESTAMP_TO_NS(q_time) -
                     TIMESTAMP_TO_NS(device_time);
+                local_boot_offset =
+                    TIMESTAMP_TO_NS(boot_time) -
+                    TIMESTAMP_TO_NS(device_time);
                 local_system_freq_offset =
                     clock->calcLocalSystemClockRateDifference
-                    ( device_time, system_time, q_time, &local_q_freq_offset );
+                    ( device_time, system_time, q_time, boot_time, &local_q_freq_offset,
+                      &local_boot_freq_offset );
                 clock->setMasterOffset
                 ( this, 0, device_time, 1.0,
                   local_system_offset, system_time,
                   local_system_freq_offset,
                   local_q_offset, q_time,
-                  local_q_freq_offset,  getSyncCount(),
+                  local_q_freq_offset,
+                  local_boot_offset, boot_time,
+                  local_boot_freq_offset, getSyncCount(),
                   pdelay_count, port_state, asCapable );
             }
             // Call media specific action for completed sync
@@ -783,14 +793,15 @@ bool CommonPort::processEvent( Event e )
 
 void CommonPort::getDeviceTime
 ( Timestamp &system_time, Timestamp &mono_time, Timestamp &device_time,
+  Timestamp &boot_time,
   uint32_t &local_clock, uint32_t &nominal_clock_rate )
 {
     if (_hw_timestamper) {
         _hw_timestamper->HWTimestamper_gettime
-        ( &system_time, &mono_time, &device_time,
+        ( &system_time, &mono_time, &device_time, &boot_time,
           &local_clock, &nominal_clock_rate );
     } else {
-        device_time = system_time = clock->getSystemTime();
+        device_time = system_time = boot_time = clock->getSystemTime();
         local_clock = nominal_clock_rate = 0;
     }
 

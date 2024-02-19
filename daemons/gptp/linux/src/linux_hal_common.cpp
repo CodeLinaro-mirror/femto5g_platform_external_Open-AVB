@@ -1192,9 +1192,11 @@ bool LinuxSharedMemoryIPC::update(
     int64_t ml_phoffset,
     int64_t ls_phoffset,
     int64_t lq_phoffset,
+    int64_t lb_phoffset,
     FrequencyRatio ml_freqoffset,
     FrequencyRatio ls_freqoffset,
     FrequencyRatio lq_freqoffset,
+    FrequencyRatio lb_freqoffset,
     uint64_t local_time,
     uint32_t sync_count,
     uint32_t pdelay_count,
@@ -1223,6 +1225,8 @@ bool LinuxSharedMemoryIPC::update(
         ptimedata->asCapable = asCapable;
         ptimedata->port_state   = port_state;
         ptimedata->process_id   = process_id;
+        ptimedata->lb_freqoffset = lb_freqoffset;
+        ptimedata->lb_phoffset = lb_phoffset;
         /* unlock */
         pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
     }

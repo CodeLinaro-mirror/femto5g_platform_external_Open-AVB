@@ -250,6 +250,7 @@ int qgptp_rmgr_init(const char *ifname, CommonPort *port)
         goto exit_unlink;
     }
 
+    GPTP_LOG_INFO("qgptp_rmgr_init success %s", SCT_SHM_NAME);
     return true;
 exit_unlink:
 #ifdef ANDROID
@@ -259,6 +260,7 @@ exit_unlink:
     shm_unlink( SCT_SHM_NAME );
 #endif
 exit_error:
+    GPTP_LOG_INFO("qgptp_rmgr_init error exit %s", SCT_SHM_NAME);
     return false;
 }
 
@@ -288,6 +290,7 @@ int qgptp_rmgr_deinit()
 #endif
     }
 
+    GPTP_LOG_INFO("qgptp_rmgr_deinit success %s", SCT_SHM_NAME);
     qgptp_port = NULL;
     return 0;
 }

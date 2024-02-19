@@ -330,18 +330,22 @@ void IEEE1588Clock::deleteEventTimerLocked
 
 FrequencyRatio IEEE1588Clock::calcLocalSystemClockRateDifference(
     Timestamp local_time, Timestamp system_time, Timestamp q_time,
-    FrequencyRatio *local_q_freq_offset )
+    Timestamp boot_time,
+    FrequencyRatio *local_q_freq_offset, FrequencyRatio *local_boot_freq_offset )
 {
     unsigned long long inter_system_time;
     unsigned long long inter_q_time;
+    unsigned long long inter_boot_time;
     unsigned long long inter_local_time;
     FrequencyRatio ptp_offset;
     FrequencyRatio ptp_offset_q;
+    FrequencyRatio ptp_offset_b;
     GPTP_LOG_DEBUG( "Calculated local to system clock rate difference" );
 
     if ( !_local_system_freq_offset_init ) {
         _prev_system_time = system_time;
         _prev_q_time = q_time;
+        _prev_boot_time = boot_time;
         _prev_local_time = local_time;
         _local_system_freq_offset_init = true;
         return 1.0;
@@ -351,6 +355,8 @@ FrequencyRatio IEEE1588Clock::calcLocalSystemClockRateDifference(
         TIMESTAMP_TO_NS(system_time) - TIMESTAMP_TO_NS(_prev_system_time);
     inter_q_time =
         TIMESTAMP_TO_NS(q_time) - TIMESTAMP_TO_NS(_prev_q_time);
+    inter_boot_time =
+        TIMESTAMP_TO_NS(boot_time) - TIMESTAMP_TO_NS(_prev_boot_time);
     inter_local_time  =
         TIMESTAMP_TO_NS(local_time) -  TIMESTAMP_TO_NS(_prev_local_time);
 
@@ -366,6 +372,12 @@ FrequencyRatio IEEE1588Clock::calcLocalSystemClockRateDifference(
         ptp_offset_q = 1.0;
     }
 
+    if ( inter_boot_time != 0 ) {
+        ptp_offset_b = ((FrequencyRatio)inter_local_time) / inter_boot_time;
+    } else {
+        ptp_offset_b = 1.0;
+    }
+
     // Check for jumps in system time or local time
     if ((fabs(ptp_offset) < MIN_LS_RATIO) || (fabs(ptp_offset) > MAX_LS_RATIO)) {
         GPTP_LOG_WARNING("Local to system clock ratio (%Lf) exceeding threshold",
@@ -375,19 +387,31 @@ FrequencyRatio IEEE1588Clock::calcLocalSystemClockRateDifference(
 
     if ((fabs(ptp_offset_q) < MIN_LS_RATIO)
             || (fabs(ptp_offset_q) > MAX_LS_RATIO)) {
-        GPTP_LOG_WARNING("Local to mono clock ratio (%Lf) exceeding threshold",
+        GPTP_LOG_WARNING("Local to qtime clock ratio (%Lf) exceeding threshold",
                          ptp_offset_q);
         ptp_offset_q = 1.0;
+    }
+
+    if ((fabs(ptp_offset_b) < MIN_LS_RATIO)
+            || (fabs(ptp_offset_b) > MAX_LS_RATIO)) {
+        GPTP_LOG_WARNING("Local to boottime clock ratio (%Lf) exceeding threshold",
+                         ptp_offset_b);
+        ptp_offset_b = 1.0;
     }
 
     /*GPTP_LOG_WARNING("Local-system clock ratio = %Lf, local-mono clock ratio = %Lf",
             ppt_offset, ppt_offset_mono);*/
     _prev_system_time = system_time;
     _prev_q_time = q_time;
+    _prev_boot_time = boot_time;
     _prev_local_time = local_time;
 
     if (local_q_freq_offset != nullptr) {
         *local_q_freq_offset = ptp_offset_q;
+    }
+
+    if (local_boot_freq_offset != nullptr) {
+        *local_boot_freq_offset = ptp_offset_b;
     }
 
     return ptp_offset;
@@ -541,6 +565,9 @@ static ValueAverage_int64 local_system_offset_avg(AVERAGE_WINDOW);
 static ValueAverage_FR local_system_freq_offset_avg(AVERAGE_WINDOW);
 static ValueAverage_int64 local_q_offset_avg(AVERAGE_WINDOW);
 static ValueAverage_FR local_q_freq_offset_avg(AVERAGE_WINDOW);
+static ValueAverage_int64 local_boot_offset_avg(AVERAGE_WINDOW);
+static ValueAverage_FR local_boot_freq_offset_avg(AVERAGE_WINDOW);
+
 
 void IEEE1588Clock::setMasterOffset
 ( CommonPort *port, int64_t master_local_offset,
@@ -548,7 +575,9 @@ void IEEE1588Clock::setMasterOffset
   int64_t local_system_offset, Timestamp system_time,
   FrequencyRatio local_system_freq_offset,
   int64_t local_q_offset, Timestamp q_time,
-  FrequencyRatio local_q_freq_offset, unsigned sync_count,
+  FrequencyRatio local_q_freq_offset,
+  int64_t local_boot_offset, Timestamp boot_time,
+  FrequencyRatio local_boot_freq_offset, unsigned sync_count,
   unsigned pdelay_count, PortState port_state, bool asCapable )
 {
     uint64_t curr_gptp = 0;
@@ -561,10 +590,10 @@ void IEEE1588Clock::setMasterOffset
                         master_local_offset, master_local_freq_offset, sync_count, pdelay_count);
     }
 
-	    if (port->sct_buffer) {
+    if (port->sct_buffer) {
         pthread_mutex_lock((pthread_mutex_t *) &port->sct_buffer->lock);
-		port->sct_buffer->syncInterval.sync_interval = port->getSyncInterval();
-		port->sct_buffer->syncInterval.init_sync_interval = port->getInitSyncInterval();
+        port->sct_buffer->syncInterval.sync_interval = port->getSyncInterval();
+        port->sct_buffer->syncInterval.init_sync_interval = port->getInitSyncInterval();
         pthread_mutex_unlock((pthread_mutex_t *) &port->sct_buffer->lock);
     }
 
@@ -591,10 +620,17 @@ void IEEE1588Clock::setMasterOffset
             local_q_freq_offset = 1.0;
         }
 
+        if ((local_boot_freq_offset < (1.0 - FREQ_OFFSET_MAX)) ||
+                (local_boot_freq_offset > (1.0 + FREQ_OFFSET_MAX)) ) {
+            local_boot_freq_offset = 1.0;
+        }
+
         local_system_offset_avg.push(local_system_offset);
         local_system_freq_offset_avg.push(local_system_freq_offset);
         local_q_offset_avg.push(local_q_offset);
         local_q_freq_offset_avg.push(local_q_freq_offset);
+        local_boot_offset_avg.push(local_boot_offset);
+        local_boot_freq_offset_avg.push(local_boot_freq_offset);
 
         if (port->getTestMode()) {
             GPTP_LOG_STATUS("MASTER Clock offset:%lld   Clock rate ratio:%Lf   Sync Count:%u   PDelay Count:%u",
@@ -605,13 +641,17 @@ void IEEE1588Clock::setMasterOffset
             GPTP_LOG_STATUS("QTIMER Clock offset:%lld  (avg:%lld)  Clock rate ratio:%Lf  avg(%Lf)   Sync Count:%u   PDelay Count:%u",
                             local_q_offset, local_q_offset_avg.get(), local_q_freq_offset,
                             local_q_freq_offset_avg.get(), sync_count, pdelay_count);
+            GPTP_LOG_STATUS("Boot Clock offset:%lld  (avg:%lld)  Clock rate ratio:%Lf  avg(%Lf)   Sync Count:%u   PDelay Count:%u",
+                            local_boot_offset, local_boot_offset_avg.get(), local_boot_freq_offset,
+                            local_boot_freq_offset_avg.get(), sync_count, pdelay_count);
         }
 
         port->setClockRateRatio(master_local_freq_offset);
         ipc->update(
             master_local_offset, local_system_offset_avg.get(), local_q_offset_avg.get(),
+            local_boot_offset_avg.get(),
             master_local_freq_offset, local_system_freq_offset_avg.get(),
-            local_q_freq_offset_avg.get(),
+            local_q_freq_offset_avg.get(), local_boot_freq_offset_avg.get(),
             TIMESTAMP_TO_NS(local_time),
             sync_count, pdelay_count, port_state, asCapable);
         ipc->update_grandmaster(

@@ -30,8 +30,8 @@
   POSSIBILITY OF SUCH DAMAGE.
 
  ******************************************************************************/
- 
- /******************************************************************************
+
+/******************************************************************************
 
 Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
 
@@ -114,6 +114,9 @@ typedef struct {
     int64_t qtime_to_mono_offset;   //!Qtimer to monotonic offset
     int32_t verbose_mode;           //!< Dynamically enable verbose mode
     int32_t in_proxy_mode;          //!< Proxy Mode
+
+    int64_t lb_phoffset;            //!< Local to boottime phase offset
+    FrequencyRatio lb_freqoffset;   //!< Local to boottime frequency offset
 
 } gPtpTimeData;
 

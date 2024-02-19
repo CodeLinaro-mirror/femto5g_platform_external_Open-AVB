@@ -30,6 +30,12 @@
   POSSIBILITY OF SUCH DAMAGE.
 
 ******************************************************************************/
+/* ============================================================================
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+============================================================================ */
 
 #include <linux_hal_generic.hpp>
 #include <linux_hal_generic_tsprivate.hpp>
@@ -468,7 +474,7 @@ static inline Timestamp pctTimestamp( struct ptp_clock_time *t )
 // Use HW cross-timestamp if available
 bool LinuxTimestamperGeneric::HWTimestamper_gettime
 ( Timestamp *system_time, Timestamp *q_time, Timestamp *device_time,
-  uint32_t *local_clock,
+  Timestamp *boot_time, uint32_t *local_clock,
   uint32_t *nominal_clock_rate ) const
 {
     if ( phc_fd == -1 ) {
@@ -561,6 +567,39 @@ bool LinuxTimestamperGeneric::HWTimestamper_gettime
         calculated_q_time = TIMESTAMP_TO_NS(*device_time);
         calculated_q_time -= (interval / QTIMER_RESAMPLING);
         q_time->set64(calculated_q_time);
+        /*GPTP_LOG_WARNING("system_time = %d.%d, mono_time = %d.%d, device_time_l = %d.%d",
+                system_time->seconds_ls, system_time->nanoseconds,
+                mono_time->seconds_ls, mono_time->nanoseconds,
+                device_time->seconds_ls, device_time->nanoseconds);*/
+    }
+#endif
+#ifdef PTP_SW_BOOTTIME
+    {
+        int64_t interval = 0;
+        int64_t calculated_boot_time = 0;
+
+        // Find average delta between qtimer and system time
+        for (int i = 0; i < QTIMER_RESAMPLING; ++i ) {
+            struct timespec real;
+            struct timespec boot;
+            struct ptp_clock_time real_pct;
+            struct ptp_clock_time boot_pct;
+            uint64_t qTimerCount = 0, qTimerFreq = 0, qTimerNanosSec = 0,
+                     qTimerNanosNSec = 0;
+            clock_gettime(_private->clockid, &real);
+            clock_gettime(CLOCK_BOOTTIME, &boot);
+            boot_pct.sec = boot.tv_sec;
+            boot_pct.nsec = boot.tv_nsec;
+            real_pct.sec = real.tv_sec;
+            real_pct.nsec = real.tv_nsec;
+            interval += pctns(pct_diff(&real_pct, &boot_pct));
+        }
+
+        // Calculate monotonic qtimer time equivanlent to system time above, which
+        // will allow us to easily calculate qtimer<->gptp time offset.
+        calculated_boot_time = TIMESTAMP_TO_NS(*device_time);
+        calculated_boot_time -= (interval / QTIMER_RESAMPLING);
+        boot_time->set64(calculated_boot_time);
         /*GPTP_LOG_WARNING("system_time = %d.%d, mono_time = %d.%d, device_time_l = %d.%d",
                 system_time->seconds_ls, system_time->nanoseconds,
                 mono_time->seconds_ls, mono_time->nanoseconds,
