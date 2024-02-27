@@ -1275,10 +1275,10 @@ bool getgPTPStatus(gptpStatsType_t *status) {
 	return true;
 }
 
-#ifdef LE_GVM
 /* public API to query gptp status, port status and current gptp time */
 bool gptpGetStatusAndCurPtpTime(struct ptp_lib *ptp_data) {
 
+#ifdef LE_GVM
     int ret = 0;
 
     if (gptp_fd != -1) {
@@ -1295,8 +1295,9 @@ bool gptpGetStatusAndCurPtpTime(struct ptp_lib *ptp_data) {
     }
 
     return true;
-}
 #endif
+    return false;
+}
 
 
 bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur, uint64_t *mono_time_cur) {

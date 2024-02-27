@@ -1258,6 +1258,7 @@ bool LinuxSharedMemoryIPC::updateGmId(ClockIdentity& id, uint16_t portNumber)
 bool LinuxSharedMemoryIPC::updateSyncStatus(bool is_sync, PortState port_state)
 {
     int buf_offset = 0;
+    int ret = 0;
     char *shm_buffer = master_offset_buffer;
     gPtpTimeData *ptimedata;
 
