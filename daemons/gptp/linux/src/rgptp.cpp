@@ -379,7 +379,7 @@ void rgptpDeInit(void)
     int ret = 0;
     IEEE1588Clock *pClock = rgptp.port_init->clock;
 
-    if(rgptp.timer_id > 0) {
+    if(rgptp.timer_id > (void *) 0) {
         pClock->deleteTimer(&rgptp.timer_id);
         rgptp.timer_id = 0;
     }
