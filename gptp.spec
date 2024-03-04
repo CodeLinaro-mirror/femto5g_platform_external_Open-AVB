@@ -15,6 +15,7 @@ Time Sensitive Networking stack Time Sync.
 %autosetup -n %{name}-%{version}
 
 %build
+%set_build_flags
 make gptp libgptp libgptp_test
 
 %install
