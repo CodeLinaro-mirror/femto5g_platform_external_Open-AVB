@@ -1087,6 +1087,7 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg )
     const char *group_name;
     pthread_mutexattr_t shared;
     mode_t oldumask = umask(0);
+    int count = 0;
 
     if ( barg == NULL ) {
         group_name = DEFAULT_GROUPNAME;
@@ -1119,11 +1120,19 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg )
     }
 
 #ifdef LE_SHARED_MEM
-    gptp_fd = open("/dev/gptp", O_RDWR );
+    do {
+        gptp_fd = open("/dev/gptp", O_RDWR );
 
-    if ( gptp_fd == -1 ) {
-        GPTP_LOG_ERROR( "open(): %s", strerror(errno) );
-    }
+        if ( gptp_fd == -1 || ( FD_TO_CLOCKID(gptp_fd)) == -1 ) {
+            GPTP_LOG_ERROR("Failed to open gPTP kernel device %d %d", gptp_fd, count);
+            usleep(50000);
+            count++;
+        } else {
+            GPTP_LOG_INFO("opened gptp kernel device: /dev/gptp");
+        }
+    } while ( ( gptp_fd == -1 )
+            || ( (FD_TO_CLOCKID(gptp_fd)) == -1 )
+            || ( count > 100 ) );
 
 #endif
     (void) umask(oldumask);
