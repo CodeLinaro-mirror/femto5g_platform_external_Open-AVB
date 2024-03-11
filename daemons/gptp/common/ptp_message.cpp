@@ -1867,6 +1867,12 @@ void PTPMessageSignalling::processMessage( EtherPort *port )
     int8_t timeSyncInterval = tlv.getTimeSyncInterval();
     int8_t announceInterval = tlv.getAnnounceInterval();
 
+    if ((true == port->getAutomotiveProfile()) && (port->getPortState() == PTP_SLAVE))
+    {
+        GPTP_LOG_WARNING("Ignoring SIGNALLING_MESSAGE as port is in automotive profile and in slave role");
+        return;
+    }
+
     if (linkDelayInterval == PTPMessageSignalling::sigMsgInterval_Initial) {
         port->setInitPDelayInterval();
         waitTime = ((long long) (pow((double)2,
