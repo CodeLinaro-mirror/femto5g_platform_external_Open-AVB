@@ -1,0 +1,11 @@
+# Kernel module instructions go here.
+#
+#obj-m := ptp_dlkm.o
+#ptp_dlkm-y := ptp.o
+obj-m += ptp_virtual_module.o
+EXTRA_CFLAGS += -I$(PWD)/../include
+
+LINUXINCLUDE += -I$(KERNEL_SRC)/$(M)
+
+obj-m += ptp_dlkm.o
+ptp_dlkm-objs := ptp_virtual_module.o

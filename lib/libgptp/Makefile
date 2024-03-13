@@ -4,6 +4,9 @@ CPPFLAGS+= -fpic -g -I../../daemons/gptp/linux/src -I../../daemons/gptp/common
 ifeq ($(GPTP_AUTO_START),1)
 	CPPFLAGS += -DGPTP_AUTO_START
 endif
+ifeq ($(LE_GVM),1)
+	CPPFLAGS += -DLE_GVM
+endif
 ifeq ($(AVB_FEATURE_GVM_MODE),1)
 	CPPFLAGS += -DAVB_FEATURE_GVM_MODE
 endif

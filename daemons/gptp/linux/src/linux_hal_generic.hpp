@@ -30,7 +30,12 @@
   POSSIBILITY OF SUCH DAMAGE.
 
 ******************************************************************************/
+/* ============================================================================
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
 
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+============================================================================ */
 #ifndef LINUX_HAL_GENERIC_HPP
 #define LINUX_HAL_GENERIC_HPP
 
@@ -42,7 +47,8 @@ struct LinuxTimestamperGenericPrivate;
 /**
  * @brief Provides LinuxTimestamperGeneric a private type
  */
-typedef struct LinuxTimestamperGenericPrivate * LinuxTimestamperGenericPrivate_t;
+typedef struct LinuxTimestamperGenericPrivate *
+    LinuxTimestamperGenericPrivate_t;
 
 #ifdef WITH_IGBLIB
 struct LinuxTimestamperIGBPrivate;
@@ -52,158 +58,164 @@ typedef struct LinuxTimestamperIGBPrivate * LinuxTimestamperIGBPrivate_t;
 /**
  * @brief Linux timestamper generic interface
  */
-class LinuxTimestamperGeneric : public LinuxTimestamper {
-private:
-	int sd;
-	int phc_fd;
-	Timestamp crstamp_system;
-	Timestamp crstamp_device;
-	LinuxTimestamperGenericPrivate_t _private;
-	bool cross_stamp_good;
-	std::list<Timestamp> rxTimestampList;
-	LinuxNetworkInterfaceList iface_list;
+class LinuxTimestamperGeneric : public LinuxTimestamper
+{
+    private:
+        int sd;
+        int phc_fd;
+        Timestamp crstamp_system;
+        Timestamp crstamp_device;
+        LinuxTimestamperGenericPrivate_t _private;
+        bool cross_stamp_good;
+        std::list<Timestamp> rxTimestampList;
+        LinuxNetworkInterfaceList iface_list;
 #ifdef PTP_HW_CROSSTSTAMP
-	bool precise_timestamp_enabled;
+        bool precise_timestamp_enabled;
 #endif
 
-	TicketingLock *net_lock;
+        TicketingLock *net_lock;
 
 #ifdef WITH_IGBLIB
-	LinuxTimestamperIGBPrivate_t igb_private;
+        LinuxTimestamperIGBPrivate_t igb_private;
 #endif
 
-public:
-	/**
-	 * @brief Default constructor. Initializes internal variables
-	 */
-	LinuxTimestamperGeneric();
+    public:
+        /**
+         * @brief Default constructor. Initializes internal variables
+         */
+        LinuxTimestamperGeneric();
 
-	/**
-	 * @brief Resets frequency adjustment value to zero and calls
-	 * linux system calls for frequency adjustment.
-	 * @return TRUE if success, FALSE if error.
-	 */
-	bool resetFrequencyAdjustment();
+        /**
+         * @brief Resets frequency adjustment value to zero and calls
+         * linux system calls for frequency adjustment.
+         * @return TRUE if success, FALSE if error.
+         */
+        bool resetFrequencyAdjustment();
 
-	/**
-	 * @brief  Calls linux system call for adjusting frequency or phase.
-	 * @param  tmx [in] Void pointer that must be cast (and filled in correctly) to
-	 * the struct timex
-	 * @return TRUE if ok, FALSE if error.
-	 */
-	bool Adjust( void *tmx ) const;
+        /**
+         * @brief  Calls linux system call for adjusting frequency or phase.
+         * @param  tmx [in] Void pointer that must be cast (and filled in correctly) to
+         * the struct timex
+         * @return TRUE if ok, FALSE if error.
+         */
+        bool Adjust( void *tmx ) const;
 
-	/**
-	 * @brief  Initializes the Hardware timestamp interface
-	 * @param  iface_label [in] Network interface label (used to find the phc index)
-	 * @param  iface [in] Network interface
-	 * @return FALSE in case of error, TRUE if success.
-	 */
-	virtual bool HWTimestamper_init
-	( InterfaceLabel *iface_label, OSNetworkInterface *iface );
+        /**
+         * @brief  Initializes the Hardware timestamp interface
+         * @param  iface_label [in] Network interface label (used to find the phc index)
+         * @param  iface [in] Network interface
+         * @return FALSE in case of error, TRUE if success.
+         */
+        virtual bool HWTimestamper_init
+        ( InterfaceLabel *iface_label, OSNetworkInterface *iface );
 
-	/**
-	 * @brief  Reset the Hardware timestamp interface
-	 * @return void
-	 */
-	virtual void HWTimestamper_reset();
+        /**
+         * @brief  Reset the Hardware timestamp interface
+         * @return void
+         */
+        virtual void HWTimestamper_reset();
 
-	/**
-	 * @brief  Inserts a new timestamp to the beginning of the
-	 * RX timestamp list.
-	 * @param tstamp [in] RX timestamp
-	 * @return void
-	 */
-	void pushRXTimestamp( Timestamp *tstamp ) {
-		tstamp->_version = version;
-		rxTimestampList.push_front(*tstamp);
-	}
+        /**
+         * @brief  Inserts a new timestamp to the beginning of the
+         * RX timestamp list.
+         * @param tstamp [in] RX timestamp
+         * @return void
+         */
+        void pushRXTimestamp( Timestamp *tstamp )
+        {
+            tstamp->_version = version;
+            rxTimestampList.push_front(*tstamp);
+        }
 
-	/**
-	 * @brief  Post initialization procedure.
-	 * @param  ifindex struct ifreq.ifr_ifindex value
-	 * @param  sd Socket file descriptor
-	 * @param  lock [in] Instance of TicketingLock object
-	 * @return TRUE if ok. FALSE if error.
-	 */
-	bool post_init( int ifindex, int sd, TicketingLock *lock );
+        /**
+         * @brief  Post initialization procedure.
+         * @param  ifindex struct ifreq.ifr_ifindex value
+         * @param  sd Socket file descriptor
+         * @param  lock [in] Instance of TicketingLock object
+         * @return TRUE if ok. FALSE if error.
+         */
+        bool post_init( int ifindex, int sd, TicketingLock *lock );
 
-	/**
-	 * @brief  Gets the ptp clock time information
-	 * @param  system_time [out] System time
-	 * @param  device_time [out] Device time
-	 * @param  local_clock Not Used
-	 * @param  nominal_clock_rate Not Used
-	 * @return TRUE if got the time successfully, FALSE otherwise
-	 */
-	virtual bool HWTimestamper_gettime
-	( Timestamp *system_time, Timestamp *mono_time, Timestamp *device_time,
-	  uint32_t *local_clock, uint32_t *nominal_clock_rate ) const;
+        /**
+         * @brief  Gets the ptp clock time information
+         * @param  system_time [out] System time
+         * @param  device_time [out] Device time
+         * @param  local_clock Not Used
+         * @param  nominal_clock_rate Not Used
+         * @return TRUE if got the time successfully, FALSE otherwise
+         */
+        virtual bool HWTimestamper_gettime
+        ( Timestamp *system_time, Timestamp *mono_time, Timestamp *device_time,
+          Timestamp *boot_time,
+          uint32_t *local_clock, uint32_t *nominal_clock_rate ) const;
 
-	/**
-	 * @brief  Gets the TX timestamp from hardware interface
-	 * @param  identity PTP port identity
-	 * @param  PTPMessageId Message ID
-	 * @param  timestamp [out] Timestamp value
-	 * @param  clock_value [out] Clock value
-	 * @param  last Signalizes that it is the last timestamp to get. When TRUE, releases the lock when its done.
-	 * @return GPTP_EC_SUCCESS if no error, GPTP_EC_FAILURE if error and GPTP_EC_EAGAIN to try again.
-	 */
-	virtual int HWTimestamper_txtimestamp
-	( PortIdentity *identity, PTPMessageId messageId, Timestamp &timestamp,
-	  unsigned &clock_value, bool last );
+        /**
+         * @brief  Gets the TX timestamp from hardware interface
+         * @param  identity PTP port identity
+         * @param  PTPMessageId Message ID
+         * @param  timestamp [out] Timestamp value
+         * @param  clock_value [out] Clock value
+         * @param  last Signalizes that it is the last timestamp to get. When TRUE, releases the lock when its done.
+         * @return GPTP_EC_SUCCESS if no error, GPTP_EC_FAILURE if error and GPTP_EC_EAGAIN to try again.
+         */
+        virtual int HWTimestamper_txtimestamp
+        ( PortIdentity *identity, PTPMessageId messageId, Timestamp &timestamp,
+          unsigned &clock_value, bool last );
 
-	/**
-	 * @brief  Gets the RX timestamp from the hardware interface. This
-	 * Currently the RX timestamp is retrieved at LinuxNetworkInterface::nrecv method.
-	 * @param  identity PTP port identity
-	 * @param  PTPMessageId Message ID
-	 * @param  timestamp [out] Timestamp value
-	 * @param  clock_value [out] Clock value
-	 * @param  last Signalizes that it is the last timestamp to get. When TRUE, releases the lock when its done.
-     * @return GPTP_EC_SUCCESS if no error, GPTP_EC_FAILURE if error and GPTP_EC_EAGAIN to try again.
-	 */
-	virtual int HWTimestamper_rxtimestamp
-	( PortIdentity *identity, PTPMessageId messageId, Timestamp &timestamp,
-	  unsigned &clock_value, bool last ) {
-		/* This shouldn't happen. Ever. */
-		if( rxTimestampList.empty() ) return GPTP_EC_EAGAIN;
-		timestamp = rxTimestampList.back();
-		rxTimestampList.pop_back();
+        /**
+         * @brief  Gets the RX timestamp from the hardware interface. This
+         * Currently the RX timestamp is retrieved at LinuxNetworkInterface::nrecv method.
+         * @param  identity PTP port identity
+         * @param  PTPMessageId Message ID
+         * @param  timestamp [out] Timestamp value
+         * @param  clock_value [out] Clock value
+         * @param  last Signalizes that it is the last timestamp to get. When TRUE, releases the lock when its done.
+         * @return GPTP_EC_SUCCESS if no error, GPTP_EC_FAILURE if error and GPTP_EC_EAGAIN to try again.
+         */
+        virtual int HWTimestamper_rxtimestamp
+        ( PortIdentity *identity, PTPMessageId messageId, Timestamp &timestamp,
+          unsigned &clock_value, bool last )
+        {
+            /* This shouldn't happen. Ever. */
+            if ( rxTimestampList.empty() ) {
+                return GPTP_EC_EAGAIN;
+            }
 
-		return GPTP_EC_SUCCESS;
-	}
+            timestamp = rxTimestampList.back();
+            rxTimestampList.pop_back();
+            return GPTP_EC_SUCCESS;
+        }
 
-	/**
-	 * @brief  Adjusts the clock phase
-	 * @param  phase_adjust Phase adjustment
-	 * @return TRUE if success, FALSE if error.
-	 */
-	virtual bool HWTimestamper_adjclockphase( int64_t phase_adjust );
+        /**
+         * @brief  Adjusts the clock phase
+         * @param  phase_adjust Phase adjustment
+         * @return TRUE if success, FALSE if error.
+         */
+        virtual bool HWTimestamper_adjclockphase( int64_t phase_adjust );
 
-	/**
-	 * @brief  Adjusts the frequency
-	 * @param  freq_offset Frequency adjustment
-	 * @return TRUE in case of sucess, FALSE if error.
-	 */
-	virtual bool HWTimestamper_adjclockrate( float freq_offset ) const;
+        /**
+         * @brief  Adjusts the frequency
+         * @param  freq_offset Frequency adjustment
+         * @return TRUE in case of sucess, FALSE if error.
+         */
+        virtual bool HWTimestamper_adjclockrate( float freq_offset ) const;
 
 #ifdef WITH_IGBLIB
-	bool HWTimestamper_PPS_start( );
-	bool HWTimestamper_PPS_stop();
+        bool HWTimestamper_PPS_start( );
+        bool HWTimestamper_PPS_stop();
 #endif
 
-	/**
-	 * @brief  Gets current ptp clock time.
-	 * @param  ptp_cur_time [out] Current ptp time
-	 * @return TRUE in case of sucess, FALSE if error.
-	 */
-	virtual bool HWTimestamper_getptptime( uint64_t *ptp_cur_time );
+        /**
+         * @brief  Gets current ptp clock time.
+         * @param  ptp_cur_time [out] Current ptp time
+         * @return TRUE in case of sucess, FALSE if error.
+         */
+        virtual bool HWTimestamper_getptptime( uint64_t *ptp_cur_time );
 
-	/**
-	 * @brief deletes LinuxTimestamperGeneric object
-	 */
-	virtual ~LinuxTimestamperGeneric();
+        /**
+         * @brief deletes LinuxTimestamperGeneric object
+         */
+        virtual ~LinuxTimestamperGeneric();
 };
 
 

@@ -31,6 +31,15 @@
 
  ******************************************************************************/
 
+/******************************************************************************
+
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+
+******************************************************************************/
+
 #ifndef IPCDEF_HPP
 #define IPCDEF_HPP
 
@@ -66,44 +75,48 @@
  * @brief Provides a data structure for gPTP time
  */
 typedef struct {
-	int64_t ml_phoffset;			//!< Master to local phase offset
-	int64_t ls_phoffset;			//!< Local to system phase offset
-	FrequencyRatio ml_freqoffset;	//!< Master to local frequency offset
-	FrequencyRatio ls_freqoffset;	//!< Local to system frequency offset
-	uint64_t local_time;			//!< Local time of last update
-	bool sync_status;				//!< PTP Sync status
-	/* Current grandmaster information */
-	/* Referenced by the IEEE Std 1722.1-2013 AVDECC Discovery Protocol Data Unit (ADPDU) */
-	uint8_t gptp_grandmaster_id[PTP_CLOCK_IDENTITY_LENGTH];	//!< Current grandmaster id (all 0's if no grandmaster selected)
-	uint8_t gptp_domain_number;		//!< gPTP domain number
+    int64_t ml_phoffset;            //!< Master to local phase offset
+    int64_t ls_phoffset;            //!< Local to system phase offset
+    FrequencyRatio ml_freqoffset;   //!< Master to local frequency offset
+    FrequencyRatio ls_freqoffset;   //!< Local to system frequency offset
+    uint64_t local_time;            //!< Local time of last update
+    bool sync_status;               //!< PTP Sync status
+    /* Current grandmaster information */
+    /* Referenced by the IEEE Std 1722.1-2013 AVDECC Discovery Protocol Data Unit (ADPDU) */
+    uint8_t gptp_grandmaster_id[PTP_CLOCK_IDENTITY_LENGTH]; //!< Current grandmaster id (all 0's if no grandmaster selected)
+    uint8_t gptp_domain_number;     //!< gPTP domain number
 
-	/* Grandmaster support for the network interface */
-	/* Referenced by the IEEE Std 1722.1-2013 AVDECC AVB_INTERFACE descriptor */
-	uint8_t  clock_identity[PTP_CLOCK_IDENTITY_LENGTH];	//!< The clock identity of the interface
-	uint8_t  priority1;				//!< The priority1 field of the grandmaster functionality of the interface, or 0xFF if not supported
-	uint8_t  clock_class;			//!< The clockClass field of the grandmaster functionality of the interface, or 0xFF if not supported
-	int16_t  offset_scaled_log_variance;	//!< The offsetScaledLogVariance field of the grandmaster functionality of the interface, or 0x0000 if not supported
-	uint8_t  clock_accuracy;		//!< The clockAccuracy field of the grandmaster functionality of the interface, or 0xFF if not supported
-	uint8_t  priority2;				//!< The priority2 field of the grandmaster functionality of the interface, or 0xFF if not supported
-	uint8_t  domain_number;			//!< The domainNumber field of the grandmaster functionality of the interface, or 0 if not supported
-	int8_t   log_sync_interval;		//!< The currentLogSyncInterval field of the grandmaster functionality of the interface, or 0 if not supported
-	int8_t   log_announce_interval;	//!< The currentLogAnnounceInterval field of the grandmaster functionality of the interface, or 0 if not supported
-	int8_t   log_pdelay_interval;	//!< The currentLogPDelayReqInterval field of the grandmaster functionality of the interface, or 0 if not supported
-	uint16_t port_number;			//!< The portNumber field of the interface, or 0x0000 if not supported
+    /* Grandmaster support for the network interface */
+    /* Referenced by the IEEE Std 1722.1-2013 AVDECC AVB_INTERFACE descriptor */
+    uint8_t  clock_identity[PTP_CLOCK_IDENTITY_LENGTH]; //!< The clock identity of the interface
+    uint8_t  priority1;             //!< The priority1 field of the grandmaster functionality of the interface, or 0xFF if not supported
+    uint8_t  clock_class;           //!< The clockClass field of the grandmaster functionality of the interface, or 0xFF if not supported
+    int16_t  offset_scaled_log_variance;    //!< The offsetScaledLogVariance field of the grandmaster functionality of the interface, or 0x0000 if not supported
+    uint8_t  clock_accuracy;        //!< The clockAccuracy field of the grandmaster functionality of the interface, or 0xFF if not supported
+    uint8_t  priority2;             //!< The priority2 field of the grandmaster functionality of the interface, or 0xFF if not supported
+    uint8_t  domain_number;         //!< The domainNumber field of the grandmaster functionality of the interface, or 0 if not supported
+    int8_t   log_sync_interval;     //!< The currentLogSyncInterval field of the grandmaster functionality of the interface, or 0 if not supported
+    int8_t   log_announce_interval; //!< The currentLogAnnounceInterval field of the grandmaster functionality of the interface, or 0 if not supported
+    int8_t   log_pdelay_interval;   //!< The currentLogPDelayReqInterval field of the grandmaster functionality of the interface, or 0 if not supported
+    uint16_t port_number;           //!< The portNumber field of the interface, or 0x0000 if not supported
 
-	/* Linux-specific */
-	uint32_t sync_count;			//!< Sync messages count
-	uint32_t pdelay_count;			//!< pdelay messages count
-	bool asCapable;                 //!< asCapable flag: true = device is AS Capable; false otherwise
-	PortState port_state;			//!< gPTP port state. It can assume values defined at ::PortState
-	PID_TYPE process_id;			//!< Process id number
-	uint8_t gmIdentifier[PTP_CLOCK_IDENTITY_LENGTH];
-	uint16_t portNumber;
+    /* Linux-specific */
+    uint32_t sync_count;            //!< Sync messages count
+    uint32_t pdelay_count;          //!< pdelay messages count
+    bool asCapable;                 //!< asCapable flag: true = device is AS Capable; false otherwise
+    PortState port_state;           //!< gPTP port state. It can assume values defined at ::PortState
+    PID_TYPE process_id;            //!< Process id number
+    uint8_t gmIdentifier[PTP_CLOCK_IDENTITY_LENGTH];
+    uint16_t portNumber;
 
-	int64_t lq_phoffset;			//!< Local to qtimer phase offset
-	FrequencyRatio lq_freqoffset;	//!< Local to qtimer frequency offset
-	int64_t qtime_to_mono_offset; //!Qtimer to monotonic offset
+    int64_t lq_phoffset;            //!< Local to qtimer phase offset
+    FrequencyRatio lq_freqoffset;   //!< Local to qtimer frequency offset
+    int64_t qtime_to_mono_offset;   //!Qtimer to monotonic offset
+    int32_t verbose_mode;           //!< Dynamically enable verbose mode
+    int32_t in_proxy_mode;          //!< Proxy Mode
 
+    int64_t lb_phoffset;            //!< Local to boottime phase offset
+    FrequencyRatio lb_freqoffset;   //!< Local to boottime frequency offset
 
 } gPtpTimeData;
 
