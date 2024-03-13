@@ -822,7 +822,7 @@ bool gptpGetBootTimeFromPtpTime(uint64_t *boot_time_ns, uint64_t ptp_time_ns)
         if (gptpdiff > GPTP_BOOTTIME_VALIDTY_RANGE || gptpdiff < 0) {
             prev_boot = 0;
             boot_gptp_ratio = 1.0;
-            printf(" gptpdiff out of range %d \n", gptpdiff);
+            //printf("reset boot ratio as gptpdiff is out of range %d prev_gptp %ld\n", gptpdiff,prev_gptp);
         }
 
         if (prev_gptp != 0 && prev_boot != 0) {
@@ -830,7 +830,7 @@ bool gptpGetBootTimeFromPtpTime(uint64_t *boot_time_ns, uint64_t ptp_time_ns)
                                prev_boot)) / (*gptp_mem - prev_gptp) ) / 3;
         }
 
-        *boot_time_ns = *boot_time_mem - (*gptp_mem - ptp_time_ns) * boot_gptp_ratio;
+        *boot_time_ns = *boot_time_mem - ((int64_t)(*gptp_mem - ptp_time_ns)) * boot_gptp_ratio;
         prev_boot = *boot_time_mem;
         prev_gptp = *gptp_mem;
     } else {
