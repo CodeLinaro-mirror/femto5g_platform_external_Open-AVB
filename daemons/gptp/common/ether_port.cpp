@@ -769,6 +769,14 @@ void EtherPort::becomeMaster( bool annc )
     clock->deleteEventTimerLocked( this, ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES );
     // Stop sync receipt timeout timer
     clock->setSyncStatus(true, PTP_MASTER);
+
+    if (sct_buffer) {
+        pthread_mutex_lock((pthread_mutex_t *) &sct_buffer->lock);
+        sct_buffer->status.gptp_status = GPTP_STATUS_TIMEOUT;
+        sct_buffer->status.IsMaster = 1;
+        pthread_mutex_unlock((pthread_mutex_t *) &sct_buffer->lock);
+    }
+
     stopSyncReceiptTimer();
 
     if ( annc ) {
@@ -789,6 +797,13 @@ void EtherPort::becomeSlave( bool restart_syntonization )
     clock->deleteEventTimerLocked( this, SYNC_INTERVAL_TIMEOUT_EXPIRES );
     setPortState( PTP_SLAVE );
     clock->setSyncStatus(false, PTP_SLAVE);
+
+    if (sct_buffer) {
+        pthread_mutex_lock((pthread_mutex_t *) &sct_buffer->lock);
+        sct_buffer->status.gptp_status = GPTP_STATUS_TIMEOUT;
+        sct_buffer->status.IsMaster = 0;
+        pthread_mutex_unlock((pthread_mutex_t *) &sct_buffer->lock);
+    }
 
     if (!automotive_profile) {
         clock->addEventTimerLocked

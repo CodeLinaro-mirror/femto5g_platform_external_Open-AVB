@@ -55,7 +55,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #include <unistd.h>
 #include <errno.h>
-
+#include <inttypes.h>
 #include <signal.h>
 #include <net/ethernet.h> /* the L2 protocols */
 
