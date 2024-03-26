@@ -1130,9 +1130,9 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg )
         } else {
             GPTP_LOG_INFO("opened gptp kernel device: /dev/gptp");
         }
-    } while ( ( gptp_fd == -1 )
-            || ( (FD_TO_CLOCKID(gptp_fd)) == -1 )
-            || ( count > 100 ) );
+    } while ( ( ( gptp_fd == -1 )
+            || ( (FD_TO_CLOCKID(gptp_fd)) == -1 ) )
+            && ( count < 100 ) );
 
 #endif
     (void) umask(oldumask);
