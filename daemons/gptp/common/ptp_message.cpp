@@ -1832,14 +1832,18 @@ bool PTPMessageSignalling::sendPort
 void PTPMessageSignalling::processMessage( EtherPort *port )
 {
 	long long unsigned int waitTime;
-
 	GPTP_LOG_STATUS("Signalling Link Delay Interval: %d", tlv.getLinkDelayInterval());
 	GPTP_LOG_STATUS("Signalling Sync Interval: %d", tlv.getTimeSyncInterval());
 	GPTP_LOG_STATUS("Signalling Announce Interval: %d", tlv.getAnnounceInterval());
-
 	int8_t linkDelayInterval = tlv.getLinkDelayInterval();
 	int8_t timeSyncInterval = tlv.getTimeSyncInterval();
 	int8_t announceInterval = tlv.getAnnounceInterval();
+
+    	if ((true == port->getAutomotiveProfile()) && (port->getPortState() == PTP_SLAVE))
+    	{
+            	GPTP_LOG_WARNING("Ignoring SIGNALLING_MESSAGE as port is in automotive profile and in slave role");
+            	return;
+    	}
 
 	if (linkDelayInterval == PTPMessageSignalling::sigMsgInterval_Initial) {
 		port->setInitPDelayInterval();
