@@ -1091,7 +1091,7 @@ bool gptpGetCurPtpTime(uint64_t *gptp_time_cur)
 {
 #ifdef LE_GVM
     int ret = 0;
-    struct ptp_lib ptp_data;
+    gptpTimeInfo_t ptp_data;
 
     if (gptp_fd != -1) {
         ret = ioctl(gptp_fd, GET_PTP_DATA, &ptp_data);
@@ -1276,7 +1276,7 @@ bool getgPTPStatus(gptpStatsType_t *status) {
 }
 
 /* public API to query gptp status, port status and current gptp time */
-bool gptpGetStatusAndCurPtpTime(struct ptp_lib *ptp_data) {
+bool gptpGetStatusAndCurPtpTime(gptpTimeInfo_t *ptp_data) {
 
 #ifdef LE_GVM
     int ret = 0;
