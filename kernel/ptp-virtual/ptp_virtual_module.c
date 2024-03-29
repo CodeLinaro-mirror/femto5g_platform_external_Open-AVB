@@ -69,16 +69,18 @@ enum vm_variant {
     TELEVM,
 };
 
-struct ptp_status_buffers {
+typedef struct __attribute__ ((packed))
+{
     bool status;
     int32_t port_status;
     int32_t tv_sec;
     int32_t tv_nsec;
-};
+}
+gptpTimeInfo_t;
 
 struct ptp_client {
     struct ptp_device *ptp_dev;
-    struct ptp_status_buffers ptp_data;
+    gptpTimeInfo_t ptp_data;
 };
 
 struct ptp_device {
@@ -87,7 +89,7 @@ struct ptp_device {
     struct notifier_block rm_nb;
     uint32_t ptp_status_shm_label;
     struct iommu_domain *domain;
-    struct ptp_status_buffers *ptp_buff;
+    gptpTimeInfo_t *ptp_buff;
     gh_memparcel_handle_t ptp_buff_mem_handle;
     dev_t ptp_cdev_devid;
     struct cdev ptp_cdev;
@@ -101,10 +103,26 @@ static void __iomem *ptp_base_addr = NULL;
 
 static int ptp_open(struct inode *inode, struct file *filp)
 {
-    struct ptp_device *ptp_dev = container_of(inode->i_cdev,
-                                 struct ptp_device, ptp_cdev);
+    int ret = 0;
+    struct ptp_device *ptp_dev = NULL;
+
+    if (!inode || !filp) {
+        ret = -EFAULT;
+        goto ret;
+    }
+
+    ptp_dev = container_of(inode->i_cdev,
+                           struct ptp_device, ptp_cdev);
+
+    if (!ptp_dev || !ptp_dev->dev) {
+        ret = -EFAULT;
+        goto ret;
+    }
+
     filp->private_data = ptp_dev;
-    return 0;
+    dev_info(ptp_dev->dev, "ptp_open is sucess \r\n");
+ret:
+    return ret;
 }
 
 
@@ -112,7 +130,25 @@ static long ptp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
     int ret = 0;
     int32_t tv_sec = 0;
-    struct ptp_device *ptp_dev = filp->private_data;
+    struct ptp_device *ptp_dev = NULL;
+
+    if (!filp) {
+        ret = -EFAULT;
+        goto ret;
+    }
+
+    ptp_dev = filp->private_data;
+
+    if (!ptp_dev || !ptp_dev->dev) {
+        ret = -EFAULT;
+        goto ret;
+    }
+
+    if (!ptp_dev->ptp_buff) {
+        dev_err(ptp_dev->dev, "ptp_buff is NULL \r\n");
+        ret = -EFAULT;
+        goto ret;
+    }
 
     switch (cmd) {
         case GET_PTP_DATA:
@@ -131,8 +167,8 @@ static long ptp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
                 dev_err(ptp_dev->dev, "PTP register adress is NULL\r\n");
             }
 
-            if (copy_to_user((struct ptp_status_buffers *)arg, ptp_dev->ptp_buff,
-                             sizeof(struct ptp_status_buffers))) {
+            if (copy_to_user((void __user *)arg, ptp_dev->ptp_buff,
+                             sizeof(gptpTimeInfo_t))) {
                 dev_err(ptp_dev->dev, "Failed to copy_to_user \r\n");
                 ret = -EFAULT;
             }
@@ -140,8 +176,9 @@ static long ptp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             break;
 
         case SET_PTP_DATA:
-            if (copy_from_user(ptp_dev->ptp_buff, (unsigned int *) arg,
-                               sizeof(struct ptp_status_buffers))) {
+
+            if (copy_from_user(ptp_dev->ptp_buff, (void __user *) arg,
+                               sizeof(gptpTimeInfo_t))) {
                 dev_err(ptp_dev->dev, "Failed to copy_from_user \r\n");
                 ret = -EFAULT;
             }
@@ -152,6 +189,7 @@ static long ptp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             break;
     }
 
+ret:
     return ret;
 }
 
@@ -166,7 +204,20 @@ static int read_shm_labels(struct ptp_device *ptp_dev)
 {
     int ret = 0;
     struct device_node *node;
+
+    if (!ptp_dev || !ptp_dev->dev) {
+        ret = -EINVAL;
+        goto ret;
+    }
+
     node = ptp_dev->dev->of_node;
+
+    if (!node) {
+        dev_err(ptp_dev->dev, "qcom,ptp read_shm_labels node is NULL\n");
+        ret = -EINVAL;
+        goto ret;
+    }
+
     ret = of_property_read_u32(node, "qcom,ptp-status-buff-shm-label",
                                &ptp_dev->ptp_status_shm_label);
 
@@ -175,6 +226,7 @@ static int read_shm_labels(struct ptp_device *ptp_dev)
         ret = -EINVAL;
     }
 
+ret:
     return ret;
 }
 
@@ -183,11 +235,25 @@ static int hyp_assign_mem_share(struct ptp_device *ptp_dev,
                                 struct gh_sgl_desc *ptp_sgl_desc, dma_addr_t dma_addr,
                                 uint32_t size, uint32_t label, gh_memparcel_handle_t *handle)
 {
+    int ret = 0;
     int srcVMperm[1] = {PERM_READ | PERM_WRITE};
     int destVMperm[2] = {PERM_READ | PERM_WRITE, PERM_READ | PERM_WRITE};
     int srcVM[1] = {AC_VM_HLOS};
-    int destVM[2] = {AC_VM_HLOS, ptp_dev->televm_vmid};
-    int ret = 0;
+    int destVM[2] = {AC_VM_HLOS, 0};
+
+    if (!ptp_dev || !ptp_dev->dev) {
+        ret = -EINVAL;
+        goto ret;
+    }
+
+    if (!ptp_acl_desc || !ptp_sgl_desc || !handle) {
+        dev_err(ptp_dev->dev,
+                "hyp_assign_mem_share has null arguments\n");
+        ret = -EINVAL;
+        goto ret;
+    }
+
+    destVM[1] = ptp_dev->televm_vmid;
     ptp_sgl_desc->n_sgl_entries = 1;
     ptp_sgl_desc->sgl_entries[0].ipa_base = dma_addr;
     ptp_sgl_desc->sgl_entries[0].size = size;
@@ -219,12 +285,19 @@ ret:
 
 static int ptp_hostvm_mem_share(struct ptp_device *ptp_dev)
 {
+    int ret = 0;
     struct gh_acl_desc *ptp_acl_desc;
     struct gh_sgl_desc *ptp_sgl_desc;
     int srcVMperm[1] = {PERM_READ | PERM_WRITE};
     int srcVM[1] = {AC_VM_HLOS};
-    int destVM[2] = {AC_VM_HLOS, ptp_dev->televm_vmid};
-    int ret = 0;
+    int destVM[2] = {AC_VM_HLOS, 0};
+
+    if (!ptp_dev || !ptp_dev->dev) {
+        ret = -EINVAL;
+        goto acl_alloc_fail;
+    }
+
+    destVM[1] = ptp_dev->televm_vmid;
     ptp_dev->ptp_buff_mem_handle = 0;
     ptp_acl_desc = kzalloc(offsetof(struct gh_acl_desc, acl_entries[2]),
                            GFP_KERNEL);
@@ -250,7 +323,7 @@ static int ptp_hostvm_mem_share(struct ptp_device *ptp_dev)
     /* Share ptp buffer from hostvm to televm */
     ret = hyp_assign_mem_share(ptp_dev, ptp_acl_desc, ptp_sgl_desc,
                                ptp_dev->ptp_status_buff_dma,
-                               round_up(sizeof(struct ptp_status_buffers), PAGE_SIZE),
+                               round_up(sizeof(gptpTimeInfo_t), PAGE_SIZE),
                                ptp_dev->ptp_status_shm_label,
                                &ptp_dev->ptp_buff_mem_handle);
 
@@ -263,7 +336,7 @@ static int ptp_hostvm_mem_share(struct ptp_device *ptp_dev)
 mem_share_status_buff_fail:
     gh_rm_mem_reclaim(ptp_dev->ptp_buff_mem_handle, 0);
     hyp_assign_phys(ptp_dev->ptp_status_buff_dma,
-                    round_up(sizeof(struct ptp_status_buffers), PAGE_SIZE),
+                    round_up(sizeof(gptpTimeInfo_t), PAGE_SIZE),
                     destVM, 2, srcVM, srcVMperm, 1);
 free_mem:
     kfree(ptp_sgl_desc);
@@ -277,10 +350,17 @@ static int hyp_unassign_mem_reclaim(struct ptp_device *ptp_dev,
                                     dma_addr_t dma_addr, uint32_t label,
                                     uint32_t size, gh_memparcel_handle_t handle)
 {
+    int ret = 0;
     int srcVMperm[1] = {PERM_READ | PERM_WRITE};
-    int srcVM[2] = {AC_VM_HLOS, ptp_dev->televm_vmid};
+    int srcVM[2] = {AC_VM_HLOS, 0};
     int destVM[1] = {AC_VM_HLOS};
-    int ret;
+
+    if (!ptp_dev || !ptp_dev->dev) {
+        ret = -EINVAL;
+        goto ret;
+    }
+
+    srcVM[1] = ptp_dev->televm_vmid;
     ret = gh_rm_mem_reclaim(handle, 0);
 
     if (ret) {
@@ -290,16 +370,23 @@ static int hyp_unassign_mem_reclaim(struct ptp_device *ptp_dev,
         ret = hyp_assign_phys(dma_addr, size, srcVM, 2, destVM, srcVMperm, 1);
     }
 
+ret:
     return ret;
 }
 
 
 static void ptp_hostvm_unshare_mem(struct ptp_device *ptp_dev)
 {
-    int ret;
+    int ret = 0;
+
+    if (!ptp_dev || !ptp_dev->dev) {
+        ret = -EINVAL;
+        return;
+    }
+
     ret = hyp_unassign_mem_reclaim(ptp_dev, ptp_dev->ptp_status_buff_dma,
                                    ptp_dev->ptp_status_shm_label,
-                                   round_up(sizeof(struct ptp_status_buffers), PAGE_SIZE),
+                                   round_up(sizeof(gptpTimeInfo_t), PAGE_SIZE),
                                    ptp_dev->ptp_buff_mem_handle);
 
     if (ret)
@@ -312,17 +399,29 @@ static void ptp_hostvm_unshare_mem(struct ptp_device *ptp_dev)
 static int qcom_ptp_rm_cb(struct notifier_block *nb, unsigned long cmd,
                           void *data)
 {
+    int ret = 0;
     struct gh_rm_notif_vm_status_payload *vm_status_payload;
     struct ptp_device *ptp_dev;
-    int ret;
     gh_vmid_t vmid;
+
+    if (!nb || !data) {
+        ret = -EINVAL;
+        goto ret;
+    }
+
     ptp_dev = container_of(nb, struct ptp_device, rm_nb);
+
+    if (!ptp_dev || !ptp_dev->dev) {
+        ret = -EINVAL;
+        goto ret;
+    }
+
     vm_status_payload = data;
     ret = gh_rm_get_vmid(GH_TELE_VM, &vmid);
 
     if (ret) {
         dev_err(ptp_dev->dev, "gh_rm_get_vmid failed\n");
-        return NOTIFY_DONE;
+        goto ret;
     }
 
     if (vm_status_payload->vmid == vmid && cmd == GH_VM_BEFORE_POWERUP) {
@@ -331,19 +430,20 @@ static int qcom_ptp_rm_cb(struct notifier_block *nb, unsigned long cmd,
 
         if (ret) {
             dev_err(ptp_dev->dev, "read_shm_labels failed\n");
-            return NOTIFY_DONE;
+            goto ret;
         }
 
         ret = ptp_hostvm_mem_share(ptp_dev);
 
         if (ret) {
             dev_err(ptp_dev->dev, "ptp_hostvm_mem_share failed\n");
-            goto hostvm_mem_share_fail;
+            goto ret;
         }
     }
 
-hostvm_mem_share_fail:
     return NOTIFY_DONE;
+ret:
+    return ret;
 }
 
 static int ptp_televm_map_shared_mem(struct ptp_device *ptp_dev, char *compat,
@@ -353,6 +453,11 @@ static int ptp_televm_map_shared_mem(struct ptp_device *ptp_dev, char *compat,
     struct resource res;
     uint32_t label;
     int ret = 0;
+
+    if (!ptp_dev || !ptp_dev->dev) {
+        ret = -EINVAL;
+        goto err;
+    }
 
     while ((np = of_find_compatible_node(np, NULL, compat))) {
         ret = of_property_read_u32(np, "qcom,label", &label);
@@ -399,6 +504,8 @@ static int ptp_televm_map_shared_mem(struct ptp_device *ptp_dev, char *compat,
             dev_err(ptp_dev->dev, "ioremap of ptp status buffers failed\n");
             goto ioremap_ptp_status_buff_fail;
         }
+
+        dev_info(ptp_dev->dev, "ioremap of ptp status buffers created\n");
     }
 
     goto put_shm_np;
@@ -415,7 +522,11 @@ err:
 
 static void ptp_dma_mem_free(struct ptp_device *ptp_dev)
 {
-    dma_free_coherent(ptp_dev->dev, round_up(sizeof(struct ptp_status_buffers),
+    if (!ptp_dev || !ptp_dev->dev) {
+        return;
+    }
+
+    dma_free_coherent(ptp_dev->dev, round_up(sizeof(gptpTimeInfo_t),
                       PAGE_SIZE),
                       ptp_dev->ptp_buff, ptp_dev->ptp_status_buff_dma);
 }
@@ -424,8 +535,14 @@ static void ptp_dma_mem_free(struct ptp_device *ptp_dev)
 static int ptp_dma_mem_alloc(struct ptp_device *ptp_dev)
 {
     int ret = 0;
+
+    if (!ptp_dev || !ptp_dev->dev) {
+        ret = -EINVAL;
+        goto ret;
+    }
+
     ptp_dev->ptp_buff = dma_alloc_coherent(ptp_dev->dev,
-                                           round_up(sizeof(struct ptp_status_buffers), PAGE_SIZE),
+                                           round_up(sizeof(gptpTimeInfo_t), PAGE_SIZE),
                                            &ptp_dev->ptp_status_buff_dma, GFP_KERNEL);
 
     if (!ptp_dev->ptp_buff) {
@@ -433,6 +550,7 @@ static int ptp_dma_mem_alloc(struct ptp_device *ptp_dev)
         ret = -ENOMEM;
     }
 
+ret:
     return ret;
 }
 
@@ -442,6 +560,11 @@ static int ptp_virtual_probe(struct platform_device *pdev)
     int ret = 0;
     struct device_node *dev_node = NULL;
     struct ptp_device *ptp_dev;
+
+    if (!pdev) {
+        return -EINVAL;
+    }
+
     dev_node = pdev->dev.of_node;
     ptp_dev = devm_kzalloc(&pdev->dev, sizeof(*ptp_dev), GFP_KERNEL);
 
@@ -496,6 +619,7 @@ static int ptp_virtual_probe(struct platform_device *pdev)
         ret = ptp_dma_mem_alloc(ptp_dev);
 
         if (ret) {
+            dev_err(ptp_dev->dev, " ptp_dma_mem_alloc for PTP failed.\r\n");
             goto dma_mem_fail;
         }
 
@@ -559,8 +683,17 @@ drv_err:
 static int ptp_virtual_remove(struct platform_device *pdev)
 {
     int ret = 0;
-    struct ptp_device *ptp_dev;
+    struct ptp_device *ptp_dev = NULL;
+
+    if (!pdev) {
+        return -EINVAL;
+    }
+
     ptp_dev = dev_get_drvdata(&pdev->dev);
+
+    if (!ptp_dev) {
+        return -ENOMEM;
+    }
 
     if (ptp_dev->vm_variant == HOSTVM) {
         ptp_hostvm_unshare_mem(ptp_dev);

@@ -78,6 +78,14 @@ extern Timestamp tsToTimestamp(struct timespec *ts);
 
 struct TicketingLockPrivate;
 
+typedef struct __attribute__ ((packed))
+{
+    bool status;
+    int32_t port_status;
+    int32_t tv_sec;
+    int32_t tv_nsec;
+} gptpTimeInfo_t;
+
 /**
  * @brief Provides the type for the TicketingLock private structure
  */
