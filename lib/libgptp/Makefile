@@ -4,6 +4,9 @@ CPPFLAGS+= -fpic -g -I../../daemons/gptp/linux/src -I../../daemons/gptp/common
 ifeq ($(GPTP_AUTO_START),1)
 	CPPFLAGS += -DGPTP_AUTO_START
 endif
+ifeq ($(LE_GVM),1)
+	CPPFLAGS += -DLE_GVM
+endif
 ifeq ($(AVB_FEATURE_GVM_MODE),1)
 	CPPFLAGS += -DAVB_FEATURE_GVM_MODE
 endif
@@ -13,7 +16,7 @@ endif
 ifeq ($(RGPTP_CLNT_ENABLED),1)
 	CPPFLAGS += -DRGPTP_CLNT_ENABLED
 endif
-LDFLAGS= -shared -lrt -lpthread
+LDFLAGS+= -shared -lrt -lpthread
 
 ifeq ($(AVB_FEATURE_GVM_MODE),1)
 	LDFLAGS+= -luhab
@@ -29,4 +32,4 @@ clean:
 	rm -f $(OBJECTS) $(TARGET)
 
 $(TARGET) : $(OBJECTS)
-	$(CC) $(CPPFLAGS) $(INCLUDES) $(OBJECTS) -o $@ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(CXXFLAGS) $(INCLUDES) $(OBJECTS) -o $@ $(LDFLAGS)

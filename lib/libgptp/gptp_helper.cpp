@@ -53,6 +53,14 @@ Attributions: The inih library portion of the source code is licensed from
 Brush Technology and Ben Hoyt - Copyright (c) 2009, Brush Technology and Copyright (c) 2009, Ben Hoyt.
 Complete license and copyright information can be found at
 https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
+
+============================================================================ */
+
+/* ============================================================================
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
 ============================================================================ */
 #include <linux/ptp_clock.h>
 #include <sys/mman.h>
@@ -77,17 +85,21 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include "gptp_helper.h"
 #include <atomic>
 #include <limits.h>
+#include <syslog.h>
+#include <stdarg.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 pthread_mutex_t gInitMutex = PTHREAD_MUTEX_INITIALIZER;
-#define LOCK()  	pthread_mutex_lock(&gInitMutex)
-#define UNLOCK()	pthread_mutex_unlock(&gInitMutex)
+#define LOCK()      pthread_mutex_lock(&gInitMutex)
+#define UNLOCK()    pthread_mutex_unlock(&gInitMutex)
 
 #define CLOCKFD 3
-#define FD_TO_CLOCKID(fd)	((~(clockid_t) (fd) << 3) | CLOCKFD)
+#define FD_TO_CLOCKID(fd)   ((~(clockid_t) (fd) << 3) | CLOCKFD)
 #define BUF_SIZE 500
+#define GPTP_BOOTTIME_VALIDTY_RANGE 10000000000LL //using 10 sec max time difference to find the boot time ratio
 
 #ifdef GPTP_AUTO_START
 #ifdef SYSTEMD
@@ -98,6 +110,35 @@ pthread_mutex_t gInitMutex = PTHREAD_MUTEX_INITIALIZER;
 #define CONNECT_RETRY_PERIOD_us  1000
 #endif
 
+#ifdef AVB_FEATURE_GVM_MODE
+#define SCT_SHM_NAME  "/dev/sct_gptp_shm"     /*!< Shared memory name*/
+#else
+#ifdef ANDROID
+#define SCT_SHM_NAME  "/dev/sctptpshm"     /*!< Shared memory name*/
+#else
+#define SCT_SHM_NAME  "/sct_ptp"        /*!< Shared memory name*/
+#endif
+#endif
+#define SCT_SHM_SIZE 0x2000
+#ifndef LOG_ERROR
+#define LOG_ERROR    1
+#endif
+#ifndef LOG_WARNING
+#define LOG_WARNING     2
+#endif
+#ifndef LOG_INFO
+#define LOG_INFO     3
+#endif
+#ifndef LOG_DEBUG
+#define LOG_DEBUG    4
+#endif
+#define GPTP_LOG_LEVEL LOG_INFO
+#define GPTP_LOG_ERROR(fmt, ...) system_log(LOG_ERROR, "[tid : %d %s %d] : " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
+#define GPTP_LOG_WARNING(fmt, ...) system_log(LOG_WARNING, "[tid : %d %s %d] : " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
+#define GPTP_LOG_INFO(fmt, ...) system_log(LOG_INFO, "[tid : %d %s %d] : " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
+#define GPTP_LOG_DEBUG(fmt, ...) system_log(LOG_DEBUG, "[tid : %d %s %d] : " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
+
+
 static bool bInitialized = false;
 #ifdef GPTP_AUTO_START
 static bool bServiceConnect = false;
@@ -107,6 +148,8 @@ int pipefd[2];
 fd_set readfds;
 static int gPtpShmFd = -1;
 static char *gPtpMmap = NULL;
+static int gPtpSCTShmFd = -1;
+static char *gPtpSCTMmap = NULL;
 static gPtpTimeData gPtpTD;
 static int gptpPhcFd = -1;
 static clockid_t gPtpClockid = -1;
@@ -118,6 +161,10 @@ static clockid_t rgptp_clkid = -1;
 #ifdef GPTP_AUTO_START
 static pthread_t thread_id;
 static int sock = -1;
+#endif
+
+#ifdef LE_GVM
+static int gptp_fd = -1;
 #endif
 
 GPTP_UPDATE_NOTIFY_CALLBACK gptp_update_callback = NULL;
@@ -132,282 +179,402 @@ int32_t hab_hdl;
 #define HABMM_SOCKET_RECV_FLAGS_UNINTERRUPTIBLE 0x00000002
 #define HABMM_VNW_1 1401
 
-extern "C" int32_t habmm_socket_open(int32_t *handle, uint32_t mm_ip_id,uint32_t timeout, uint32_t flags);
-extern "C" int32_t habmm_socket_recv(int32_t handle, void *dst_buff, uint32_t *size_bytes,uint32_t timeout, uint32_t flags);
+extern "C" int32_t habmm_socket_open(int32_t *handle, uint32_t mm_ip_id,
+                                     uint32_t timeout, uint32_t flags);
+extern "C" int32_t habmm_socket_recv(int32_t handle, void *dst_buff,
+                                     uint32_t *size_bytes, uint32_t timeout, uint32_t flags);
 extern "C" int32_t habmm_socket_close(int32_t handle);
 
 #endif
 
 
+typedef struct {
+    pthread_mutex_t lock;
+    syncMesaurementData_t syncData;
+    pDelayMeasurementData_t delayData;
+    gptpStatsType_t status;
+    syncInterval_t syncInterval;
+} sct_gptp_data;
+
+void system_log(int loglevel, const char *s, ...)
+{
+    va_list arg = {};
+
+    if (loglevel == LOG_ERROR || loglevel <= GPTP_LOG_LEVEL) {
+        va_start(arg, s);
+        vsyslog(loglevel, s, arg);
+        va_end(arg);
+    }
+}
+
 static int gptpClkInit(int *gptp_phc_fd)
 {
     *gptp_phc_fd = open("/dev/ptp0", O_RDWR );
 
-    if( *gptp_phc_fd == -1 ||
-        (gPtpClockid = FD_TO_CLOCKID(*gptp_phc_fd)) == -1 ) {
-        printf("Failed to open PTP clock device\n");
+    if ( *gptp_phc_fd == -1 ||
+            (gPtpClockid = FD_TO_CLOCKID(*gptp_phc_fd)) == -1 ) {
+        GPTP_LOG_ERROR("Failed to open PTP clock device\n");
         return false;
     }
+
     return true;
 }
 
 static void gptpClkDeInit(int gptp_phc_fd)
 {
-    if (gptp_phc_fd < 0)
-	close(gptp_phc_fd);
+    if (gptp_phc_fd < 0) {
+        close(gptp_phc_fd);
+    }
 
     gPtpClockid = -1;
 }
 
+
+static bool gptpSCTMemInit()
+{
+    if (gPtpSCTShmFd  == -1) {
+#ifdef AVB_FEATURE_GVM_MODE
+        gPtpSCTShmFd = open( SCT_SHM_NAME, O_RDWR, 0);
+#else
+#ifdef ANDROID
+        gPtpSCTShmFd = open( SCT_SHM_NAME, O_RDWR | O_CREAT, 0);
+#else
+        gPtpSCTShmFd = shm_open(SCT_SHM_NAME, O_RDWR, 0);
+#endif
+#endif
+        GPTP_LOG_INFO("gptpSCTMemInit %s %d\n", SCT_SHM_NAME, gPtpSCTShmFd);
+
+        if (gPtpSCTShmFd == -1) {
+            perror("shm_open()");
+            return false;
+        }
+
+        gPtpSCTMmap =
+            (char *)mmap(NULL, SCT_SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+                         gPtpSCTShmFd, 0);
+        GPTP_LOG_INFO("gptpMemInit mmap pointer %p\n", gPtpSCTMmap);
+
+        if (gPtpSCTMmap == (char *) -1) {
+            perror("mmap()");
+            gPtpSCTMmap = NULL;
+#ifdef AVB_FEATURE_GVM_MODE
+            close(gPtpSCTShmFd);
+            unlink(SCT_SHM_NAME );
+#else
+#ifdef ANDROID
+            close(gPtpSCTShmFd);
+            unlink(SCT_SHM_NAME );
+#else
+            close(gPtpSCTShmFd);
+#endif
+#endif
+            GPTP_LOG_ERROR("gptpSCTMemInit failed %s\n", SCT_SHM_NAME);
+            gPtpSCTShmFd = -1;
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static void gptpSCTMemDeinit()
+{
+    if (gPtpSCTShmFd != -1) {
+        if (gPtpSCTMmap != NULL) {
+            munmap(gPtpSCTMmap, SCT_SHM_SIZE);
+            gPtpSCTMmap = NULL;
+        }
+
+        if (gPtpSCTShmFd != -1) {
+            close(gPtpSCTShmFd);
+        }
+
+        GPTP_LOG_INFO("gptpSCTMemDeinit %s\n", SCT_SHM_NAME);
+        gPtpSCTShmFd = -1;
+    }
+}
+
+
+
 /* gptp core function to init gptp scaling */
 static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 {
-	if (NULL == gptp_shm_fd)
-		return false;
+    if (NULL == gptp_shm_fd) {
+        return false;
+    }
+
 #ifdef AVB_FEATURE_GVM_MODE
-	*gptp_shm_fd = open( SHM_NAME, O_RDWR, 0);
+    *gptp_shm_fd = open( SHM_NAME, O_RDWR, 0);
 #else
 #ifdef ANDROID
-	*gptp_shm_fd = open( SHM_NAME, O_RDWR | O_CREAT, 0);
+    *gptp_shm_fd = open( SHM_NAME, O_RDWR | O_CREAT, 0);
 #else
-	*gptp_shm_fd = shm_open(SHM_NAME, O_RDWR, 0);
+    *gptp_shm_fd = shm_open(SHM_NAME, O_RDWR, 0);
 #endif
 #endif
-	printf("gptpMemInit %s",SHM_NAME);
-	if (*gptp_shm_fd == -1) {
-		perror("shm_open()");
-		return false;
-	}
+    GPTP_LOG_INFO("gptpMemInit %s %d\n", SHM_NAME, *gptp_shm_fd);
 
-	*gptp_mmap =
-	    (char *)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
-			 *gptp_shm_fd, 0);
+    if (*gptp_shm_fd == -1) {
+        perror("shm_open()");
+        return false;
+    }
 
-	if (*gptp_mmap == (char *)-1) {
-		perror("mmap()");
-		*gptp_mmap = NULL;
+    *gptp_mmap =
+        (char *)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+                     *gptp_shm_fd, 0);
+
+    if (*gptp_mmap == (char *) -1) {
+        perror("mmap()");
+        GPTP_LOG_ERROR("gptpMemInit mmap pointer %p\n", *gptp_mmap);
+        *gptp_mmap = NULL;
 #ifdef AVB_FEATURE_GVM_MODE
-		close(*gptp_shm_fd);
-		unlink(SHM_NAME );
+        close(*gptp_shm_fd);
+        unlink(SHM_NAME );
 #else
 #ifdef ANDROID
-		close(*gptp_shm_fd);
-		unlink(SHM_NAME );
+        close(*gptp_shm_fd);
+        unlink(SHM_NAME );
 #else
-		shm_unlink(SHM_NAME);
+        close(*gptp_shm_fd);
 #endif
 #endif
-		return false;
-	}
-	return true;
+        GPTP_LOG_ERROR("gptpMemInit failed %s\n", SHM_NAME);
+        return false;
+    }
+
+    gptpSCTMemInit();
+    return true;
 }
 
 /* gptp core function to deinit gptp scaling */
 static void gptpMemDeinit(int gptp_shm_fd, char *gptp_mmap)
 {
-	if (gptp_mmap != NULL){
-		munmap(gptp_mmap, SHM_SIZE);
-		gptp_mmap = NULL;
+    if (gptp_mmap != NULL) {
+        munmap(gptp_mmap, SHM_SIZE);
+        gptp_mmap = NULL;
     }
 
-	if (gptp_shm_fd != -1)
-		close(gptp_shm_fd);
+    if (gptp_shm_fd != -1) {
+        close(gptp_shm_fd);
+    }
+
+    GPTP_LOG_INFO("gptpMemDeinit %s\n", SHM_NAME);
+    gptpSCTMemDeinit();
 }
 
 /* gptp core function to copy gptp offset data from shared memory */
 static int gptpScaling(gPtpTimeData * td, char *memory_offset_buffer)
 {
-	if ((td == NULL)||(memory_offset_buffer == NULL))
-	{
-		printf("gptpScaling failure %p %p\n",td,memory_offset_buffer);
-		return false;
-	}
+    if ((td == NULL) || (memory_offset_buffer == NULL)) {
+        GPTP_LOG_ERROR("gptpScaling failure %p %p\n", td, memory_offset_buffer);
+        return false;
+    }
 
 #ifndef AVB_FEATURE_GVM_MODE
-	pthread_mutex_lock((pthread_mutex_t *) memory_offset_buffer);
-	memcpy(td, memory_offset_buffer + sizeof(pthread_mutex_t), sizeof(*td));
-	pthread_mutex_unlock((pthread_mutex_t *) memory_offset_buffer);
+    pthread_mutex_lock((pthread_mutex_t *) memory_offset_buffer);
+    memcpy(td, memory_offset_buffer + sizeof(pthread_mutex_t), sizeof(*td));
+    pthread_mutex_unlock((pthread_mutex_t *) memory_offset_buffer);
 #else
-	int buf_offset = 0;
-	std::atomic<uint32_t> *seq0;
-	std::atomic<uint32_t> *seq1;
-	uint32_t a,b;
-	gPtpTimeData *ptimedata;
-	int count = 0;
-	char *dest = (char*)td;
-	char *src = NULL;
-	buf_offset += (2 * sizeof(std::atomic<uint32_t>));
+    int buf_offset = 0;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
+    uint32_t a, b;
+    gPtpTimeData *ptimedata;
+    int count = 0;
+    char *dest = (char*)td;
+    char *src = NULL;
+    buf_offset += (2 * sizeof(std::atomic<uint32_t>));
+    seq0 = (std::atomic<uint32_t> *)memory_offset_buffer;
+    seq1 = (std::atomic<uint32_t> *)(memory_offset_buffer + sizeof(
+                                         std::atomic<uint32_t>));
+    ptimedata   = (gPtpTimeData *) (memory_offset_buffer + buf_offset);
+    src = (char *)ptimedata;
 
-	seq0 = (std::atomic<uint32_t> *)memory_offset_buffer;
-	seq1 = (std::atomic<uint32_t> *)(memory_offset_buffer + sizeof(std::atomic<uint32_t>));
-	ptimedata   = (gPtpTimeData *) (memory_offset_buffer + buf_offset);
-	src = (char *)ptimedata;
-	do {
-	a = seq0->load();
-	b = seq1->load();
+    do {
+        a = seq0->load();
+        b = seq1->load();
 
-	//memcpy(td, ptimedata, sizeof(*td)); //commented due to bus error issue
-	for(int i=0; i<sizeof(gPtpTimeData); i++ )
-	{
-	    dest[i] = *(volatile char *)(&src[i]);
-	}
-	count++;
+        //memcpy(td, ptimedata, sizeof(*td)); //commented due to bus error issue
+        for (int i = 0; i < sizeof(gPtpTimeData); i++ ) {
+            dest[i] = *(volatile char *)(&src[i]);
+        }
 
-	}while((a!=b || a!=seq0->load() || b != seq1->load())&&count<3);
+        count++;
+    } while ((a != b || a != seq0->load() || b != seq1->load()) && count < 3);
 
 #endif
-	return true;
+    return true;
 }
 
 
 #ifdef AVB_FEATURE_GVM_MODE
 
-void* habLoop(void* param) {
+void* habLoop(void* param)
+{
+    int32_t ret;
+    struct gptp_update update;
+    uint32_t len = sizeof(update);
 
-	int32_t ret;
-	struct gptp_update update;
-	uint32_t len = sizeof(update);
+    while (hab_thread_running) {
+        memset(&update, 0, sizeof(update));
 
-	while(hab_thread_running){
+        do {
+            ret = habmm_socket_recv(hab_hdl, &update, &len, 0,
+                                    HABMM_SOCKET_RECV_FLAGS_UNINTERRUPTIBLE);
+        } while (-EINTR == ret);
 
-			memset(&update,0,sizeof(update));
+        if (ret) {
+            GPTP_LOG_ERROR("habmm_socket_recv failed, ret= 0x%x\n", ret);
+            return NULL;
+        }
 
-			do {
-			ret = habmm_socket_recv(hab_hdl,&update, &len, 0,
-				HABMM_SOCKET_RECV_FLAGS_UNINTERRUPTIBLE);
-			} while (-EINTR == ret);
+        if (gptp_update_callback) {
+            gptp_update_callback(update);
+        }
+    }
 
-
-		if (ret) {
-			printf("habmm_socket_recv failed, ret= 0x%x\n", ret);
-			return NULL;
-		}
-
-
-		if(gptp_update_callback) {
-			gptp_update_callback(update);
-		}
-
-	}
-
-	return NULL;
-
+    return NULL;
 }
 
 #endif
 
 bool gptpRegisterCallback(GPTP_UPDATE_NOTIFY_CALLBACK fn_ptr)
 {
-
-	if(fn_ptr == NULL && gptp_update_callback == NULL)
-	return false;
+    if (fn_ptr == NULL && gptp_update_callback == NULL) {
+        return false;
+    }
 
 #ifdef AVB_FEATURE_GVM_MODE
+    int err = 0;
+    int32_t ret;
 
-	int err = 0;
-	int32_t ret;
+    if (gptp_update_callback != NULL && hab_thread_running) {
+        hab_thread_running = false;
+        habmm_socket_close(hab_hdl);
+    }
 
+    gptp_update_callback = fn_ptr;
 
-	if(gptp_update_callback!=NULL && hab_thread_running)
-	{
-		hab_thread_running = false;
-		habmm_socket_close(hab_hdl);
-	}
+    if (fn_ptr != NULL) {
+        ret = habmm_socket_open(&hab_hdl, HABMM_VNW_1, 0, 0);
 
-	gptp_update_callback = fn_ptr;
+        if (ret < 0) {
+            GPTP_LOG_ERROR("habmm_socket_open: socket create failed\n");
+            return false;
+        }
 
-	if(fn_ptr!=NULL)
-	{
-		ret = habmm_socket_open(&hab_hdl, HABMM_VNW_1, 0, 0);
+        hab_thread_running = true;
 
-		if (ret < 0)
-		{
-			 printf("habmm_socket_open: socket create failed\n");
-	         return false;
-		}
+        if ((err = pthread_create(&hab_Thread, NULL, habLoop, (void *) NULL))
+                < 0) {
+            hab_thread_running = false;
+            GPTP_LOG_ERROR("Error during creation of the thread %d\n", err);
+            return false;
+        } else {
+            hab_thread_running = true;
+        }
+    }
 
-		hab_thread_running = true;
-
-		if ((err = pthread_create(&hab_Thread, NULL, habLoop, (void *) NULL))
-				< 0) {
-			hab_thread_running = false;
-			printf("Error during creation of the thread %d\n",err);
-			return false;
-		}
-		else
-		{
-			hab_thread_running = true;
-		}
-	}
 #endif
-
-	return true;
-
+    return true;
 }
 
 /* gptp core function query gptp time */
-static bool gptpLocalTime(const gPtpTimeData *td, uint64_t *now_local, uint64_t *time_sys_ns)
+static bool gptpLocalTime(const gPtpTimeData *td, uint64_t *now_local,
+                          uint64_t *time_sys_ns)
 {
-	uint64_t system_time = 0;
-	int64_t delta_local = 0;
-	int64_t delta_system = 0;
+    uint64_t system_time = 0;
+    int64_t delta_local = 0;
+    int64_t delta_system = 0;
 
-	if (!td || !now_local || !time_sys_ns)
-		return false;
+    if (!td || !now_local || !time_sys_ns) {
+        return false;
+    }
 
-	system_time = td->local_time + td->ls_phoffset;
-	delta_system = *time_sys_ns - system_time;
-	delta_local = td->ls_freqoffset * delta_system;
+    system_time = td->local_time + td->ls_phoffset;
+    delta_system = *time_sys_ns - system_time;
+    delta_local = td->ls_freqoffset * delta_system;
+    /* now_local contains the scaled gptp local time
+    corresponding to system time */
+    *now_local = td->local_time + delta_local;
 
-	/* now_local contains the scaled gptp local time
-	corresponding to system time */
-	*now_local = td->local_time + delta_local;
+    if (*now_local == 0) {
+        return false;
+    }
 
-	if (*now_local == 0) {
-		return false;
-	}
-
-	return true;
+    return true;
 }
 
 
 /* gptp core function query gptp time */
-static bool gptpLocalQTime(const gPtpTimeData *td, uint64_t *now_local, uint64_t *time_qtime_ns)
+static bool gptpLocalQTime(const gPtpTimeData *td, uint64_t *now_local,
+                           uint64_t *time_qtime_ns)
 {
-	uint64_t qtimer_time = 0;
-	int64_t delta_local = 0;
-	int64_t delta_qtimer = 0;
+    uint64_t qtimer_time = 0;
+    int64_t delta_local = 0;
+    int64_t delta_qtimer = 0;
 
-	if (!td || !now_local || !time_qtime_ns)
-		return false;
+    if (!td || !now_local || !time_qtime_ns) {
+        return false;
+    }
 
-	qtimer_time = td->local_time + td->lq_phoffset;
-	delta_qtimer = *time_qtime_ns - qtimer_time;
-	delta_local = td->lq_freqoffset * delta_qtimer;
+    qtimer_time = td->local_time + td->lq_phoffset;
+    delta_qtimer = *time_qtime_ns - qtimer_time;
+    delta_local = td->lq_freqoffset * delta_qtimer;
+    /* now_local contains the scaled gptp local time
+    corresponding to qtimer time*/
+    *now_local = td->local_time + delta_local;
 
-	/* now_local contains the scaled gptp local time
-	corresponding to qtimer time*/
-	*now_local = td->local_time + delta_local;
+    if (*now_local == 0) {
+        return false;
+    }
 
-	if (*now_local == 0) {
-		return false;
-	}
-	return true;
+    return true;
 }
 
+
+/* gptp core function query gptp time */
+static bool gptpLocalBTime(const gPtpTimeData *td, uint64_t *now_local,
+                           uint64_t *time_btime_ns)
+{
+    uint64_t boot_time = 0;
+    int64_t delta_local = 0;
+    int64_t delta_btimer = 0;
+
+    if (!td || !now_local || !time_btime_ns) {
+        return false;
+    }
+
+    boot_time = td->local_time + td->lb_phoffset;
+    delta_btimer = *time_btime_ns - boot_time;
+    delta_local = td->lb_freqoffset * delta_btimer;
+    /* now_local contains the scaled gptp local time
+    corresponding to qtimer time*/
+    *now_local = td->local_time + delta_local;
+
+    if (*now_local == 0) {
+        return false;
+    }
+
+    return true;
+}
 
 /* intermediate wrapper to init gptp scaling */
-static bool gptpTimeInit(void) {
-	if (!gptpMemInit(&gPtpShmFd, &gPtpMmap))
-		return false;
+static bool gptpTimeInit(void)
+{
+    if (!gptpMemInit(&gPtpShmFd, &gPtpMmap)) {
+        return false;
+    }
 
-	if (!gptpScaling(&gPtpTD, gPtpMmap))
-		return false;
+    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+        return false;
+    }
 
-	if(!gptpClkInit(&gptpPhcFd))
-		return false;
+    if (!gptpClkInit(&gptpPhcFd)) {
+        return false;
+    }
 
-	return true;
+    return true;
 }
 
 #ifdef GPTP_AUTO_START
@@ -424,7 +591,7 @@ static void *gptpDaemonSrvConnect(void *arg)
     while (bServiceConnect) {
         if (sock == -1) {
             if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
-                printf("gptpDaemonSrvConnect: socket create failed\n");
+                GPTP_LOG_ERROR("gptpDaemonSrvConnect: socket create failed\n");
                 return NULL;
             }
 
@@ -442,7 +609,7 @@ static void *gptpDaemonSrvConnect(void *arg)
 
             if (!bInitialized) {
                 if (gptpTimeInit()) {
-                    printf("gptpDaemonSrvConnect: success\n");
+                    GPTP_LOG_INFO("gptpDaemonSrvConnect: success\n");
                     bInitialized = true;
                 }
             }
@@ -463,7 +630,7 @@ static void *gptpDaemonSrvConnect(void *arg)
                     read(pipefd[0], &pipebuf, 1);
 
                     if (pipebuf == '1') {
-                        printf("clean up thread\n");
+                        GPTP_LOG_INFO("clean up thread\n");
                         ret = -1;
                     }
                 } else if (FD_ISSET(sock, &readfds)) {
@@ -475,12 +642,12 @@ static void *gptpDaemonSrvConnect(void *arg)
                     }
                 }
             } else {
-                printf("gptpDaemonSrvConnect: select errno %d\n", errno);
+                GPTP_LOG_ERROR("gptpDaemonSrvConnect: select errno %d\n", errno);
             }
         }
 
         if (ret == -1) {
-            printf("gptpDaemonSrvConnect: cleanup errno %d\n", errno);
+            GPTP_LOG_ERROR("gptpDaemonSrvConnect: cleanup errno %d\n", errno);
             LOCK();
             gptpMemDeinit(gPtpShmFd, gPtpMmap);
             gptpClkDeInit(gptpPhcFd);
@@ -495,11 +662,12 @@ static void *gptpDaemonSrvConnect(void *arg)
     return NULL;
 }
 
-static void gptpDaemonClientInit(void) {
+static void gptpDaemonClientInit(void)
+{
     int ret = 0;
 
     if (bServiceConnect == true || sock != -1) {
-        printf("gptpDaemonClientInit: already initialized\n");
+        GPTP_LOG_INFO("gptpDaemonClientInit: already initialized\n");
         return;
     }
 
@@ -508,33 +676,35 @@ static void gptpDaemonClientInit(void) {
     pipefd[1] = -1;
 
     if (pipe(pipefd) == -1) {
-        printf("pipe create error\n");
+        GPTP_LOG_ERROR("pipe create error\n");
         return;
     }
+
     ret = pthread_create(&thread_id, NULL, gptpDaemonSrvConnect, NULL);
 
-    if(ret != 0){
-        printf("gptpDaemonClientInit: failed -->%s\n", strerror(errno));
+    if (ret != 0) {
+        GPTP_LOG_ERROR("gptpDaemonClientInit: failed -->%s\n", strerror(errno));
     }
 
     ret = pthread_setname_np(thread_id, "GPTP-HELPER");
 
     if (ret != 0) {
-        printf("Failed to set thread name \n");
+        GPTP_LOG_ERROR("Failed to set thread name \n");
     }
 
     return;
 }
 
-static void gptpDaemonClientDeInit(void) {
+static void gptpDaemonClientDeInit(void)
+{
     int ret = 0;
     char data = '1';
     bServiceConnect = false;
     write(pipefd[1], &data, 1);
     ret = pthread_join(thread_id, NULL);
 
-    if(ret != 0){
-        printf("gptpDaemonClientDeInit: failed -->%s\n", strerror(errno));
+    if (ret != 0) {
+        GPTP_LOG_ERROR("gptpDaemonClientDeInit: failed -->%s\n", strerror(errno));
     }
 
     if (sock > 0) {
@@ -557,138 +727,576 @@ static void gptpDaemonClientDeInit(void) {
 #endif
 
 /* public API to query gptp time */
-bool gptpGetPtpTimeFromMonoTime(uint64_t *gptp_time_sys, uint64_t time_mono_ns) {
-	uint64_t now_local = 0;
-	uint64_t update_8021as = 0;
-	int64_t delta_8021as = 0;
-	int64_t delta_local = 0;
-	uint64_t time_mono_qtime_ns  = 0;
+bool gptpGetPtpTimeFromMonoTime(uint64_t *gptp_time_sys, uint64_t time_mono_ns)
+{
+    uint64_t now_local = 0;
+    uint64_t update_8021as = 0;
+    int64_t delta_8021as = 0;
+    int64_t delta_local = 0;
+    uint64_t time_mono_qtime_ns  = 0;
 
-	if (!bInitialized) {
-		return false;
-	}
-	if (!gptpScaling(&gPtpTD, gPtpMmap))
-		return false;
+    if (!bInitialized) {
+        return false;
+    }
 
-	if (gPtpTD.port_state == PTP_SLAVE) {
-		if (gPtpTD.sync_status == false) {
-			return false;
-		}
-	}
+    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+        return false;
+    }
 
-	time_mono_qtime_ns =  time_mono_ns + gPtpTD.qtime_to_mono_offset; //Qtimer is ahead from monotonic
+    if (gPtpTD.port_state == PTP_SLAVE) {
+        if (gPtpTD.sync_status == false) {
+            return false;
+        }
+    }
 
-	if (gptpLocalQTime(&gPtpTD, &now_local, &time_mono_qtime_ns)) {
-		update_8021as = gPtpTD.local_time - gPtpTD.ml_phoffset;
-		delta_local = now_local - gPtpTD.local_time;
-		delta_8021as = gPtpTD.ml_freqoffset * delta_local;
-		*gptp_time_sys = update_8021as + delta_8021as;
-		return true;
-	}
-	return false;
+    time_mono_qtime_ns =  time_mono_ns +
+                          gPtpTD.qtime_to_mono_offset; //Qtimer is ahead from monotonic
+
+    if (gptpLocalQTime(&gPtpTD, &now_local, &time_mono_qtime_ns)) {
+        update_8021as = gPtpTD.local_time - gPtpTD.ml_phoffset;
+        delta_local = now_local - gPtpTD.local_time;
+        delta_8021as = gPtpTD.ml_freqoffset * delta_local;
+        *gptp_time_sys = update_8021as + delta_8021as;
+        return true;
+    }
+
+    return false;
 }
 
 /* public API to query gptp time */
-bool gptpGetPtpTimeFromQTimeNs(uint64_t *gptp_time_qt, uint64_t time_qtimer_ns) {
-	uint64_t now_local = 0;
-	uint64_t update_8021as = 0;
-	int64_t delta_8021as = 0;
-	int64_t delta_local = 0;
-	uint64_t time_ns = time_qtimer_ns;
+bool gptpGetPtpTimeFromQTimeNs(uint64_t *gptp_time_qt, uint64_t time_qtimer_ns)
+{
+    uint64_t now_local = 0;
+    uint64_t update_8021as = 0;
+    int64_t delta_8021as = 0;
+    int64_t delta_local = 0;
+    uint64_t time_ns = time_qtimer_ns;
 
-	if (!bInitialized) {
-		return false;
-	}
-	if (!gptpScaling(&gPtpTD, gPtpMmap))
-		return false;
+    if (!bInitialized) {
+        return false;
+    }
 
-	if (gPtpTD.port_state == PTP_SLAVE) {
-		if (gPtpTD.sync_status == false) {
-			return false;
-		}
-	}
+    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+        return false;
+    }
 
-	if (gptpLocalQTime(&gPtpTD, &now_local, &time_ns)) {
-		update_8021as = gPtpTD.local_time - gPtpTD.ml_phoffset;
-		delta_local = now_local - gPtpTD.local_time;
-		delta_8021as = gPtpTD.ml_freqoffset * delta_local;
-		*gptp_time_qt = update_8021as + delta_8021as;
-		return true;
-	}
-	return false;
+    if (gPtpTD.port_state == PTP_SLAVE) {
+        if (gPtpTD.sync_status == false) {
+            return false;
+        }
+    }
+
+    if (gptpLocalQTime(&gPtpTD, &now_local, &time_ns)) {
+        update_8021as = gPtpTD.local_time - gPtpTD.ml_phoffset;
+        delta_local = now_local - gPtpTD.local_time;
+        delta_8021as = gPtpTD.ml_freqoffset * delta_local;
+        *gptp_time_qt = update_8021as + delta_8021as;
+        return true;
+    }
+
+    return false;
 }
 
-bool gptpGetPtpTimeFromQTimeTickCount(uint64_t *gptp_time_sys, uint64_t qtime_ticks)  {
+/* public API to query gptp time */
+bool gptpGetPtpTimeFromBootTime(uint64_t *gptp_time_bt, uint64_t time_boot_ns)
+{
+    if (!gptp_time_bt || !bInitialized) {
+        return false;
+    }
 
-	bool ret = false;
-	uint64_t qTimerFreq = 0, qtimer_sec = 0, qtimer_nanos_NSec = 0, time_qtimer_ns = 0;
-#if __aarch64__
-		asm volatile("mrs %0, cntfrq_el0" : "=r"(qTimerFreq));
+    *gptp_time_bt = 0;
+#ifndef AVB_FEATURE_GVM_MODE
+    uint64_t now_local = 0;
+    uint64_t update_8021as = 0;
+    int64_t delta_8021as = 0;
+    int64_t delta_local = 0;
+    uint64_t time_ns = time_boot_ns;
+
+    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+        return false;
+    }
+
+    if (gPtpTD.port_state == PTP_SLAVE) {
+        if (gPtpTD.sync_status == false) {
+            return false;
+        }
+    }
+
+    if (gptpLocalBTime(&gPtpTD, &now_local, &time_ns)) {
+        update_8021as = gPtpTD.local_time - gPtpTD.ml_phoffset;
+        delta_local = now_local - gPtpTD.local_time;
+        delta_8021as = gPtpTD.ml_freqoffset * delta_local;
+        *gptp_time_bt = update_8021as + delta_8021as;
+        return true;
+    }
+
+    return false;
 #else
-		qTimerFreq = 19200000; //19.2 MHz TBD: find right asm instruction
+    uint64_t *gptp_mem;
+    uint64_t *boot_time_mem;
+    static double boot_gptp_ratio = 1.0;
+    static uint64_t prev_gptp = 0;
+    static uint64_t prev_boot = 0;
+    struct timespec ts;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
+    uint32_t a, b;
+    int count = 0;
+    ts.tv_sec = ts.tv_nsec = 0;
+    seq0 = (std::atomic<uint32_t> *)gPtpMmap;
+    seq1 = (std::atomic<uint32_t> *)(gPtpMmap + sizeof(std::atomic<uint32_t>));
+
+    do {
+        a = seq0->load();
+        b = seq1->load();
+
+        if (clock_gettime(gPtpClockid, &ts)) {
+            GPTP_LOG_ERROR("clock_gettime failed");
+            return false;
+        }
+
+        if (ts.tv_sec == 0 && ts.tv_nsec == 0) {
+            GPTP_LOG_ERROR("gptp time read taking longer time\n");
+            return false;
+        }
+
+        gptp_mem = (uint64_t *) (gPtpMmap + 0x1000 - 3 * sizeof(uint64_t));
+        boot_time_mem = (uint64_t *) (gPtpMmap + 0x1000 - 9 * sizeof(uint64_t));
+        count++;
+    } while ((a != b || a != seq0->load() || b != seq1->load()) && count < 3);
+
+    if (count < 3) {
+        int gptpdiff = *gptp_mem - ptp_time_ns;
+
+        if (gptpdiff > GPTP_BOOTTIME_VALIDTY_RANGE
+                || gptpdiff < -GPTP_BOOTTIME_VALIDTY_RANGE) {
+            GPTP_LOG_INFO("gptp time provided beyond range for better accuracy\n");
+            return false;
+        }
+
+        gptpdiff = *gptp_mem - prev_gptp;
+
+        if (gptpdiff > GPTP_BOOTTIME_VALIDTY_RANGE || gptpdiff < 0) {
+            prev_boot = 0;
+            boot_gptp_ratio = 1.0;
+        }
+
+        if (prev_gptp != 0 && prev_boot != 0) {
+            boot_gptp_ratio = (2 * boot_gptp_ratio + ((double)(*boot_time_mem -
+                               prev_boot)) / (*gptp_mem - prev_gptp) ) / 3;
+        }
+
+        *gptp_time_bt = *gptp_mem - ((int64_t)(*boot_time_mem - time_boot_ns)) /
+                        boot_gptp_ratio;
+        prev_boot = *boot_time_mem;
+        prev_gptp = *gptp_mem;
+    } else {
+        GPTP_LOG_INFO("dint get valid values\n");
+        return false;
+    }
+
+    return true;
 #endif
+}
 
-	qtimer_sec = (qtime_ticks / qTimerFreq);
-	qtimer_nanos_NSec = (qtime_ticks % qTimerFreq);
-	qtimer_nanos_NSec *= 1000000000;
-	qtimer_nanos_NSec /= qTimerFreq;
+bool gptpGetBootTimeFromPtpTime(uint64_t *boot_time_ns, uint64_t ptp_time_ns)
+{
+    if (!boot_time_ns || !bInitialized) {
+        return false;
+    }
 
-	time_qtimer_ns = qtimer_sec * 1000000000 + qtimer_nanos_NSec;
-	ret = gptpGetPtpTimeFromQTimeNs(gptp_time_sys, time_qtimer_ns);
-	return ret;
+    *boot_time_ns = 0;
+#ifndef AVB_FEATURE_GVM_MODE
 
+    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+        return false;
+    }
+
+    int gptpdiff = 0;
+    gptpdiff =  ptp_time_ns - gPtpTD.local_time;
+
+    if (gptpdiff > GPTP_BOOTTIME_VALIDTY_RANGE
+            || gptpdiff < -GPTP_BOOTTIME_VALIDTY_RANGE) {
+        GPTP_LOG_ERROR("gptp time provided beyond range for better accuracy\n");
+        return false;
+    }
+
+    GPTP_LOG_ERROR("gptpGetBootTimeFromPtpTime offset %ld freqoffset %f qtimeoffset %ld \n",
+                   gPtpTD.lb_phoffset, gPtpTD.lb_freqoffset, gPtpTD.qtime_to_mono_offset);
+    *boot_time_ns = gPtpTD.local_time + gPtpTD.lb_phoffset; //curr boot time
+
+    if (gPtpTD.lb_freqoffset) {
+        *boot_time_ns += (gptpdiff / gPtpTD.lb_freqoffset);
+    } else {
+        *boot_time_ns += gptpdiff;
+    }
+
+#else
+    uint64_t *gptp_mem;
+    uint64_t *boot_time_mem;
+    static double boot_gptp_ratio = 1.0;
+    static uint64_t prev_gptp = 0;
+    static uint64_t prev_boot = 0;
+    struct timespec ts;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
+    uint32_t a, b;
+    int count = 0;
+    ts.tv_sec = ts.tv_nsec = 0;
+    seq0 = (std::atomic<uint32_t> *)gPtpMmap;
+    seq1 = (std::atomic<uint32_t> *)(gPtpMmap + sizeof(std::atomic<uint32_t>));
+
+    do {
+        a = seq0->load();
+        b = seq1->load();
+
+        if (clock_gettime(gPtpClockid, &ts)) {
+            GPTP_LOG_ERROR("clock_gettime failed");
+            return false;
+        }
+
+        if (ts.tv_sec == 0 && ts.tv_nsec == 0) {
+            GPTP_LOG_INFO("gptp time read taking longer time\n");
+            return false;
+        }
+
+        gptp_mem = (uint64_t *) (gPtpMmap + 0x1000 - 3 * sizeof(uint64_t));
+        boot_time_mem = (uint64_t *) (gPtpMmap + 0x1000 - 9 * sizeof(uint64_t));
+        count++;
+    } while ((a != b || a != seq0->load() || b != seq1->load()) && count < 3);
+
+    if (count < 3) {
+        int gptpdiff = *gptp_mem - ptp_time_ns;
+
+        if (gptpdiff > GPTP_BOOTTIME_VALIDTY_RANGE
+                || gptpdiff < -GPTP_BOOTTIME_VALIDTY_RANGE) {
+            GPTP_LOG_ERROR("gptp time provided beyond range for better accuracy\n");
+            return false;
+        }
+
+        gptpdiff = *gptp_mem - prev_gptp;
+
+        if (gptpdiff > GPTP_BOOTTIME_VALIDTY_RANGE || gptpdiff < 0) {
+            prev_boot = 0;
+            boot_gptp_ratio = 1.0;
+        }
+
+        if (prev_gptp != 0 && prev_boot != 0) {
+            boot_gptp_ratio = (2 * boot_gptp_ratio + ((double)(*boot_time_mem -
+                               prev_boot)) / (*gptp_mem - prev_gptp) ) / 3;
+        }
+
+        *boot_time_ns = *boot_time_mem - ((int64_t)(*gptp_mem - ptp_time_ns)) *
+                        boot_gptp_ratio;
+        prev_boot = *boot_time_mem;
+        prev_gptp = *gptp_mem;
+    } else {
+        GPTP_LOG_ERROR("dint get valid values\n");
+        return false;
+    }
+
+#endif
+    return true;
+}
+bool gptpGetPtpTimeFromQTimeTickCount(uint64_t *gptp_time_sys,
+                                      uint64_t qtime_ticks)
+{
+    bool ret = false;
+    uint64_t qTimerFreq = 0, qtimer_sec = 0, qtimer_nanos_NSec = 0,
+             time_qtimer_ns = 0;
+#if __aarch64__
+    asm volatile("mrs %0, cntfrq_el0" : "=r"(qTimerFreq));
+#else
+    qTimerFreq = 19200000; //19.2 MHz TBD: find right asm instruction
+#endif
+    qtimer_sec = (qtime_ticks / qTimerFreq);
+    qtimer_nanos_NSec = (qtime_ticks % qTimerFreq);
+    qtimer_nanos_NSec *= 1000000000;
+    qtimer_nanos_NSec /= qTimerFreq;
+    time_qtimer_ns = qtimer_sec * 1000000000 + qtimer_nanos_NSec;
+    ret = gptpGetPtpTimeFromQTimeNs(gptp_time_sys, time_qtimer_ns);
+    return ret;
 }
 
 /* public API to query gptp time */
-bool gptpGetTime(uint64_t *gptp_time_sys, uint64_t time_sys_ns) {
-	uint64_t now_local = 0;
-	uint64_t update_8021as = 0;
-	int64_t delta_8021as = 0;
-	int64_t delta_local = 0;
-	uint64_t time_ns = time_sys_ns;
+bool gptpGetPtpTimefromSystime(uint64_t *gptp_time_sys, uint64_t time_sys_ns)
+{
+    uint64_t now_local = 0;
+    uint64_t update_8021as = 0;
+    int64_t delta_8021as = 0;
+    int64_t delta_local = 0;
+    uint64_t time_ns = time_sys_ns;
+    gPtpTimeData gPtpTD;
 
-	if (!bInitialized)
-		return false;
+    if (!bInitialized) {
+        return false;
+    }
 
-	if (!gptpScaling(&gPtpTD, gPtpMmap))
-		return false;
+    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+        return false;
+    }
 
-	if (gPtpTD.port_state == PTP_SLAVE) {
-		if (gPtpTD.sync_status == false) {
-			return false;
-		}
-	}
+    if (gPtpTD.port_state == PTP_SLAVE) {
+        if (gPtpTD.sync_status == false) {
+            GPTP_LOG_ERROR("%s : can not get gptp time\n", __func__);
+            return false;
+        }
+    }
 
-	if (gptpLocalTime(&gPtpTD, &now_local, &time_ns)) {
-		update_8021as = gPtpTD.local_time - gPtpTD.ml_phoffset;
-		delta_local = now_local - gPtpTD.local_time;
-		delta_8021as = gPtpTD.ml_freqoffset * delta_local;
-		*gptp_time_sys = update_8021as + delta_8021as;
-		return true;
-	}
-	return false;
+    if (gptpLocalTime(&gPtpTD, &now_local, &time_ns)) {
+        update_8021as = gPtpTD.local_time - gPtpTD.ml_phoffset;
+        delta_local = now_local - gPtpTD.local_time;
+        delta_8021as = gPtpTD.ml_freqoffset * delta_local;
+        *gptp_time_sys = update_8021as + delta_8021as;
+        return true;
+    }
+
+    return false;
 }
 
+/* public API to query gptp Port State */
+int gptpGetPortState(void)
+{
+    gPtpTimeData gPtpTD;
+
+    if (!bInitialized) {
+        return false;
+    }
+
+    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+        return false;
+    }
+
+    return gPtpTD.port_state;
+}
+
+/* public API to query gptp sync status */
+bool gptpGetSyncStatus(void)
+{
+    gPtpTimeData gPtpTD;
+
+    if (!bInitialized) {
+        return false;
+    }
+
+    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+        return false;
+    }
+
+    return gPtpTD.sync_status;
+}
 
 /* public API to query current gptp time */
-bool gptpGetCurPtpTime(uint64_t *gptp_time_cur) {
+bool gptpGetCurPtpTime(uint64_t *gptp_time_cur)
+{
+#ifdef LE_GVM
+    int ret = 0;
+    struct ptp_lib ptp_data;
 
+    if (gptp_fd != -1) {
+        ret = ioctl(gptp_fd, GET_PTP_DATA, &ptp_data);
+
+        if (ret) {
+            GPTP_LOG_ERROR(" Ioctl failed to get ptp data 0x%x (%s)\n", errno,
+                           strerror(errno));
+            close(gptp_fd);
+            gptp_fd = -1;
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    *gptp_time_cur = (ptp_data.tv_sec) * 1000000000LL + ptp_data.tv_nsec;
+#else
     struct timespec ts;
-
     ts.tv_sec = ts.tv_nsec = 0;
     *gptp_time_cur = 0;
 
     if (!bInitialized) {
-	return false;
-    }
-    if (clock_gettime(gPtpClockid, &ts)) {
-	printf("clock_gettime failed");
-	return false;
+        return false;
     }
 
-    *gptp_time_cur = (ts.tv_sec)*1000000000LL + ts.tv_nsec;
+    if (clock_gettime(gPtpClockid, &ts)) {
+        GPTP_LOG_ERROR("clock_gettime failed");
+        return false;
+    }
+
+    *gptp_time_cur = (ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+#endif
+    return true;
+}
+
+/* public API to query gptp time */
+bool gptpGetTime(uint64_t *gptp_time_sys, uint64_t time_sys_ns)
+{
+    uint64_t now_local = 0;
+    uint64_t update_8021as = 0;
+    int64_t delta_8021as = 0;
+    int64_t delta_local = 0;
+    uint64_t time_ns = time_sys_ns;
+
+    if (!bInitialized) {
+        return false;
+    }
+
+    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+        return false;
+    }
+
+    if (gPtpTD.port_state == PTP_SLAVE) {
+        if (gPtpTD.sync_status == false) {
+            return false;
+        }
+    }
+
+    if (gptpLocalTime(&gPtpTD, &now_local, &time_ns)) {
+        update_8021as = gPtpTD.local_time - gPtpTD.ml_phoffset;
+        delta_local = now_local - gPtpTD.local_time;
+        delta_8021as = gPtpTD.ml_freqoffset * delta_local;
+        *gptp_time_sys = update_8021as + delta_8021as;
+        return true;
+    }
+
+    return false;
+}
+
+bool gptpGetSyncMeasurementData(syncMesaurementData_t *syncData)
+{
+    int ret = false;
+
+    if (syncData == NULL) {
+        GPTP_LOG_ERROR("Invalid SyncData parameter");
+        return ret;
+    }
+
+    if (gPtpSCTMmap == NULL) {
+        GPTP_LOG_ERROR("gptpGetSyncMeasurementData memory failure %p\n", gPtpSCTMmap);
+        gptpSCTMemInit();
+        return false;
+    }
+
+    sct_gptp_data* data = (sct_gptp_data*)gPtpSCTMmap;
+    pthread_mutex_lock((pthread_mutex_t *) &data->lock);
+    memcpy(syncData, &data->syncData,
+           sizeof(syncMesaurementData_t));
+    pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
+#ifdef LIBGPTP_DEBUG
+    GPTP_LOG_INFO("qgptp Sync Measurement Data: precise_origin_timestamp %"PRIu64" reference_local_timestamp %"PRIu64" \
+			sync_ingress_timestamp %"PRIu64" correction_field %"PRIu64" sequence_id %d pDelay %"PRIu64" portNumber %d \
+			clockIdentity "CLK_STR"\n",
+                  syncData->precise_origin_timestamp,
+                  syncData->reference_local_timestamp,
+                  syncData->sync_ingress_timestamp,
+                  syncData->correction_field,
+                  syncData->sequence_id,
+                  syncData->pDelay,
+                  syncData->portNumber,
+                  CLK_TO_STR(syncData->clockIdentity));
+#endif
+    return true;
+}
+
+bool gptpGetPDelayMeasurementData(pDelayMeasurementData_t *delayData)
+{
+    int ret = false;
+
+    if (delayData == NULL) {
+        GPTP_LOG_INFO("Invalid SyncData parameter");
+        return false;
+    }
+
+    if (gPtpSCTMmap == NULL) {
+        GPTP_LOG_ERROR("gptpGetPDelayMeasurementData memory failure %p\n", gPtpSCTMmap);
+        gptpSCTMemInit();
+        return false;
+    }
+
+    sct_gptp_data* data = (sct_gptp_data*)gPtpSCTMmap;
+    pthread_mutex_lock((pthread_mutex_t *) &data->lock);
+    memcpy(delayData, &data->delayData,
+           sizeof(pDelayMeasurementData_t));
+    pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
+    GPTP_LOG_INFO("libgptp library: resp_clockIdentity "CLK_STR"", CLK_TO_STR(delayData->resp_clockIdentity));
+
+#ifdef LIBGPTP_DEBUG
+	GPTP_LOG_INFO("qgptp PDelay Measurement Data: request_origin_timestamp %"PRIu64" request_receipt_timestamp %"PRIu64"\
+			response_origin_timestamp %"PRIu64" response_receipt_timestamp %"PRIu64" reference_local_timestamp %"PRIu64"\
+			sequence_id %d pDelay %"PRIu64" req_portNumber %d req_clockIdentity "CLK_STR" resp_portNumber %d resp_clockIdentity "CLK_STR"\n",
+			delayData->request_origin_timestamp,
+			delayData->request_receipt_timestamp,
+			delayData->response_origin_timestamp,
+			delayData->response_receipt_timestamp,
+			delayData->reference_local_timestamp,
+			delayData->sequence_id,
+			delayData->pDelay,
+			delayData->req_portNumber,
+			CLK_TO_STR(delayData->req_clockIdentity),
+			delayData->resp_portNumber,
+			CLK_TO_STR(delayData->resp_clockIdentity));
+#endif
+
+	return true;
+}
+
+bool getgPTPStatus(gptpStatsType_t *status) {
+	int ret = false;
+
+	if(status == NULL)
+	{
+        GPTP_LOG_ERROR("Invalid SyncData parameter");
+        return false;
+	}
+
+	if (gPtpSCTMmap == NULL)
+	{
+		GPTP_LOG_ERROR("getgPTPStatus memory failure %p\n",gPtpSCTMmap);
+		gptpSCTMemInit();
+		return false;
+	}
+
+	sct_gptp_data* data = (sct_gptp_data*)gPtpSCTMmap;
+
+
+	pthread_mutex_lock((pthread_mutex_t *) &data->lock);
+	memcpy(status, &data->status,
+		   sizeof(gptpStatsType_t));
+	pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
+
+
+#ifdef LIBGPTP_DEBUG
+	GPTP_LOG_INFO("qgptp Status Data: gptp_status %d rate_deviation %f IsMaster %d offset %"PRIu64" ",
+			status->gptp_status,
+			status->rate_deviation,
+			status->IsMaster,
+			status->offset);
+#endif
+
+	return true;
+}
+
+/* public API to query gptp status, port status and current gptp time */
+bool gptpGetStatusAndCurPtpTime(struct ptp_lib *ptp_data) {
+
+#ifdef LE_GVM
+    int ret = 0;
+
+    if (gptp_fd != -1) {
+        ret = ioctl(gptp_fd, GET_PTP_DATA, ptp_data);
+        if (ret)
+        {
+            GPTP_LOG_ERROR(" Ioctl failed to get ptp data 0x%x (%s)\n", errno, strerror(errno));
+            close(gptp_fd);
+            gptp_fd = -1;
+            return false;
+        }
+    } else {
+        return false;
+    }
 
     return true;
+#endif
+    return false;
 }
 
 
@@ -722,12 +1330,12 @@ bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur, uint64_t *mono_time_cu
 	a = seq0->load();
 	b = seq1->load();
     if (clock_gettime(gPtpClockid, &ts)) {
-	printf("clock_gettime failed");
+	GPTP_LOG_ERROR("clock_gettime failed");
 	return false;
     }
 
 	if(ts.tv_sec == 0 && ts.tv_nsec == 0) {
-	printf("gptp time read taking longer time\n");
+	GPTP_LOG_ERROR("gptp time read taking longer time\n");
 	return false;
 	}
 
@@ -748,6 +1356,15 @@ bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur, uint64_t *mono_time_cu
 
 /* public API to init gptp time scaling */
 bool gptpInit(void) {
+#ifdef LE_GVM
+    gptp_fd = open("/dev/gptp", O_RDWR);
+    if ( gptp_fd == -1 ) {
+        GPTP_LOG_ERROR("Failed to open /dev/gptp error 0x%x(%s)\n", errno,
+                strerror(errno));
+        return false;
+    }
+    return true;
+#else
 #ifdef GPTP_AUTO_START
 	gptpDaemonClientInit();
 	return true;
@@ -760,16 +1377,24 @@ bool gptpInit(void) {
 	UNLOCK();
 	return bInitialized;
 #endif
+#endif
 }
 
 /* public API to deinit gptp time scaling */
 bool gptpDeinit(void) {
+#ifdef LE_GVM
+    if (gptp_fd != -1) {
+        close(gptp_fd);
+        gptp_fd = -1;
+    }
+#else
 	gptpMemDeinit(gPtpShmFd, gPtpMmap);
 	gptpClkDeInit(gptpPhcFd);
 #ifdef GPTP_AUTO_START
 	gptpDaemonClientDeInit();
 #endif
 	bInitialized = false;
+#endif
 	return true;
 }
 
@@ -781,7 +1406,7 @@ bool rgptpGetCurPtpTime(uint64_t *rgptp_time) {
     *rgptp_time = 0;
 
     if (clock_gettime(rgptp_clkid, &ts)) {
-        printf("clock_gettime failed");
+        GPTP_LOG_ERROR("clock_gettime failed");
         return false;
     }
     *rgptp_time = (ts.tv_sec)*1000000000LL + ts.tv_nsec;
@@ -794,7 +1419,7 @@ bool rgptpInit(void) {
 
     if( rptp_fd == -1 ||
             (rgptp_clkid = FD_TO_CLOCKID(rptp_fd)) == -1 ) {
-        printf("%s, Failed to open PTP clock device\n", __func__);
+        GPTP_LOG_ERROR("%s, Failed to open PTP clock device\n", __func__);
         return false;
     }
     return true;
@@ -810,6 +1435,90 @@ bool rgptpDeinit(void) {
 }
 #endif
 
+bool handleGptpGetTimeIf(uint64_t *gptp_time_ns, uint64_t time_sys_ns)
+{
+   return gptpGetTime(gptp_time_ns, time_sys_ns);
+}
+bool handleGptpGetPtpTimeFromQTimeNsIf(uint64_t *gptp_time_ns,
+                                      uint64_t time_qtimer_ns)
+{
+  return gptpGetPtpTimeFromQTimeNs(gptp_time_ns, time_qtimer_ns);
+}
+bool handleGptpGetPtpTimeFromQTimeTickCountIf(uint64_t *gptp_time_ns,
+                                      uint64_t qtime_ticks)
+{
+   return gptpGetPtpTimeFromQTimeTickCount(gptp_time_ns, qtime_ticks);
+}
+bool handleGptpGetPtpTimeFromMonoTimeIf(uint64_t *gptp_time_ns,
+                                      uint64_t time_mono_ns)
+{
+   return gptpGetPtpTimeFromMonoTime(gptp_time_ns, time_mono_ns);
+}
+bool handleGptpGetCurPtpTimeIf(uint64_t *gptp_time_ns)
+{
+   return gptpGetCurPtpTime(gptp_time_ns);
+}
+bool handleGptpGetCurgPtpMonotonicPairIf(uint64_t *gptp_time_cur,
+                                      uint64_t *mono_time_cur)
+{
+   return gptpGetCurgPtpMonotonicPair(gptp_time_cur, mono_time_cur);
+}
+bool handleGptpGetBootTimeFromPtpTimeIf(uint64_t *boot_time_ns,
+                                      uint64_t ptp_time_ns)
+{
+   return gptpGetBootTimeFromPtpTime(boot_time_ns, ptp_time_ns);
+}
+bool handleGptpGetPtpTimeFromBootTimeIf(uint64_t *ptp_time_ns,
+                                      uint64_t boot_time_ns)
+{
+   return gptpGetPtpTimeFromBootTime(ptp_time_ns, boot_time_ns);
+}
+bool handleGetgPTPStatusIf(gptpStatsType_t *status)
+{
+   return getgPTPStatus(status);
+}
+bool handleGptpInitIf(void)
+{
+   return gptpInit();
+}
+bool handleGptpDeinitIf(void)
+{
+   return gptpDeinit();
+}
+const gPTPLibInterfaceEvent* gPTPEventIf = nullptr;
+bool handleGptpRegisterEvent(void)
+{
+   gptpRegisterCallback(gPTPEventIf->gPTP_Update_Event);
+   return true;
+}
+bool handleGptpUnregisterEvent(void)
+{
+   gptpRegisterCallback(nullptr);
+   return true;
+}
+const static gPTPLibInterfaceReq gPTPReqIf {
+     handleGptpGetTimeIf,
+     handleGptpGetPtpTimeFromQTimeNsIf,
+     handleGptpGetPtpTimeFromQTimeTickCountIf,
+     handleGptpGetPtpTimeFromMonoTimeIf,
+     handleGptpGetCurPtpTimeIf,
+     handleGptpGetCurgPtpMonotonicPairIf,
+     handleGptpGetBootTimeFromPtpTimeIf,
+     handleGptpGetPtpTimeFromBootTimeIf,
+     handleGetgPTPStatusIf,
+     handleGptpInitIf,
+     handleGptpDeinitIf,
+     handleGptpRegisterEvent,
+     handleGptpUnregisterEvent
+};
+const gPTPLibInterfaceReq* get_gPTPLib_if(const gPTPLibInterfaceEvent* eventCallback)
+{
+    if ((nullptr != eventCallback) &&
+        (nullptr != eventCallback->gPTP_Update_Event)) {
+       gPTPEventIf = eventCallback;
+    }
+    return (&gPTPReqIf);
+}
 #ifdef __cplusplus
 }
 #endif

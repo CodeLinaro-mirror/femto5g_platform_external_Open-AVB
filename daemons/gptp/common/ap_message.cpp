@@ -22,7 +22,12 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *************************************************************************************************************/
+/* ============================================================================
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
 
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+============================================================================ */
 #include <ieee1588.hpp>
 #include <avbts_clock.hpp>
 #include <avbap_message.hpp>
@@ -61,57 +66,59 @@ APMessageTestStatus::APMessageTestStatus( EtherPort *port )
 
 void APMessageTestStatus::sendPort( EtherPort * port )
 {
-	static uint16_t sequenceId = 0;
-
-	uint8_t buf_t[256];
-	uint8_t *buf_ptr = buf_t + port->getPayloadOffset();
-	uint16_t tmp16;
-	uint32_t tmp32;
-	uint64_t tmp64;
-
-	memset(buf_t, 0, 256);
-
-	// Create packet in buf
-	messageLength = AP_TEST_STATUS_LENGTH;
-
-	BIT_D2BHTONB(buf_ptr + AP_TEST_STATUS_AVTP_SUBTYPE(AP_TEST_STATUS_OFFSET), 0xfb, 0);
-	BIT_D2BHTONB(buf_ptr + AP_TEST_STATUS_AVTP_VERSION_CONTROL(AP_TEST_STATUS_OFFSET), 0x1, 0);
-	BIT_D2BHTONS(buf_ptr + AP_TEST_STATUS_AVTP_STATUS_LENGTH(AP_TEST_STATUS_OFFSET), 148, 0);
-
-	port->getLocalAddr()->toOctetArray(buf_ptr + AP_TEST_STATUS_TARGET_ENTITY_ID(AP_TEST_STATUS_OFFSET));
-
-	tmp16 = PLAT_htons(sequenceId++);
-	memcpy(buf_ptr + AP_TEST_STATUS_SEQUENCE_ID(AP_TEST_STATUS_OFFSET), &tmp16, sizeof(tmp16));
-
-	BIT_D2BHTONS(buf_ptr + AP_TEST_STATUS_COMMAND_TYPE(AP_TEST_STATUS_OFFSET), 1, 15);
-	BIT_D2BHTONS(buf_ptr + AP_TEST_STATUS_COMMAND_TYPE(AP_TEST_STATUS_OFFSET), 0x29, 0);
-
-	tmp16 = PLAT_htons(0x09);
-	memcpy(buf_ptr + AP_TEST_STATUS_DESCRIPTOR_TYPE(AP_TEST_STATUS_OFFSET), &tmp16, sizeof(tmp16));
-	tmp16 = PLAT_htons(0x00);
-	memcpy(buf_ptr + AP_TEST_STATUS_DESCRIPTOR_INDEX(AP_TEST_STATUS_OFFSET), &tmp16, sizeof(tmp16));
-
-	tmp32 = PLAT_htonl(0x07000023);
-	memcpy(buf_ptr + AP_TEST_STATUS_COUNTERS_VALID(AP_TEST_STATUS_OFFSET), &tmp32, sizeof(tmp32));
-
-	tmp32 = PLAT_htonl(port->getLinkUpCount());
-	memcpy(buf_ptr + AP_TEST_STATUS_COUNTER_LINKUP(AP_TEST_STATUS_OFFSET), &tmp32, sizeof(tmp32));
-
-	tmp32 = PLAT_htonl(port->getLinkDownCount());
-	memcpy(buf_ptr + AP_TEST_STATUS_COUNTER_LINKDOWN(AP_TEST_STATUS_OFFSET), &tmp32, sizeof(tmp32));
-
-	Timestamp system_time;
-	Timestamp q_time;
-	Timestamp device_time;
-	uint32_t local_clock, nominal_clock_rate;
-	port->getDeviceTime(system_time, q_time, device_time, local_clock, nominal_clock_rate);
-	tmp64 = PLAT_htonll(TIMESTAMP_TO_NS(system_time));
-	memcpy(buf_ptr + AP_TEST_STATUS_MESSAGE_TIMESTAMP(AP_TEST_STATUS_OFFSET), &tmp64, sizeof(tmp64));
-
-	BIT_D2BHTONB(buf_ptr + AP_TEST_STATUS_STATION_STATE(AP_TEST_STATUS_OFFSET), (uint8_t)port->getStationState(), 0);
-
-	port->sendGeneralPort(AVTP_ETHERTYPE, buf_t, messageLength, MCAST_TEST_STATUS, NULL);
-
-	return;
+    static uint16_t sequenceId = 0;
+    uint8_t buf_t[256];
+    uint8_t *buf_ptr = buf_t + port->getPayloadOffset();
+    uint16_t tmp16;
+    uint32_t tmp32;
+    uint64_t tmp64;
+    memset(buf_t, 0, 256);
+    // Create packet in buf
+    messageLength = AP_TEST_STATUS_LENGTH;
+    BIT_D2BHTONB(buf_ptr + AP_TEST_STATUS_AVTP_SUBTYPE(AP_TEST_STATUS_OFFSET), 0xfb,
+                 0);
+    BIT_D2BHTONB(buf_ptr + AP_TEST_STATUS_AVTP_VERSION_CONTROL(
+                     AP_TEST_STATUS_OFFSET), 0x1, 0);
+    BIT_D2BHTONS(buf_ptr + AP_TEST_STATUS_AVTP_STATUS_LENGTH(AP_TEST_STATUS_OFFSET),
+                 148, 0);
+    port->getLocalAddr()->toOctetArray(buf_ptr + AP_TEST_STATUS_TARGET_ENTITY_ID(
+                                           AP_TEST_STATUS_OFFSET));
+    tmp16 = PLAT_htons(sequenceId++);
+    memcpy(buf_ptr + AP_TEST_STATUS_SEQUENCE_ID(AP_TEST_STATUS_OFFSET), &tmp16,
+           sizeof(tmp16));
+    BIT_D2BHTONS(buf_ptr + AP_TEST_STATUS_COMMAND_TYPE(AP_TEST_STATUS_OFFSET), 1,
+                 15);
+    BIT_D2BHTONS(buf_ptr + AP_TEST_STATUS_COMMAND_TYPE(AP_TEST_STATUS_OFFSET), 0x29,
+                 0);
+    tmp16 = PLAT_htons(0x09);
+    memcpy(buf_ptr + AP_TEST_STATUS_DESCRIPTOR_TYPE(AP_TEST_STATUS_OFFSET), &tmp16,
+           sizeof(tmp16));
+    tmp16 = PLAT_htons(0x00);
+    memcpy(buf_ptr + AP_TEST_STATUS_DESCRIPTOR_INDEX(AP_TEST_STATUS_OFFSET), &tmp16,
+           sizeof(tmp16));
+    tmp32 = PLAT_htonl(0x07000023);
+    memcpy(buf_ptr + AP_TEST_STATUS_COUNTERS_VALID(AP_TEST_STATUS_OFFSET), &tmp32,
+           sizeof(tmp32));
+    tmp32 = PLAT_htonl(port->getLinkUpCount());
+    memcpy(buf_ptr + AP_TEST_STATUS_COUNTER_LINKUP(AP_TEST_STATUS_OFFSET), &tmp32,
+           sizeof(tmp32));
+    tmp32 = PLAT_htonl(port->getLinkDownCount());
+    memcpy(buf_ptr + AP_TEST_STATUS_COUNTER_LINKDOWN(AP_TEST_STATUS_OFFSET), &tmp32,
+           sizeof(tmp32));
+    Timestamp system_time;
+    Timestamp q_time;
+    Timestamp boot_time;
+    Timestamp device_time;
+    uint32_t local_clock, nominal_clock_rate;
+    port->getDeviceTime(system_time, q_time, device_time, boot_time, local_clock,
+                        nominal_clock_rate);
+    tmp64 = PLAT_htonll(TIMESTAMP_TO_NS(system_time));
+    memcpy(buf_ptr + AP_TEST_STATUS_MESSAGE_TIMESTAMP(AP_TEST_STATUS_OFFSET),
+           &tmp64, sizeof(tmp64));
+    BIT_D2BHTONB(buf_ptr + AP_TEST_STATUS_STATION_STATE(AP_TEST_STATUS_OFFSET),
+                 (uint8_t)port->getStationState(), 0);
+    port->sendGeneralPort(AVTP_ETHERTYPE, buf_t, messageLength, MCAST_TEST_STATUS,
+                          NULL);
+    return;
 }
 

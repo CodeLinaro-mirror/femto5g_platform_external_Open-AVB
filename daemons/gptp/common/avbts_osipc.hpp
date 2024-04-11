@@ -30,6 +30,14 @@
   POSSIBILITY OF SUCH DAMAGE.
 
 ******************************************************************************/
+/******************************************************************************
+
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+
+******************************************************************************/
 
 #ifndef AVBTS_OSIPC_HPP
 #define AVBTS_OSIPC_HPP
@@ -43,9 +51,10 @@
 /**
  * @brief Generic interface for Inter Process Communication arguments
  */
-class OS_IPC_ARG {
-public:
-	virtual ~OS_IPC_ARG() = 0;
+class OS_IPC_ARG
+{
+    public:
+        virtual ~OS_IPC_ARG() = 0;
 };
 
 inline OS_IPC_ARG::~OS_IPC_ARG () { }
@@ -53,111 +62,120 @@ inline OS_IPC_ARG::~OS_IPC_ARG () { }
 /**
  * @brief Generic interface for Inter Process Communication
  */
-class OS_IPC {
-public:
-	/**
-	 * @brief  Initializes the IPC
-	 * @return Implementation dependent
-	 */
-    virtual bool init( OS_IPC_ARG *arg = NULL ) = 0;
+class OS_IPC
+{
+    public:
+        /**
+         * @brief  Initializes the IPC
+         * @return Implementation dependent
+         */
+        virtual bool init( OS_IPC_ARG *arg = NULL ) = 0;
 
-	/**
-	 * @brief  Updates IPC values
-	 *
-	 * @param ml_phoffset Master to local phase offset
-	 * @param ls_phoffset Local to system phase offset
-	 * @param ml_freqoffset Master to local frequency offset
-	 * @param ls_freq_offset Local to system frequency offset
-	 * @param local_time Local time
-	 * @param sync_count Count of syncs
-	 * @param pdelay_count Count of pdelays
-	 * @param port_state Port's state
-	 * @param asCapable asCapable flag
-	 *
-	 * @return Implementation dependent.
-	 */
-	virtual bool update(
-		int64_t  ml_phoffset,
-		int64_t ls_phoffset,
-		int64_t lq_phoffset,
-		FrequencyRatio  ml_freqoffset,
-		FrequencyRatio ls_freq_offset,
-		FrequencyRatio lq_freq_offset,
-		uint64_t local_time,
-		uint32_t sync_count,
-		uint32_t pdelay_count,
-		PortState port_state,
-		bool asCapable ) = 0;
+        /**
+         * @brief  Updates IPC values
+         *
+         * @param ml_phoffset Master to local phase offset
+         * @param ls_phoffset Local to system phase offset
+         * @param ml_freqoffset Master to local frequency offset
+         * @param ls_freq_offset Local to system frequency offset
+         * @param local_time Local time
+         * @param sync_count Count of syncs
+         * @param pdelay_count Count of pdelays
+         * @param port_state Port's state
+         * @param asCapable asCapable flag
+         *
+         * @return Implementation dependent.
+         */
+        virtual bool update(
+            int64_t  ml_phoffset,
+            int64_t ls_phoffset,
+            int64_t lq_phoffset,
+            int64_t lb_phoffset,
+            FrequencyRatio  ml_freqoffset,
+            FrequencyRatio ls_freq_offset,
+            FrequencyRatio lq_freq_offset,
+            FrequencyRatio lb_freq_offset,
+            uint64_t local_time,
+            uint32_t sync_count,
+            uint32_t pdelay_count,
+            PortState port_state,
+            bool asCapable ) = 0;
 
-	/**
-	 * @brief  Updates grandmaster IPC values
-	 *
-	 * @param gptp_grandmaster_id Current grandmaster id (all 0's if no grandmaster selected)
-	 * @param gptp_domain_number gPTP domain number
-	 *
-	 * @return Implementation dependent.
-	 */
-	virtual bool update_grandmaster(
-		uint8_t gptp_grandmaster_id[],
-		uint8_t gptp_domain_number ) = 0;
+        /**
+         * @brief  Updates grandmaster IPC values
+         *
+         * @param gptp_grandmaster_id Current grandmaster id (all 0's if no grandmaster selected)
+         * @param gptp_domain_number gPTP domain number
+         *
+         * @return Implementation dependent.
+         */
+        virtual bool update_grandmaster(
+            uint8_t gptp_grandmaster_id[],
+            uint8_t gptp_domain_number ) = 0;
 
-	/**
-	 * @brief  Updates network interface IPC values
-	 *
-	 * @param  clock_identity  The clock identity of the interface
-	 * @param  priority1  The priority1 field of the grandmaster functionality of the interface, or 0xFF if not supported
-	 * @param  clock_class  The clockClass field of the grandmaster functionality of the interface, or 0xFF if not supported
-	 * @param  offset_scaled_log_variance  The offsetScaledLogVariance field of the grandmaster functionality of the interface, or 0x0000 if not supported
-	 * @param  clock_accuracy  The clockAccuracy field of the grandmaster functionality of the interface, or 0xFF if not supported
-	 * @param  priority2  The priority2 field of the grandmaster functionality of the interface, or 0xFF if not supported
-	 * @param  domain_number  The domainNumber field of the grandmaster functionality of the interface, or 0 if not supported
-	 * @param  log_sync_interval  The currentLogSyncInterval field of the grandmaster functionality of the interface, or 0 if not supported
-	 * @param  log_announce_interval  The currentLogAnnounceInterval field of the grandmaster functionality of the interface, or 0 if not supported
-	 * @param  log_pdelay_interval  The currentLogPDelayReqInterval field of the grandmaster functionality of the interface, or 0 if not supported
-	 * @param  port_number  The portNumber field of the interface, or 0x0000 if not supported
-	 *
-	 * @return Implementation dependent.
-	 */
-	virtual bool update_network_interface(
-		uint8_t  clock_identity[],
-		uint8_t  priority1,
-		uint8_t  clock_class,
-		int16_t  offset_scaled_log_variance,
-		uint8_t  clock_accuracy,
-		uint8_t  priority2,
-		uint8_t  domain_number,
-		int8_t   log_sync_interval,
-		int8_t   log_announce_interval,
-		int8_t   log_pdelay_interval,
-		uint16_t port_number ) = 0;
-     /**
-      * @brief Updates Grandmaster id and port
-      * @param id ClockIdentity of grandmaster
-      * @param portNumber Port of the grandmaster
-      * @return Implementation dependent
-      */
-    virtual bool updateGmId(ClockIdentity& id, uint16_t portNumber) = 0;
+        /**
+         * @brief  Updates network interface IPC values
+         *
+         * @param  clock_identity  The clock identity of the interface
+         * @param  priority1  The priority1 field of the grandmaster functionality of the interface, or 0xFF if not supported
+         * @param  clock_class  The clockClass field of the grandmaster functionality of the interface, or 0xFF if not supported
+         * @param  offset_scaled_log_variance  The offsetScaledLogVariance field of the grandmaster functionality of the interface, or 0x0000 if not supported
+         * @param  clock_accuracy  The clockAccuracy field of the grandmaster functionality of the interface, or 0xFF if not supported
+         * @param  priority2  The priority2 field of the grandmaster functionality of the interface, or 0xFF if not supported
+         * @param  domain_number  The domainNumber field of the grandmaster functionality of the interface, or 0 if not supported
+         * @param  log_sync_interval  The currentLogSyncInterval field of the grandmaster functionality of the interface, or 0 if not supported
+         * @param  log_announce_interval  The currentLogAnnounceInterval field of the grandmaster functionality of the interface, or 0 if not supported
+         * @param  log_pdelay_interval  The currentLogPDelayReqInterval field of the grandmaster functionality of the interface, or 0 if not supported
+         * @param  port_number  The portNumber field of the interface, or 0x0000 if not supported
+         *
+         * @return Implementation dependent.
+         */
+        virtual bool update_network_interface(
+            uint8_t  clock_identity[],
+            uint8_t  priority1,
+            uint8_t  clock_class,
+            int16_t  offset_scaled_log_variance,
+            uint8_t  clock_accuracy,
+            uint8_t  priority2,
+            uint8_t  domain_number,
+            int8_t   log_sync_interval,
+            int8_t   log_announce_interval,
+            int8_t   log_pdelay_interval,
+            uint16_t port_number ) = 0;
+        /**
+         * @brief Updates Grandmaster id and port
+         * @param id ClockIdentity of grandmaster
+         * @param portNumber Port of the grandmaster
+         * @return Implementation dependent
+         */
+        virtual bool updateGmId(ClockIdentity& id, uint16_t portNumber) = 0;
 
-	 /**
-      * @brief Updates sync status
-      * @param is_sync - Sync status of gPTP slave
-      * @param portNumber Port of the grandmaster
-      * @return Implementation dependent
-      */
-    virtual bool updateSyncStatus(bool is_sync, PortState port_state) = 0;
+        /**
+         * @brief Updates sync status
+         * @param is_sync - Sync status of gPTP slave
+         * @param portNumber Port of the grandmaster
+         * @return Implementation dependent
+         */
+        virtual bool updateSyncStatus(bool is_sync, PortState port_state) = 0;
 
-     /**
-      * @brief Updates sync status
-      * @param is_sync - Sync status of gPTP slave
-      * @param portNumber Port of the grandmaster
-      * @return Implementation dependent
-      */
-    virtual bool getSyncStatus(void) = 0;
+        /**
+         * @brief Updates sync status
+         * @param is_sync - Sync status of gPTP slave
+         * @param portNumber Port of the grandmaster
+         * @return Implementation dependent
+         */
+        virtual bool getSyncStatus(void) = 0;
 
-	/*
-	 * Destroys IPC
-	 */
-	virtual ~OS_IPC() = 0;
+        /**
+         * @brief Updates Proxy Mode status
+         * @param proxy_value - Proxy status to be set
+         * @return Implementation dependent
+         */
+        virtual bool setProxyMode(int32_t proxy_value) = 0;
+        /*
+         * Destroys IPC
+         */
+        virtual ~OS_IPC() = 0;
 };
 
 inline OS_IPC::~OS_IPC() {}

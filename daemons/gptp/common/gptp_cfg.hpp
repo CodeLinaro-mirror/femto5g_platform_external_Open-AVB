@@ -28,6 +28,15 @@ Complete license and copyright information can be found at
 https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 *************************************************************************************************************/
 
+/******************************************************************************
+
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+
+******************************************************************************/
+
 /**
  * @file
  * MODULE SUMMARY : Reads the .ini file and parses it into information
@@ -40,11 +49,11 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 #include <limits.h>
 #include <common_port.hpp>
 
-const uint32_t LINKSPEED_10G =		10000000;
-const uint32_t LINKSPEED_2_5G =		2500000;
-const uint32_t LINKSPEED_1G =		1000000;
-const uint32_t LINKSPEED_100MB =	100000;
-const uint32_t INVALID_LINKSPEED =	UINT_MAX;
+const uint32_t LINKSPEED_10G =      10000000;
+const uint32_t LINKSPEED_2_5G =     2500000;
+const uint32_t LINKSPEED_1G =       1000000;
+const uint32_t LINKSPEED_100MB =    100000;
+const uint32_t INVALID_LINKSPEED =  UINT_MAX;
 
 /**
  * @brief Returns name given numeric link speed
@@ -63,8 +72,7 @@ class GptpIniParser
         /**
          * @brief Container with the information to get from the .ini file
          */
-        typedef struct
-        {
+        typedef struct {
             /*ptp data set*/
             uint8_t priority1;
             uint8_t priority2;
@@ -73,22 +81,24 @@ class GptpIniParser
             /*port data set*/
             unsigned int announceReceiptTimeout;
             unsigned int syncReceiptTimeout;
-            unsigned int syncReceiptThresh;		//!< Number of wrong sync messages that will trigger a switch to master
+            unsigned int
+            syncReceiptThresh;     //!< Number of wrong sync messages that will trigger a switch to master
             int64_t neighborPropDelayThresh;
+            int64_t stbMSyncLossThreshold;
             unsigned int seqIdAsCapableThresh;
             uint16_t lostPdelayRespThresh;
-			int8_t initialLogSyncInterval;
-			int8_t initialLogPdelayReqInterval;
-			int8_t operLogSyncInterval;
-			int8_t operLogPdelayReqInterval;
-			bool automotive_profile;
-			bool asCapable;
-			bool isGm;
+            int8_t initialLogSyncInterval;
+            int8_t initialLogPdelayReqInterval;
+            int8_t operLogSyncInterval;
+            int8_t operLogPdelayReqInterval;
+            bool automotive_profile;
+            bool asCapable;
+            bool isGm;
             PortState port_state;
 
             /*ethernet adapter data set*/
-	    std::string ifname;
-		phy_delay_map_t phy_delay;
+            std::string ifname;
+            phy_delay_map_t phy_delay;
         } gptp_cfg_t;
 
         /*public methods*/
@@ -171,6 +181,16 @@ class GptpIniParser
         }
 
         /**
+         * @brief  Reads the StbMSyncLossThreshold from the configuration file
+         * @param  void
+         * @return StbMSyncLossThreshold value from the .ini file
+         */
+        int64_t getStbMSyncLossThreshold(void)
+        {
+            return _config.stbMSyncLossThreshold;
+        }
+
+        /**
          * @brief  Reads the sync receipt threshold from the configuration file
          * @return syncRecepitThresh value from the .ini file
          */
@@ -211,35 +231,36 @@ class GptpIniParser
             return _config.operLogPdelayReqInterval;
         }
 
-		bool getIsGM(void)
-		{
-			return _config.isGm;
-		}
+        bool getIsGM(void)
+        {
+            return _config.isGm;
+        }
 
-		bool getAsCapable(void)
-		{
-			return _config.asCapable;
-		}
-		bool getAutomotiveProfile(void)
-		{
-			return _config.automotive_profile;
-		}
+        bool getAsCapable(void)
+        {
+            return _config.asCapable;
+        }
+        bool getAutomotiveProfile(void)
+        {
+            return _config.automotive_profile;
+        }
 
-		PortState getPortState(void)
-		{
-			return _config.port_state;
-		}
+        PortState getPortState(void)
+        {
+            return _config.port_state;
+        }
 
-	/**
-	 * @brief Dump PHY delays to screen
-	 */
-	void print_phy_delay( void );
+        /**
+         * @brief Dump PHY delays to screen
+         */
+        void print_phy_delay( void );
 
     private:
         int _error;
         gptp_cfg_t _config;
 
-        static int iniCallBack(void *user, const char *section, const char *name, const char *value);
+        static int iniCallBack(void *user, const char *section, const char *name,
+                               const char *value);
         static bool parseMatch(const char *s1, const char *s2);
 };
 

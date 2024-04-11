@@ -31,6 +31,15 @@
 
 ******************************************************************************/
 
+/******************************************************************************
+
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+
+******************************************************************************/
+
 #include <linux_hal_common.hpp>
 #include <sys/types.h>
 #include <avbts_clock.hpp>
@@ -46,7 +55,7 @@
 
 #include <unistd.h>
 #include <errno.h>
-
+#include <inttypes.h>
 #include <signal.h>
 #include <net/ethernet.h> /* the L2 protocols */
 
@@ -62,199 +71,225 @@
 #include <linux/sockios.h>
 #include <gptp_cfg.hpp>
 
+struct ptp_lib {
+    bool status;
+    int32_t port_status;
+};
+
 Timestamp tsToTimestamp(struct timespec *ts)
 {
-	Timestamp ret;
-	int seclen = sizeof(ts->tv_sec) - sizeof(ret.seconds_ls);
-	if (seclen > 0) {
-		ret.seconds_ms =
-		    ts->tv_sec >> (sizeof(ts->tv_sec) - seclen) * 8;
-		ret.seconds_ls = ts->tv_sec & 0xFFFFFFFF;
-	} else {
-		ret.seconds_ms = 0;
-		ret.seconds_ls = ts->tv_sec;
-	}
-	ret.nanoseconds = ts->tv_nsec;
-	return ret;
+    Timestamp ret;
+    int seclen = sizeof(ts->tv_sec) - sizeof(ret.seconds_ls);
+
+    if (seclen > 0) {
+        ret.seconds_ms =
+            ts->tv_sec >> (sizeof(ts->tv_sec) - seclen) * 8;
+        ret.seconds_ls = ts->tv_sec & 0xFFFFFFFF;
+    } else {
+        ret.seconds_ms = 0;
+        ret.seconds_ls = ts->tv_sec;
+    }
+
+    ret.nanoseconds = ts->tv_nsec;
+    return ret;
 }
 
-LinuxNetworkInterface::~LinuxNetworkInterface() {
-	close( sd_event );
-	close( sd_general );
+LinuxNetworkInterface::~LinuxNetworkInterface()
+{
+    close( sd_event );
+    close( sd_general );
 }
 
 net_result LinuxNetworkInterface::send
-( LinkLayerAddress *addr, uint16_t etherType, uint8_t *payload, size_t length, bool timestamp ) {
-	sockaddr_ll *remote = NULL;
-	int err;
-	remote = new struct sockaddr_ll;
-	memset( remote, 0, sizeof( *remote ));
-	remote->sll_family = AF_PACKET;
-	remote->sll_protocol = PLAT_htons( etherType );
-	remote->sll_ifindex = ifindex;
-	remote->sll_halen = ETH_ALEN;
-	addr->toOctetArray( remote->sll_addr );
+( LinkLayerAddress *addr, uint16_t etherType, uint8_t *payload, size_t length,
+  bool timestamp )
+{
+    sockaddr_ll *remote = NULL;
+    int err;
+    remote = new struct sockaddr_ll;
+    memset( remote, 0, sizeof( *remote ));
+    remote->sll_family = AF_PACKET;
+    remote->sll_protocol = PLAT_htons( etherType );
+    remote->sll_ifindex = ifindex;
+    remote->sll_halen = ETH_ALEN;
+    addr->toOctetArray( remote->sll_addr );
 
-	if( timestamp ) {
+    if ( timestamp ) {
 #ifndef ARCH_INTELCE
-		net_lock.lock();
+        net_lock.lock();
 #endif
-		err = sendto
-			( sd_event, payload, length, 0, (sockaddr *) remote,
-			  sizeof( *remote ));
-	} else {
-		err = sendto
-			( sd_general, payload, length, 0, (sockaddr *) remote,
-			  sizeof( *remote ));
-	}
-	delete remote;
-	if( err == -1 ) {
-		GPTP_LOG_ERROR( "Failed to send: %s(%d)", strerror(errno), errno );
-		return net_fatal;
-	}
-	return net_succeed;
+        err = sendto
+              ( sd_event, payload, length, 0, (sockaddr *) remote,
+                sizeof( *remote ));
+    } else {
+        err = sendto
+              ( sd_general, payload, length, 0, (sockaddr *) remote,
+                sizeof( *remote ));
+    }
+
+    delete remote;
+
+    if ( err == -1 ) {
+        GPTP_LOG_ERROR( "Failed to send: %s(%d)", strerror(errno), errno );
+        return net_fatal;
+    }
+
+    return net_succeed;
 }
 
 
-void LinuxNetworkInterface::disable_rx_queue() {
-	struct packet_mreq mr_8021as;
-	int err;
+void LinuxNetworkInterface::disable_rx_queue()
+{
+    struct packet_mreq mr_8021as;
+    int err;
 
-	if( !net_lock.lock() ) {
-		fprintf( stderr, "D rx lock failed\n" );
-		_exit(0);
-	}
+    if ( !net_lock.lock() ) {
+        fprintf( stderr, "D rx lock failed\n" );
+        _exit(0);
+    }
 
-	memset( &mr_8021as, 0, sizeof( mr_8021as ));
-	mr_8021as.mr_ifindex = ifindex;
-	mr_8021as.mr_type = PACKET_MR_MULTICAST;
-	mr_8021as.mr_alen = 6;
-	memcpy( mr_8021as.mr_address, P8021AS_MULTICAST, mr_8021as.mr_alen );
-	err = setsockopt
-		( sd_event, SOL_PACKET, PACKET_DROP_MEMBERSHIP, &mr_8021as,
-		  sizeof( mr_8021as ));
-	if( err == -1 ) {
-		GPTP_LOG_ERROR
-			( "Unable to add PTP multicast addresses to port id: %u",
-			  ifindex );
-		return;
-	}
+    memset( &mr_8021as, 0, sizeof( mr_8021as ));
+    mr_8021as.mr_ifindex = ifindex;
+    mr_8021as.mr_type = PACKET_MR_MULTICAST;
+    mr_8021as.mr_alen = 6;
+    memcpy( mr_8021as.mr_address, P8021AS_MULTICAST, mr_8021as.mr_alen );
+    err = setsockopt
+          ( sd_event, SOL_PACKET, PACKET_DROP_MEMBERSHIP, &mr_8021as,
+            sizeof( mr_8021as ));
 
-	return;
+    if ( err == -1 ) {
+        GPTP_LOG_ERROR
+        ( "Unable to add PTP multicast addresses to port id: %u",
+          ifindex );
+        return;
+    }
+
+    return;
 }
 
-void LinuxNetworkInterface::clear_reenable_rx_queue() {
-	struct packet_mreq mr_8021as;
-	char buf[256];
-	int err;
+void LinuxNetworkInterface::clear_reenable_rx_queue()
+{
+    struct packet_mreq mr_8021as;
+    char buf[256];
+    int err;
 
-	while( recvfrom( sd_event, buf, 256, MSG_DONTWAIT, NULL, 0 ) != -1 );
+    while ( recvfrom( sd_event, buf, 256, MSG_DONTWAIT, NULL, 0 ) != -1 );
 
-	memset( &mr_8021as, 0, sizeof( mr_8021as ));
-	mr_8021as.mr_ifindex = ifindex;
-	mr_8021as.mr_type = PACKET_MR_MULTICAST;
-	mr_8021as.mr_alen = 6;
-	memcpy( mr_8021as.mr_address, P8021AS_MULTICAST, mr_8021as.mr_alen );
-	err = setsockopt
-		( sd_event, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mr_8021as,
-		  sizeof( mr_8021as ));
-	if( err == -1 ) {
-		GPTP_LOG_ERROR
-			( "Unable to add PTP multicast addresses to port id: %u",
-			  ifindex );
-		return;
-	}
+    memset( &mr_8021as, 0, sizeof( mr_8021as ));
+    mr_8021as.mr_ifindex = ifindex;
+    mr_8021as.mr_type = PACKET_MR_MULTICAST;
+    mr_8021as.mr_alen = 6;
+    memcpy( mr_8021as.mr_address, P8021AS_MULTICAST, mr_8021as.mr_alen );
+    err = setsockopt
+          ( sd_event, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mr_8021as,
+            sizeof( mr_8021as ));
 
-	if( !net_lock.unlock() ) {
-		fprintf( stderr, "D failed unlock rx lock, %d\n", err );
-	}
+    if ( err == -1 ) {
+        GPTP_LOG_ERROR
+        ( "Unable to add PTP multicast addresses to port id: %u",
+          ifindex );
+        return;
+    }
+
+    if ( !net_lock.unlock() ) {
+        fprintf( stderr, "D failed unlock rx lock, %d\n", err );
+    }
 }
 
 static void x_readEvent
 ( int sockint, EtherPort *pPort, int ifindex )
 {
-	int status;
-	char buf[4096];
-	struct iovec iov = { buf, sizeof buf };
-	struct sockaddr_nl snl;
-	struct msghdr msg = { (void *) &snl, sizeof snl, &iov, 1, NULL, 0, 0 };
-	struct nlmsghdr *msgHdr;
-	struct ifinfomsg *ifi;
+    int status;
+    char buf[4096];
+    struct iovec iov = { buf, sizeof buf };
+    struct sockaddr_nl snl;
+    struct msghdr msg = { (void *) &snl, sizeof snl, &iov, 1, NULL, 0, 0 };
+    struct nlmsghdr *msgHdr;
+    struct ifinfomsg *ifi;
+    status = recvmsg(sockint, &msg, 0);
 
-	status = recvmsg(sockint, &msg, 0);
+    if (status < 0) {
+        GPTP_LOG_ERROR("read_netlink: Error recvmsg: %d", status);
+        return;
+    }
 
-	if (status < 0) {
-		GPTP_LOG_ERROR("read_netlink: Error recvmsg: %d", status);
-		return;
-	}
+    if (status == 0) {
+        GPTP_LOG_ERROR("read_netlink: EOF");
+        return;
+    }
 
-	if (status == 0) {
-		GPTP_LOG_ERROR("read_netlink: EOF");
-		return;
-	}
+    // Process the NETLINK messages
+    for (msgHdr = (struct nlmsghdr *)buf; NLMSG_OK(msgHdr, (unsigned int)status);
+            msgHdr = NLMSG_NEXT(msgHdr, status)) {
+        if (msgHdr->nlmsg_type == NLMSG_DONE) {
+            return;
+        }
 
-	// Process the NETLINK messages
-	for (msgHdr = (struct nlmsghdr *)buf; NLMSG_OK(msgHdr, (unsigned int)status); msgHdr = NLMSG_NEXT(msgHdr, status))
-	{
-		if (msgHdr->nlmsg_type == NLMSG_DONE)
-			return;
+        if (msgHdr->nlmsg_type == NLMSG_ERROR) {
+            GPTP_LOG_ERROR("netlink message error");
+            return;
+        }
 
-		if (msgHdr->nlmsg_type == NLMSG_ERROR) {
-			GPTP_LOG_ERROR("netlink message error");
-			return;
-		}
+        if (msgHdr->nlmsg_type == RTM_NEWLINK) {
+            ifi = (struct ifinfomsg *)NLMSG_DATA(msgHdr);
 
-		if (msgHdr->nlmsg_type == RTM_NEWLINK) {
-			ifi = (struct ifinfomsg *)NLMSG_DATA(msgHdr);
-			if (ifi->ifi_index == ifindex) {
-				bool linkUp = ifi->ifi_flags & IFF_RUNNING;
-				if (linkUp != pPort->getLinkUpState()) {
-					pPort->setLinkUpState(linkUp);
-					if (linkUp) {
-						pPort->processEvent(LINKUP);
-					}
-					else {
-						pPort->processEvent(LINKDOWN);
-					}
-				}
-				else {
-					GPTP_LOG_DEBUG("False (repeated) %s event for the interface", linkUp ? "LINKUP" : "LINKDOWN");
-				}
-			}
-		}
-	}
-	return;
+            if (ifi->ifi_index == ifindex) {
+                bool linkUp = ifi->ifi_flags & IFF_RUNNING;
+
+                if (linkUp != pPort->getLinkUpState()) {
+                    pPort->setLinkUpState(linkUp);
+
+                    if (linkUp) {
+                        pPort->processEvent(LINKUP);
+                    } else {
+                        pPort->processEvent(LINKDOWN);
+                    }
+                } else {
+                    GPTP_LOG_DEBUG("False (repeated) %s event for the interface",
+                                   linkUp ? "LINKUP" : "LINKDOWN");
+                }
+            }
+        }
+    }
+
+    return;
 }
 
 static void x_initLinkUpStatus( EtherPort *pPort, int ifindex )
 {
-	struct ifreq device;
-	memset(&device, 0, sizeof(device));
-	device.ifr_ifindex = ifindex;
+    struct ifreq device;
+    memset(&device, 0, sizeof(device));
+    device.ifr_ifindex = ifindex;
+    int inetSocket = socket (AF_INET, SOCK_STREAM, 0);
 
-	int inetSocket = socket (AF_INET, SOCK_STREAM, 0);
-	if (inetSocket < 0) {
-		GPTP_LOG_ERROR("initLinkUpStatus error opening socket: %s", strerror(errno));
-		return;
-	}
+    if (inetSocket < 0) {
+        GPTP_LOG_ERROR("initLinkUpStatus error opening socket: %s", strerror(errno));
+        return;
+    }
 
-	int r = ioctl(inetSocket, SIOCGIFNAME, &device);
-	if (r < 0) {
-		GPTP_LOG_ERROR("initLinkUpStatus error reading interface name: %s", strerror(errno));
-		close(inetSocket);
-		return;
-	}
-	r = ioctl(inetSocket, SIOCGIFFLAGS, &device);
-	if (r < 0) {
-		GPTP_LOG_ERROR("initLinkUpStatus error reading flags: %s", strerror(errno));
-		close(inetSocket);
-		return;
-	}
-	if (device.ifr_flags & IFF_RUNNING) {
-		GPTP_LOG_DEBUG("Interface %s is up", device.ifr_name);
-		pPort->setLinkUpState(true);
-	} //linkUp == false by default
-	close(inetSocket);
+    int r = ioctl(inetSocket, SIOCGIFNAME, &device);
+
+    if (r < 0) {
+        GPTP_LOG_ERROR("initLinkUpStatus error reading interface name: %s",
+                       strerror(errno));
+        close(inetSocket);
+        return;
+    }
+
+    r = ioctl(inetSocket, SIOCGIFFLAGS, &device);
+
+    if (r < 0) {
+        GPTP_LOG_ERROR("initLinkUpStatus error reading flags: %s", strerror(errno));
+        close(inetSocket);
+        return;
+    }
+
+    if (device.ifr_flags & IFF_RUNNING) {
+        GPTP_LOG_DEBUG("Interface %s is up", device.ifr_name);
+        pPort->setLinkUpState(true);
+    } //linkUp == false by default
+
+    close(inetSocket);
 }
 
 #ifdef __ANDROID__
@@ -268,1027 +303,1286 @@ static inline __u32 ethtool_cmd_speed(const struct ethtool_cmd *ep)
 
 bool LinuxNetworkInterface::getLinkSpeed( int sd, uint32_t *speed )
 {
-	struct ifreq ifr;
-	struct ethtool_cmd edata;
+    struct ifreq ifr;
+    struct ethtool_cmd edata;
+    ifr.ifr_ifindex = ifindex;
 
-	ifr.ifr_ifindex = ifindex;
-	if( ioctl( sd, SIOCGIFNAME, &ifr ) == -1 )
-	{
-		GPTP_LOG_ERROR
-			( "%s: SIOCGIFNAME failed: %s", __PRETTY_FUNCTION__,
-			  strerror( errno ));
-		return false;
-	}
+    if ( ioctl( sd, SIOCGIFNAME, &ifr ) == -1 ) {
+        GPTP_LOG_ERROR
+        ( "%s: SIOCGIFNAME failed: %s", __PRETTY_FUNCTION__,
+          strerror( errno ));
+        return false;
+    }
 
-	ifr.ifr_data = (char *) &edata;
-	edata.cmd = ETHTOOL_GSET;
-	if( ioctl( sd, SIOCETHTOOL, &ifr ) == -1 )
-	{
-		GPTP_LOG_WARNING
-			( "%s: SIOCETHTOOL failed: %s", __PRETTY_FUNCTION__,
-			  strerror( errno ));
-		*speed = LINKSPEED_1G;
-		GPTP_LOG_INFO( "Use default Link Speed: %d kb/sec", *speed );
-		return true;
-	}
+    ifr.ifr_data = (char *) &edata;
+    edata.cmd = ETHTOOL_GSET;
 
-	switch (ethtool_cmd_speed(&edata))
-	{
-	default:
-		GPTP_LOG_ERROR( "%s: Unknown/Unsupported Speed!",
-				__PRETTY_FUNCTION__ );
-		return false;
-	case SPEED_100:
-		*speed = LINKSPEED_100MB;
-		break;
-	case SPEED_1000:
-		*speed = LINKSPEED_1G;
-		break;
-	case SPEED_2500:
-		*speed = LINKSPEED_2_5G;
-		break;
-	case SPEED_10000:
-		*speed = LINKSPEED_10G;
-		break;
-	}
-	GPTP_LOG_STATUS( "Link Speed: %d kb/sec", *speed );
+    if ( ioctl( sd, SIOCETHTOOL, &ifr ) == -1 ) {
+        GPTP_LOG_WARNING
+        ( "%s: SIOCETHTOOL failed: %s", __PRETTY_FUNCTION__,
+          strerror( errno ));
+        *speed = LINKSPEED_1G;
+        GPTP_LOG_INFO( "Use default Link Speed: %d kb/sec", *speed );
+        return true;
+    }
 
-	return true;
+    switch (ethtool_cmd_speed(&edata)) {
+        default:
+            GPTP_LOG_ERROR( "%s: Unknown/Unsupported Speed!",
+                            __PRETTY_FUNCTION__ );
+            return false;
+
+        case SPEED_100:
+            *speed = LINKSPEED_100MB;
+            break;
+
+        case SPEED_1000:
+            *speed = LINKSPEED_1G;
+            break;
+
+        case SPEED_2500:
+            *speed = LINKSPEED_2_5G;
+            break;
+
+        case SPEED_10000:
+            *speed = LINKSPEED_10G;
+            break;
+    }
+
+    GPTP_LOG_STATUS( "Link Speed: %d kb/sec", *speed );
+    return true;
 }
 
 void LinuxNetworkInterface::watchNetLink( CommonPort *iPort )
 {
-	fd_set netLinkFD;
-	int netLinkSocket;
-	int inetSocket;
-	struct sockaddr_nl addr;
+    fd_set netLinkFD;
+    int netLinkSocket;
+    int inetSocket;
+    struct sockaddr_nl addr;
+    EtherPort *pPort =
+        dynamic_cast<EtherPort *>(iPort);
 
-	EtherPort *pPort =
-		dynamic_cast<EtherPort *>(iPort);
-	if( pPort == NULL )
-	{
-		GPTP_LOG_ERROR("NETLINK socket open error");
-		return;
-	}
+    if ( pPort == NULL ) {
+        GPTP_LOG_ERROR("NETLINK socket open error");
+        return;
+    }
 
-	netLinkSocket = socket (AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
-	if (netLinkSocket < 0) {
-		GPTP_LOG_ERROR("NETLINK socket open error");
-		return;
-	}
+    netLinkSocket = socket (AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 
-	memset((void *) &addr, 0, sizeof (addr));
+    if (netLinkSocket < 0) {
+        GPTP_LOG_ERROR("NETLINK socket open error");
+        return;
+    }
 
-	addr.nl_family = AF_NETLINK;
-	addr.nl_pid = getpid ();
-	addr.nl_groups = RTMGRP_LINK;
+    memset((void *) &addr, 0, sizeof (addr));
+    addr.nl_family = AF_NETLINK;
+    addr.nl_pid = getpid ();
+    addr.nl_groups = RTMGRP_LINK;
 
-	if (bind (netLinkSocket, (struct sockaddr *) &addr, sizeof (addr)) < 0) {
-		GPTP_LOG_ERROR("Socket bind failed");
-		close (netLinkSocket);
-		return;
-	}
+    if (bind (netLinkSocket, (struct sockaddr *) &addr, sizeof (addr)) < 0) {
+        GPTP_LOG_ERROR("Socket bind failed");
+        close (netLinkSocket);
+        return;
+    }
 
-	/*
-	 * Open an INET family socket to be passed to getLinkSpeed() which calls
-	 * ioctl() because NETLINK sockets do not support ioctl(). Since we will
-	 * enter an infinite loop, there are no apparent close() calls for the
-	 * open sockets, but they will be closed on process termination.
-	 */
-	inetSocket = socket (AF_INET, SOCK_STREAM, 0);
-	if (inetSocket < 0) {
-		GPTP_LOG_ERROR("watchNetLink error opening socket: %s", strerror(errno));
-		close (netLinkSocket);
-		return;
-	}
+    /*
+     * Open an INET family socket to be passed to getLinkSpeed() which calls
+     * ioctl() because NETLINK sockets do not support ioctl(). Since we will
+     * enter an infinite loop, there are no apparent close() calls for the
+     * open sockets, but they will be closed on process termination.
+     */
+    inetSocket = socket (AF_INET, SOCK_STREAM, 0);
 
-	x_initLinkUpStatus(pPort, ifindex);
-	if( pPort->getLinkUpState() )
-	{
-		uint32_t link_speed;
-		getLinkSpeed( inetSocket, &link_speed );
-		pPort->setLinkSpeed((int32_t) link_speed );
-	} else
-	{
-		pPort->setLinkSpeed( INVALID_LINKSPEED );
-	}
+    if (inetSocket < 0) {
+        GPTP_LOG_ERROR("watchNetLink error opening socket: %s", strerror(errno));
+        close (netLinkSocket);
+        return;
+    }
 
-	while (1) {
-		FD_ZERO(&netLinkFD);
-		FD_CLR(netLinkSocket, &netLinkFD);
-		FD_SET(netLinkSocket, &netLinkFD);
+    x_initLinkUpStatus(pPort, ifindex);
 
-		// Wait forever for a net link event
-		int retval = select(FD_SETSIZE, &netLinkFD, NULL, NULL, NULL);
-		if (retval == -1)
-			; // Error on select. We will ignore and keep going
-		else if (retval) {
-			bool prev_link_up = pPort->getLinkUpState();
-			x_readEvent(netLinkSocket, pPort, ifindex);
+    if ( pPort->getLinkUpState() ) {
+        uint32_t link_speed;
+        getLinkSpeed( inetSocket, &link_speed );
+        pPort->setLinkSpeed((int32_t) link_speed );
+    } else {
+        pPort->setLinkSpeed( INVALID_LINKSPEED );
+    }
 
-			// Don't do anything else if link state is the same
-			if( prev_link_up == pPort->getLinkUpState() )
-				continue;
-			if( pPort->getLinkUpState() )
-			{
-				uint32_t link_speed;
-				getLinkSpeed( inetSocket, &link_speed );
-				pPort->setLinkSpeed((int32_t) link_speed );
-			} else
-			{
-				pPort->setLinkSpeed( INVALID_LINKSPEED );
-			}
-		}
-		else {
-			; // Would be timeout but Won't happen because we wait forever
-		}
-	}
+    while (1) {
+        FD_ZERO(&netLinkFD);
+        FD_CLR(netLinkSocket, &netLinkFD);
+        FD_SET(netLinkSocket, &netLinkFD);
+        // Wait forever for a net link event
+        int retval = select(FD_SETSIZE, &netLinkFD, NULL, NULL, NULL);
+
+        if (retval == -1)
+            ; // Error on select. We will ignore and keep going
+        else if (retval) {
+            bool prev_link_up = pPort->getLinkUpState();
+            x_readEvent(netLinkSocket, pPort, ifindex);
+
+            // Don't do anything else if link state is the same
+            if ( prev_link_up == pPort->getLinkUpState() ) {
+                continue;
+            }
+
+            if ( pPort->getLinkUpState() ) {
+                uint32_t link_speed;
+                getLinkSpeed( inetSocket, &link_speed );
+                pPort->setLinkSpeed((int32_t) link_speed );
+            } else {
+                pPort->setLinkSpeed( INVALID_LINKSPEED );
+            }
+        } else {
+            ; // Would be timeout but Won't happen because we wait forever
+        }
+    }
 }
 
 
 struct LinuxTimerQueuePrivate {
-	pthread_t signal_thread;
+    pthread_t signal_thread;
 };
 
 struct LinuxTimerQueueActionArg {
-	timer_t timer_handle;
-	struct sigevent sevp;
-	void *inner_arg;
-	ostimerq_handler func;
-	int type;
-	bool rm;
-	bool oneshot;
+    timer_t timer_handle;
+    struct sigevent sevp;
+    void *inner_arg;
+    ostimerq_handler func;
+    int type;
+    bool rm;
+    bool oneshot;
 };
 
-LinuxTimerQueue::~LinuxTimerQueue() {
-	if( _private != NULL ) {
-		pthread_join(_private->signal_thread,NULL);
-		delete _private;
+LinuxTimerQueue::~LinuxTimerQueue()
+{
+    if ( _private != NULL ) {
+        pthread_join(_private->signal_thread, NULL);
+        delete _private;
+    }
+}
+
+bool LinuxTimerQueue::init()
+{
+    _private = new LinuxTimerQueuePrivate;
+
+    if ( _private == NULL ) {
+        return false;
     }
 
+    return true;
 }
 
-bool LinuxTimerQueue::init() {
-	_private = new LinuxTimerQueuePrivate;
-	if( _private == NULL ) return false;
+void *LinuxTimerQueueHandler( void *arg )
+{
+    LinuxTimerQueue *timerq = (LinuxTimerQueue *) arg;
+    sigset_t waitfor;
+    struct timespec timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_nsec = 100000000; /* 100 ms */
+    sigemptyset( &waitfor );
 
-	return true;
+    while ( !timerq->stop ) {
+        siginfo_t info;
+        LinuxTimerQueueMap_t::iterator iter;
+        sigaddset( &waitfor, SIGUSR1 );
+
+        if ( sigtimedwait( &waitfor, &info, &timeout ) == -1 ) {
+            if ( errno == EAGAIN ) {
+                continue;
+            } else {
+                GPTP_LOG_ERROR("LinuxTimerQueueHandler sigtimedwait failed - %s",
+                               strerror(errno));
+                continue;
+            }
+        }
+
+        if ( timerq->lock->lock() != oslock_ok ) {
+            GPTP_LOG_ERROR("LinuxTimerQueueHandler timerq lock failed");
+            continue;
+        }
+
+        iter = timerq->timerQueueMap.find(info.si_value.sival_int);
+
+        if ( iter != timerq->timerQueueMap.end() ) {
+            struct LinuxTimerQueueActionArg *action_arg = iter->second;
+
+            if (!action_arg->oneshot) {
+                timerq->LinuxTimerQueueAction( action_arg );
+            } else {
+                timerq->timerQueueMap.erase(iter);
+                timerq->LinuxTimerQueueAction( action_arg );
+
+                if ( action_arg->rm ) {
+                    delete (event_descriptor_t *)action_arg->inner_arg;
+                }
+
+                timer_delete(action_arg->timer_handle);
+                delete action_arg;
+            }
+        }
+
+        if ( timerq->lock->unlock() != oslock_ok ) {
+            GPTP_LOG_ERROR("LinuxTimerQueueHandler timerq unlock failed");
+            continue;
+        }
+    }
+
+    return NULL;
 }
 
-void *LinuxTimerQueueHandler( void *arg ) {
-	LinuxTimerQueue *timerq = (LinuxTimerQueue *) arg;
-	sigset_t waitfor;
-	struct timespec timeout;
-	timeout.tv_sec = 0; timeout.tv_nsec = 100000000; /* 100 ms */
-
-	sigemptyset( &waitfor );
-
-	while( !timerq->stop ) {
-		siginfo_t info;
-		LinuxTimerQueueMap_t::iterator iter;
-		sigaddset( &waitfor, SIGUSR1 );
-		if( sigtimedwait( &waitfor, &info, &timeout ) == -1 ) {
-			if( errno == EAGAIN ) {
-				continue;
-			} else {
-				GPTP_LOG_ERROR("LinuxTimerQueueHandler sigtimedwait failed - %s",
-						strerror(errno));
-				continue;
-			}
-		}
-		if( timerq->lock->lock() != oslock_ok ) {
-			GPTP_LOG_ERROR("LinuxTimerQueueHandler timerq lock failed");
-			continue;
-		}
-
-		iter = timerq->timerQueueMap.find(info.si_value.sival_int);
-		if( iter != timerq->timerQueueMap.end() ) {
-		    struct LinuxTimerQueueActionArg *action_arg = iter->second;
-
-			if (!action_arg->oneshot) {
-				timerq->LinuxTimerQueueAction( action_arg );
-			}
-			else {
-				timerq->timerQueueMap.erase(iter);
-				timerq->LinuxTimerQueueAction( action_arg );
-				if( action_arg->rm ) {
-					delete (event_descriptor_t *)action_arg->inner_arg;
-				}
-				timer_delete(action_arg->timer_handle);
-				delete action_arg;
-			}
-		}
-		if( timerq->lock->unlock() != oslock_ok ) {
-			GPTP_LOG_ERROR("LinuxTimerQueueHandler timerq unlock failed");
-			continue;
-		}
-	}
-
-	return NULL;
-}
-
-void LinuxTimerQueue::LinuxTimerQueueAction( LinuxTimerQueueActionArg *arg ) {
-	arg->func( arg->inner_arg );
-
-	return;
+void LinuxTimerQueue::LinuxTimerQueueAction( LinuxTimerQueueActionArg *arg )
+{
+    arg->func( arg->inner_arg );
+    return;
 }
 
 OSTimerQueue *LinuxTimerQueueFactory::createOSTimerQueue
-	( IEEE1588Clock *clock ) {
-	LinuxTimerQueue *ret = new LinuxTimerQueue();
+( IEEE1588Clock *clock )
+{
+    LinuxTimerQueue *ret = new LinuxTimerQueue();
 
-	if( !ret->init() ) {
-		delete ret;
-		return NULL;
-	}
+    if ( !ret->init() ) {
+        delete ret;
+        return NULL;
+    }
 
-	ret->key = 0;
-	ret->stop = false;
-	ret->lock = clock->timerQLock();
+    ret->key = 0;
+    ret->stop = false;
+    ret->lock = clock->timerQLock();
 
-	if( pthread_create
-		( &(ret->_private->signal_thread),
-		  NULL, LinuxTimerQueueHandler, ret ) != 0 ) {
-		delete ret;
-		return NULL;
-	}
+    if ( pthread_create
+            ( &(ret->_private->signal_thread),
+              NULL, LinuxTimerQueueHandler, ret ) != 0 ) {
+        delete ret;
+        return NULL;
+    }
 
-	return ret;
+    return ret;
 }
 
 
 
 bool LinuxTimerQueue::addEvent
 ( unsigned long micros, int type, ostimerq_handler func,
-  void **arg, bool rm, unsigned *event, bool oneshot, timer_t **timer_handle) {
-	LinuxTimerQueueActionArg *outer_arg;
-	int err;
-	LinuxTimerQueueMap_t::iterator iter;
+  void **arg, bool rm, unsigned *event, bool oneshot, timer_t **timer_handle)
+{
+    LinuxTimerQueueActionArg *outer_arg;
+    int err;
+    LinuxTimerQueueMap_t::iterator iter;
+    outer_arg = new LinuxTimerQueueActionArg;
+    outer_arg->inner_arg = *arg;
+    outer_arg->rm = rm;
+    outer_arg->func = func;
+    outer_arg->type = type;
+    outer_arg->oneshot = oneshot;
 
+    // Find key that we can use
+    while ( timerQueueMap.find( key ) != timerQueueMap.end() ) {
+        ++key;
+    }
 
-	outer_arg = new LinuxTimerQueueActionArg;
-	outer_arg->inner_arg = *arg;
-	outer_arg->rm = rm;
-	outer_arg->func = func;
-	outer_arg->type = type;
-	outer_arg->oneshot = oneshot;
+    {
+        struct itimerspec its;
+        memset(&(outer_arg->sevp), 0, sizeof(outer_arg->sevp));
+        outer_arg->sevp.sigev_notify = SIGEV_SIGNAL;
+        outer_arg->sevp.sigev_signo  = SIGUSR1;
+        outer_arg->sevp.sigev_value.sival_int = key;
 
-	// Find key that we can use
-	while( timerQueueMap.find( key ) != timerQueueMap.end() ) {
-		++key;
-	}
+        if ( timer_create
+                (CLOCK_MONOTONIC, &outer_arg->sevp, &outer_arg->timer_handle)
+                == -1) {
+            GPTP_LOG_ERROR("timer_create failed - %s", strerror(errno));
+            return false;
+        }
 
-	{
-		struct itimerspec its;
-		memset(&(outer_arg->sevp), 0, sizeof(outer_arg->sevp));
-		outer_arg->sevp.sigev_notify = SIGEV_SIGNAL;
-		outer_arg->sevp.sigev_signo  = SIGUSR1;
-		outer_arg->sevp.sigev_value.sival_int = key;
-		if ( timer_create
-			 (CLOCK_MONOTONIC, &outer_arg->sevp, &outer_arg->timer_handle)
-			 == -1) {
-			GPTP_LOG_ERROR("timer_create failed - %s", strerror(errno));
-			return false;
-		}
-		timerQueueMap[key] = outer_arg;
+        timerQueueMap[key] = outer_arg;
+        memset(&its, 0, sizeof(its));
+        its.it_value.tv_sec = micros / 1000000;
+        its.it_value.tv_nsec = (micros % 1000000) * 1000;
 
-		memset(&its, 0, sizeof(its));
-		its.it_value.tv_sec = micros / 1000000;
-		its.it_value.tv_nsec = (micros % 1000000) * 1000;
-		if (!outer_arg->oneshot) {
-			its.it_interval.tv_sec = its.it_value.tv_sec;
-			its.it_interval.tv_nsec = its.it_value.tv_nsec;
-		}
+        if (!outer_arg->oneshot) {
+            its.it_interval.tv_sec = its.it_value.tv_sec;
+            its.it_interval.tv_nsec = its.it_value.tv_nsec;
+        }
 
-		err = timer_settime( outer_arg->timer_handle, 0, &its, NULL );
-		if( err < 0 ) {
-			fprintf
-				( stderr, "Failed to arm timer: %s\n",
-				  strerror( errno ));
-			return false;
-		}
-	}
+        err = timer_settime( outer_arg->timer_handle, 0, &its, NULL );
 
-	if(timer_handle != NULL)
-		**timer_handle = outer_arg->timer_handle;
+        if ( err < 0 ) {
+            fprintf
+            ( stderr, "Failed to arm timer: %s\n",
+              strerror( errno ));
+            return false;
+        }
+    }
 
-	return true;
+    if (timer_handle != NULL) {
+        **timer_handle = outer_arg->timer_handle;
+    }
+
+    return true;
 }
 
 
-bool LinuxTimerQueue::cancelEvent( int type, unsigned *event ) {
-	LinuxTimerQueueMap_t::iterator iter;
-	for( iter = timerQueueMap.begin(); iter != timerQueueMap.end();) {
-		if( ((iter->second)->type == type) && ((iter->second)->oneshot) ) {
-			// Delete element
-			if( (iter->second)->rm ) {
-				delete (event_descriptor_t *)(iter->second)->inner_arg;
-			}
-			timer_delete(iter->second->timer_handle);
-			delete iter->second;
-			timerQueueMap.erase(iter++);
-		} else {
-			++iter;
-		}
-	}
+bool LinuxTimerQueue::cancelEvent( int type, unsigned *event )
+{
+    LinuxTimerQueueMap_t::iterator iter;
 
-	return true;
+    for ( iter = timerQueueMap.begin(); iter != timerQueueMap.end();) {
+        if ( ((iter->second)->type == type) && ((iter->second)->oneshot) ) {
+            // Delete element
+            if ( (iter->second)->rm ) {
+                delete (event_descriptor_t *)(iter->second)->inner_arg;
+            }
+
+            timer_delete(iter->second->timer_handle);
+            delete iter->second;
+            timerQueueMap.erase(iter++);
+        } else {
+            ++iter;
+        }
+    }
+
+    return true;
 }
 
-bool LinuxTimerQueue::cancelTimer( timer_t **timer_handle ) {
-	LinuxTimerQueueMap_t::iterator iter;
-	for( iter = timerQueueMap.begin(); iter != timerQueueMap.end();) {
-		if( (iter->second)->timer_handle == **timer_handle ) {
-			// Delete element
-			if( (iter->second)->rm ) {
-				delete (event_descriptor_t *)(iter->second)->inner_arg;
-			}
-			timer_delete(iter->second->timer_handle);
-			delete iter->second;
-			timerQueueMap.erase(iter++);
-			GPTP_LOG_INFO("cancelTimer");
-		} else {
-			++iter;
-		}
-	}
+bool LinuxTimerQueue::cancelTimer( timer_t **timer_handle )
+{
+    LinuxTimerQueueMap_t::iterator iter;
+
+    for ( iter = timerQueueMap.begin(); iter != timerQueueMap.end();) {
+        if ( (iter->second)->timer_handle == **timer_handle ) {
+            // Delete element
+            if ( (iter->second)->rm ) {
+                delete (event_descriptor_t *)(iter->second)->inner_arg;
+            }
+
+            timer_delete(iter->second->timer_handle);
+            delete iter->second;
+            timerQueueMap.erase(iter++);
+            GPTP_LOG_INFO("cancelTimer");
+        } else {
+            ++iter;
+        }
+    }
 
     return true;
 }
 
 
 
-void* OSThreadCallback( void* input ) {
-	OSThreadArg *arg = (OSThreadArg*) input;
-
-	arg->ret = arg->func( arg->arg );
-	return 0;
+void* OSThreadCallback( void* input )
+{
+    OSThreadArg *arg = (OSThreadArg*) input;
+    arg->ret = arg->func( arg->arg );
+    return 0;
 }
 
-bool LinuxTimestamper::post_init( int ifindex, int sd, TicketingLock *lock ) {
-	return true;
+bool LinuxTimestamper::post_init( int ifindex, int sd, TicketingLock *lock )
+{
+    return true;
 }
 
 LinuxTimestamper::~LinuxTimestamper() {}
 
-unsigned long LinuxTimer::sleep(unsigned long micros) {
-	struct timespec req;
-	struct timespec rem;
-	req.tv_sec = micros / 1000000;
-	req.tv_nsec = micros % 1000000 * 1000;
-	int ret = nanosleep( &req, &rem );
-	while( ret == -1 && errno == EINTR ) {
-		req = rem;
-		ret = nanosleep( &req, &rem );
-	}
-	if( ret == -1 ) {
-		fprintf
-			( stderr, "Error calling nanosleep: %s\n", strerror( errno ));
-		_exit(-1);
-	}
-	return micros;
+unsigned long LinuxTimer::sleep(unsigned long micros)
+{
+    struct timespec req;
+    struct timespec rem;
+    req.tv_sec = micros / 1000000;
+    req.tv_nsec = micros % 1000000 * 1000;
+    int ret = nanosleep( &req, &rem );
+
+    while ( ret == -1 && errno == EINTR ) {
+        req = rem;
+        ret = nanosleep( &req, &rem );
+    }
+
+    if ( ret == -1 ) {
+        fprintf
+        ( stderr, "Error calling nanosleep: %s\n", strerror( errno ));
+        _exit(-1);
+    }
+
+    return micros;
 }
 
 struct TicketingLockPrivate {
-	pthread_cond_t condition;
-	pthread_mutex_t cond_lock;
+    pthread_cond_t condition;
+    pthread_mutex_t cond_lock;
 };
 
-bool TicketingLock::lock( bool *got ) {
-	uint8_t ticket;
-	bool yield = false;
-	bool ret = true;
-	if( !init_flag ) return false;
+bool TicketingLock::lock( bool *got )
+{
+    uint8_t ticket;
+    bool yield = false;
+    bool ret = true;
 
-	if( pthread_mutex_lock( &_private->cond_lock ) != 0 ) {
-		ret = false;
-		goto done;
-	}
-	// Take a ticket
-	ticket = cond_ticket_issue++;
-	while( ticket != cond_ticket_serving ) {
-		if( got != NULL ) {
-			*got = false;
-			--cond_ticket_issue;
-			yield = true;
-			goto unlock;
-		}
-		if( pthread_cond_wait( &_private->condition, &_private->cond_lock ) != 0 ) {
-			ret = false;
-			goto unlock;
-		}
-	}
+    if ( !init_flag ) {
+        return false;
+    }
 
-	if( got != NULL ) *got = true;
+    if ( pthread_mutex_lock( &_private->cond_lock ) != 0 ) {
+        ret = false;
+        goto done;
+    }
 
- unlock:
-	if( pthread_mutex_unlock( &_private->cond_lock ) != 0 ) {
-		ret = false;
-		goto done;
-	}
+    // Take a ticket
+    ticket = cond_ticket_issue++;
+
+    while ( ticket != cond_ticket_serving ) {
+        if ( got != NULL ) {
+            *got = false;
+            --cond_ticket_issue;
+            yield = true;
+            goto unlock;
+        }
+
+        if ( pthread_cond_wait( &_private->condition, &_private->cond_lock ) != 0 ) {
+            ret = false;
+            goto unlock;
+        }
+    }
+
+    if ( got != NULL ) {
+        *got = true;
+    }
+
+unlock:
+
+    if ( pthread_mutex_unlock( &_private->cond_lock ) != 0 ) {
+        ret = false;
+        goto done;
+    }
 
 #ifdef ANDROID
-    if( yield ) sched_yield();
+
+    if ( yield ) {
+        sched_yield();
+    }
+
 #else
-    if( yield ) pthread_yield();
+
+    if ( yield ) {
+        pthread_yield();
+    }
+
 #endif
-
- done:
-	return ret;
+done:
+    return ret;
 }
 
-bool TicketingLock::unlock() {
-	bool ret = true;
-	if( !init_flag ) return false;
+bool TicketingLock::unlock()
+{
+    bool ret = true;
 
-	if( pthread_mutex_lock( &_private->cond_lock ) != 0 ) {
-		ret = false;
-		goto done;
-	}
-	++cond_ticket_serving;
-	if( pthread_cond_broadcast( &_private->condition ) != 0 ) {
-		ret = false;
-		goto unlock;
-	}
+    if ( !init_flag ) {
+        return false;
+    }
 
- unlock:
-	if( pthread_mutex_unlock( &_private->cond_lock ) != 0 ) {
-		ret = false;
-		goto done;
-	}
+    if ( pthread_mutex_lock( &_private->cond_lock ) != 0 ) {
+        ret = false;
+        goto done;
+    }
 
- done:
-	return ret;
+    ++cond_ticket_serving;
+
+    if ( pthread_cond_broadcast( &_private->condition ) != 0 ) {
+        ret = false;
+        goto unlock;
+    }
+
+unlock:
+
+    if ( pthread_mutex_unlock( &_private->cond_lock ) != 0 ) {
+        ret = false;
+        goto done;
+    }
+
+done:
+    return ret;
 }
 
-bool TicketingLock::init() {
-	int err;
-	if( init_flag ) return false;  // Don't do this more than once
-	_private = new TicketingLockPrivate;
-	if( _private == NULL ) return false;
+bool TicketingLock::init()
+{
+    int err;
 
-	err = pthread_mutex_init( &_private->cond_lock, NULL );
-	if( err != 0 ) return false;
-	err = pthread_cond_init( &_private->condition, NULL );
-	if( err != 0 ) return false;
-	in_use = false;
-	cond_ticket_issue = 0;
-	cond_ticket_serving = 0;
-	init_flag = true;
+    if ( init_flag ) {
+        return false;    // Don't do this more than once
+    }
 
-	return true;
+    _private = new TicketingLockPrivate;
+
+    if ( _private == NULL ) {
+        return false;
+    }
+
+    err = pthread_mutex_init( &_private->cond_lock, NULL );
+
+    if ( err != 0 ) {
+        return false;
+    }
+
+    err = pthread_cond_init( &_private->condition, NULL );
+
+    if ( err != 0 ) {
+        return false;
+    }
+
+    in_use = false;
+    cond_ticket_issue = 0;
+    cond_ticket_serving = 0;
+    init_flag = true;
+    return true;
 }
 
-TicketingLock::TicketingLock() {
-	init_flag = false;
-	_private = NULL;
+TicketingLock::TicketingLock()
+{
+    init_flag = false;
+    _private = NULL;
 }
 
-TicketingLock::~TicketingLock() {
-	if( _private != NULL ) delete _private;
+TicketingLock::~TicketingLock()
+{
+    if ( _private != NULL ) {
+        delete _private;
+    }
 }
 
 struct LinuxLockPrivate {
-	pthread_t thread_id;
-	pthread_mutexattr_t mta;
-	pthread_mutex_t mutex;
-	pthread_cond_t port_ready_signal;
+    pthread_t thread_id;
+    pthread_mutexattr_t mta;
+    pthread_mutex_t mutex;
+    pthread_cond_t port_ready_signal;
 };
 
-bool LinuxLock::initialize( OSLockType type ) {
-	int lock_c;
+bool LinuxLock::initialize( OSLockType type )
+{
+    int lock_c;
+    _private = new LinuxLockPrivate;
 
-	_private = new LinuxLockPrivate;
-	if( _private == NULL ) return false;
+    if ( _private == NULL ) {
+        return false;
+    }
 
-	pthread_mutexattr_init(&_private->mta);
-	if( type == oslock_recursive )
-		pthread_mutexattr_settype(&_private->mta, PTHREAD_MUTEX_RECURSIVE);
-	lock_c = pthread_mutex_init(&_private->mutex,&_private->mta);
-	if(lock_c != 0) {
-		GPTP_LOG_ERROR("Mutex initialization failed - %s",strerror(errno));
-		return oslock_fail;
-	}
-	return oslock_ok;
+    pthread_mutexattr_init(&_private->mta);
+
+    if ( type == oslock_recursive ) {
+        pthread_mutexattr_settype(&_private->mta, PTHREAD_MUTEX_RECURSIVE);
+    }
+
+    lock_c = pthread_mutex_init(&_private->mutex, &_private->mta);
+
+    if (lock_c != 0) {
+        GPTP_LOG_ERROR("Mutex initialization failed - %s", strerror(errno));
+        return oslock_fail;
+    }
+
+    return oslock_ok;
 }
 
-LinuxLock::~LinuxLock() {
-	int lock_c = pthread_mutex_lock(&_private->mutex);
-	if(lock_c == 0) {
-		pthread_mutex_destroy( &_private->mutex );
-	}
+LinuxLock::~LinuxLock()
+{
+    int lock_c = pthread_mutex_lock(&_private->mutex);
+
+    if (lock_c == 0) {
+        pthread_mutex_destroy( &_private->mutex );
+    }
 }
 
-OSLockResult LinuxLock::lock() {
-	int lock_c;
-	lock_c = pthread_mutex_lock(&_private->mutex);
-	if(lock_c != 0) {
-		fprintf( stderr, "LinuxLock: lock failed %d\n", lock_c );
-		return oslock_fail;
-	}
-	return oslock_ok;
+OSLockResult LinuxLock::lock()
+{
+    int lock_c;
+    lock_c = pthread_mutex_lock(&_private->mutex);
+
+    if (lock_c != 0) {
+        fprintf( stderr, "LinuxLock: lock failed %d\n", lock_c );
+        return oslock_fail;
+    }
+
+    return oslock_ok;
 }
 
-OSLockResult LinuxLock::trylock() {
-	int lock_c;
-	lock_c = pthread_mutex_trylock(&_private->mutex);
-	if(lock_c != 0) return oslock_fail;
-	return oslock_ok;
+OSLockResult LinuxLock::trylock()
+{
+    int lock_c;
+    lock_c = pthread_mutex_trylock(&_private->mutex);
+
+    if (lock_c != 0) {
+        return oslock_fail;
+    }
+
+    return oslock_ok;
 }
 
-OSLockResult LinuxLock::unlock() {
-	int lock_c;
-	lock_c = pthread_mutex_unlock(&_private->mutex);
-	if(lock_c != 0) {
-		fprintf( stderr, "LinuxLock: unlock failed %d\n", lock_c );
-		return oslock_fail;
-	}
-	return oslock_ok;
+OSLockResult LinuxLock::unlock()
+{
+    int lock_c;
+    lock_c = pthread_mutex_unlock(&_private->mutex);
+
+    if (lock_c != 0) {
+        fprintf( stderr, "LinuxLock: unlock failed %d\n", lock_c );
+        return oslock_fail;
+    }
+
+    return oslock_ok;
 }
 
 struct LinuxConditionPrivate {
-	pthread_cond_t port_ready_signal;
-	pthread_mutex_t port_lock;
+    pthread_cond_t port_ready_signal;
+    pthread_mutex_t port_lock;
 };
 
 
-LinuxCondition::~LinuxCondition() {
-	if( _private != NULL ) delete _private;
+LinuxCondition::~LinuxCondition()
+{
+    if ( _private != NULL ) {
+        delete _private;
+    }
 }
 
-bool LinuxCondition::initialize() {
-	int lock_c;
+bool LinuxCondition::initialize()
+{
+    int lock_c;
+    _private = new LinuxConditionPrivate;
 
-	_private = new LinuxConditionPrivate;
-	if( _private == NULL ) return false;
+    if ( _private == NULL ) {
+        return false;
+    }
 
-	pthread_cond_init(&_private->port_ready_signal, NULL);
-	lock_c = pthread_mutex_init(&_private->port_lock, NULL);
-	if (lock_c != 0)
-		return false;
-	return true;
+    pthread_cond_init(&_private->port_ready_signal, NULL);
+    lock_c = pthread_mutex_init(&_private->port_lock, NULL);
+
+    if (lock_c != 0) {
+        return false;
+    }
+
+    return true;
 }
 
-bool LinuxCondition::wait_prelock() {
-	pthread_mutex_lock(&_private->port_lock);
-	up();
-	return true;
+bool LinuxCondition::wait_prelock()
+{
+    pthread_mutex_lock(&_private->port_lock);
+    up();
+    return true;
 }
 
-bool LinuxCondition::wait() {
-	pthread_cond_wait(&_private->port_ready_signal, &_private->port_lock);
-	down();
-	pthread_mutex_unlock(&_private->port_lock);
-	return true;
+bool LinuxCondition::wait()
+{
+    pthread_cond_wait(&_private->port_ready_signal, &_private->port_lock);
+    down();
+    pthread_mutex_unlock(&_private->port_lock);
+    return true;
 }
 
-bool LinuxCondition::signal() {
-	pthread_mutex_lock(&_private->port_lock);
-	if (waiting())
-		pthread_cond_broadcast(&_private->port_ready_signal);
-	pthread_mutex_unlock(&_private->port_lock);
-	return true;
+bool LinuxCondition::signal()
+{
+    pthread_mutex_lock(&_private->port_lock);
+
+    if (waiting()) {
+        pthread_cond_broadcast(&_private->port_ready_signal);
+    }
+
+    pthread_mutex_unlock(&_private->port_lock);
+    return true;
 }
 
 struct LinuxThreadPrivate {
-	pthread_t thread_id;
+    pthread_t thread_id;
 };
 
-bool LinuxThread::start(OSThreadFunction function, void *arg) {
-	sigset_t set;
-	sigset_t oset;
-	int err;
+bool LinuxThread::start(OSThreadFunction function, void *arg)
+{
+    sigset_t set;
+    sigset_t oset;
+    int err;
+    _private = new LinuxThreadPrivate;
 
-	_private = new LinuxThreadPrivate;
-	if( _private == NULL ) return false;
+    if ( _private == NULL ) {
+        return false;
+    }
 
-	arg_inner = new OSThreadArg();
-	arg_inner->func = function;
-	arg_inner->arg = arg;
-	sigemptyset(&set);
-	sigaddset(&set, SIGALRM);
-	err = pthread_sigmask(SIG_BLOCK, &set, &oset);
-	if (err != 0) {
-		GPTP_LOG_ERROR
-			("Add timer pthread_sigmask( SIG_BLOCK ... )");
-		return false;
-	}
-	err = pthread_create(&_private->thread_id, NULL, OSThreadCallback,
-						 arg_inner);
-	if (err != 0)
-		return false;
-	sigdelset(&oset, SIGALRM);
-	err = pthread_sigmask(SIG_SETMASK, &oset, NULL);
-	if (err != 0) {
-		GPTP_LOG_ERROR
-			("Add timer pthread_sigmask( SIG_SETMASK ... )");
-		return false;
-	}
+    arg_inner = new OSThreadArg();
+    arg_inner->func = function;
+    arg_inner->arg = arg;
+    sigemptyset(&set);
+    sigaddset(&set, SIGALRM);
+    err = pthread_sigmask(SIG_BLOCK, &set, &oset);
 
-	return true;
+    if (err != 0) {
+        GPTP_LOG_ERROR
+        ("Add timer pthread_sigmask( SIG_BLOCK ... )");
+        return false;
+    }
+
+    err = pthread_create(&_private->thread_id, NULL, OSThreadCallback,
+                         arg_inner);
+
+    if (err != 0) {
+        return false;
+    }
+
+    sigdelset(&oset, SIGALRM);
+    err = pthread_sigmask(SIG_SETMASK, &oset, NULL);
+
+    if (err != 0) {
+        GPTP_LOG_ERROR
+        ("Add timer pthread_sigmask( SIG_SETMASK ... )");
+        return false;
+    }
+
+    return true;
 }
 
-bool LinuxThread::join(OSThreadExitCode & exit_code) {
-	int err;
-	err = pthread_join(_private->thread_id, NULL);
-	if (err != 0)
-		return false;
-	exit_code = arg_inner->ret;
-	delete arg_inner;
-	return true;
+bool LinuxThread::join(OSThreadExitCode & exit_code)
+{
+    int err;
+    err = pthread_join(_private->thread_id, NULL);
+
+    if (err != 0) {
+        return false;
+    }
+
+    exit_code = arg_inner->ret;
+    delete arg_inner;
+    return true;
 }
 
-LinuxThread::LinuxThread() {
-	_private = NULL;
+LinuxThread::LinuxThread()
+{
+    _private = NULL;
 };
 
-LinuxThread::~LinuxThread() {
-	if( _private != NULL ) delete _private;
+LinuxThread::~LinuxThread()
+{
+    if ( _private != NULL ) {
+        delete _private;
+    }
 }
 
-LinuxSharedMemoryIPC::~LinuxSharedMemoryIPC() {
-	munmap(master_offset_buffer, SHM_SIZE);
+LinuxSharedMemoryIPC::~LinuxSharedMemoryIPC()
+{
+    munmap(master_offset_buffer, SHM_SIZE);
 #ifdef ANDROID
     close(shm_fd);
     unlink( SHM_NAME );
 #else
     shm_unlink(SHM_NAME);
 #endif
+#ifdef LE_SHARED_MEM
 
+    if (gptp_fd != -1) {
+        close(gptp_fd);
+        gptp_fd = -1;
+    }
+
+#endif
 }
 
-bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
-	LinuxIPCArg *arg;
-	struct group *grp;
-	const char *group_name;
-	pthread_mutexattr_t shared;
-	mode_t oldumask = umask(0);
+bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg )
+{
+    LinuxIPCArg *arg;
+    struct group *grp;
+    const char *group_name;
+    pthread_mutexattr_t shared;
+    mode_t oldumask = umask(0);
+    int count = 0;
 
-	if( barg == NULL ) {
-		group_name = DEFAULT_GROUPNAME;
-	} else {
-		arg = dynamic_cast<LinuxIPCArg *> (barg);
-		if( arg == NULL ) {
-			GPTP_LOG_ERROR( "Wrong IPC init arg type" );
-			goto exit_error;
-		} else {
-			group_name = arg->group_name;
-		}
-	}
-	grp = getgrnam( group_name );
-	if( grp == NULL ) {
-		GPTP_LOG_INFO( "Group %s not found, will try root (0) instead", group_name );
-	}
+    if ( barg == NULL ) {
+        group_name = DEFAULT_GROUPNAME;
+    } else {
+        arg = dynamic_cast<LinuxIPCArg *> (barg);
+
+        if ( arg == NULL ) {
+            GPTP_LOG_ERROR( "Wrong IPC init arg type" );
+            goto exit_error;
+        } else {
+            group_name = arg->group_name;
+        }
+    }
+
+    grp = getgrnam( group_name );
+
+    if ( grp == NULL ) {
+        GPTP_LOG_INFO( "Group %s not found, will try root (0) instead", group_name );
+    }
+
 #ifdef ANDROID
     shm_fd = open( SHM_NAME, O_RDWR | O_CREAT, 0666 );
 #else
     shm_fd = shm_open( SHM_NAME, O_RDWR | O_CREAT, 0660 );
 #endif
 
-	if( shm_fd == -1 ) {
-		GPTP_LOG_ERROR( "shm_open(): %s", strerror(errno) );
-		goto exit_error;
-	}
-	(void) umask(oldumask);
-	if (fchown(shm_fd, -1, grp != NULL ? grp->gr_gid : 0) < 0) {
-		GPTP_LOG_ERROR("shm_open(): Failed to set ownership");
-	}
-	if( ftruncate( shm_fd, SHM_SIZE ) == -1 ) {
-		GPTP_LOG_ERROR( "ftruncate()" );
-		goto exit_unlink;
-	}
-	master_offset_buffer = (char *) mmap
-		( NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_LOCKED | MAP_SHARED,
-		  shm_fd, 0 );
-	if( master_offset_buffer == (char *) -1 ) {
-		GPTP_LOG_ERROR( "mmap()" );
-		goto exit_unlink;
-	}
-	/*create mutex attr */
-	err = pthread_mutexattr_init(&shared);
-	if(err != 0) {
-		GPTP_LOG_ERROR
-			("mutex attr initialization failed - %s",
-			 strerror(errno));
-		goto exit_unlink;
-	}
-	pthread_mutexattr_setpshared(&shared,1);
-	pthread_mutexattr_setprotocol(&shared, PTHREAD_PRIO_INHERIT);
-	/*create a mutex */
-	err = pthread_mutex_init((pthread_mutex_t *) master_offset_buffer, &shared);
-	if(err != 0) {
-		GPTP_LOG_ERROR
-			("sharedmem - Mutex initialization failed - %s",
-			 strerror(errno));
-		goto exit_unlink;
-	}
-	return true;
- exit_unlink:
+    if ( shm_fd == -1 ) {
+        GPTP_LOG_ERROR( "shm_open(): %s", strerror(errno) );
+        goto exit_error;
+    }
+
+#ifdef LE_SHARED_MEM
+    do {
+        gptp_fd = open("/dev/gptp", O_RDWR );
+
+        if ( gptp_fd == -1 || ( FD_TO_CLOCKID(gptp_fd)) == -1 ) {
+            GPTP_LOG_ERROR("Failed to open gPTP kernel device %d %d", gptp_fd, count);
+            usleep(50000);
+            count++;
+        } else {
+            GPTP_LOG_INFO("opened gptp kernel device: /dev/gptp");
+        }
+    } while ( ( ( gptp_fd == -1 )
+            || ( (FD_TO_CLOCKID(gptp_fd)) == -1 ) )
+            && ( count < 100 ) );
+
+#endif
+    (void) umask(oldumask);
+
+    if (fchown(shm_fd, -1, grp != NULL ? grp->gr_gid : 0) < 0) {
+        GPTP_LOG_ERROR("shm_open(): Failed to set ownership");
+    }
+
+    if ( ftruncate( shm_fd, SHM_SIZE ) == -1 ) {
+        GPTP_LOG_ERROR( "ftruncate()" );
+        goto exit_unlink;
+    }
+
+    master_offset_buffer = (char *) mmap
+                           ( NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_LOCKED | MAP_SHARED,
+                             shm_fd, 0 );
+
+    if ( master_offset_buffer == (char *) -1 ) {
+        GPTP_LOG_ERROR( "mmap()" );
+        goto exit_unlink;
+    }
+
+    /*create mutex attr */
+    err = pthread_mutexattr_init(&shared);
+
+    if (err != 0) {
+        GPTP_LOG_ERROR
+        ("mutex attr initialization failed - %s",
+         strerror(errno));
+        goto exit_unlink;
+    }
+
+    pthread_mutexattr_setpshared(&shared, 1);
+    pthread_mutexattr_setprotocol(&shared, PTHREAD_PRIO_INHERIT);
+    /*create a mutex */
+    err = pthread_mutex_init((pthread_mutex_t *) master_offset_buffer, &shared);
+
+    if (err != 0) {
+        GPTP_LOG_ERROR
+        ("sharedmem - Mutex initialization failed - %s",
+         strerror(errno));
+        goto exit_unlink;
+    }
+
+    return true;
+exit_unlink:
 #ifdef ANDROID
     close( shm_fd );
     unlink( SHM_NAME );
 #else
     shm_unlink( SHM_NAME );
 #endif
+#ifdef LE_SHARED_MEM
 
- exit_error:
-	return false;
+    if (gptp_fd != -1) {
+        close(gptp_fd);
+        gptp_fd = -1;
+    }
+
+#endif
+exit_error:
+    return false;
 }
 
 bool LinuxSharedMemoryIPC::update(
-	int64_t ml_phoffset,
-	int64_t ls_phoffset,
-	int64_t lq_phoffset,
-	FrequencyRatio ml_freqoffset,
-	FrequencyRatio ls_freqoffset,
-	FrequencyRatio lq_freqoffset,
-	uint64_t local_time,
-	uint32_t sync_count,
-	uint32_t pdelay_count,
-	PortState port_state,
-	bool asCapable )
+    int64_t ml_phoffset,
+    int64_t ls_phoffset,
+    int64_t lq_phoffset,
+    int64_t lb_phoffset,
+    FrequencyRatio ml_freqoffset,
+    FrequencyRatio ls_freqoffset,
+    FrequencyRatio lq_freqoffset,
+    FrequencyRatio lb_freqoffset,
+    uint64_t local_time,
+    uint32_t sync_count,
+    uint32_t pdelay_count,
+    PortState port_state,
+    bool asCapable )
 {
-	int buf_offset = 0;
-	pid_t process_id = getpid();
-	char *shm_buffer = master_offset_buffer;
-	gPtpTimeData *ptimedata;
-	if( shm_buffer != NULL ) {
-		/* lock */
-		pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-		buf_offset += sizeof(pthread_mutex_t);
-		ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
-		ptimedata->ml_phoffset = ml_phoffset;
-		ptimedata->ls_phoffset = ls_phoffset;
-		ptimedata->lq_phoffset = lq_phoffset;
-		ptimedata->ml_freqoffset = ml_freqoffset;
-		ptimedata->ls_freqoffset = ls_freqoffset;
-		ptimedata->lq_freqoffset = lq_freqoffset;
-		ptimedata->local_time = local_time;
-		ptimedata->sync_count   = sync_count;
-		ptimedata->pdelay_count = pdelay_count;
-		ptimedata->asCapable = asCapable;
-		ptimedata->port_state   = port_state;
-		ptimedata->process_id   = process_id;
-		/* unlock */
-		pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
-	}
-	return true;
-}
-
-bool LinuxSharedMemoryIPC::updateGmId(ClockIdentity& id, uint16_t portNumber) {
-       int buf_offset = 0;
-       char *shm_buffer = master_offset_buffer;
-       gPtpTimeData *ptimedata;
-       if( shm_buffer != NULL ) {
-               /* lock */
-               pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-               buf_offset += sizeof(pthread_mutex_t);
-               ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
-               id.getIdentityString(ptimedata->gmIdentifier);
-               ptimedata->portNumber = portNumber;
-               /* unlock */
-               pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
-       }
-       return true;
-}
-
-
-bool LinuxSharedMemoryIPC::updateSyncStatus(bool is_sync , PortState port_state) {
-       int buf_offset = 0;
-       char *shm_buffer = master_offset_buffer;
-       gPtpTimeData *ptimedata;
-       if (shm_buffer != NULL) {
-               /* lock */
-               pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-               buf_offset += sizeof(pthread_mutex_t);
-               ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
-               ptimedata->sync_status = is_sync;
-               ptimedata->port_state = port_state;
-               /* unlock */
-               pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
-       }
-       return true;
-}
-
-bool LinuxSharedMemoryIPC::getSyncStatus(void) {
-	bool sync_stat = 0;
-	int buf_offset = 0;
-	char *shm_buffer = master_offset_buffer;
-
-	gPtpTimeData *ptimedata;
-	if (shm_buffer != NULL) {
-		pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-		buf_offset += sizeof(pthread_mutex_t);
-		ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
-		sync_stat = ptimedata->sync_status;
-		pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
-	}
-
-	return sync_stat;
-}
-
-
-bool LinuxSharedMemoryIPC::updateQtimeToMonoOffset(int64_t offset) {
-	int buf_offset = 0;
+    int buf_offset = 0;
+    pid_t process_id = getpid();
     char *shm_buffer = master_offset_buffer;
     gPtpTimeData *ptimedata;
+
+    if ( shm_buffer != NULL ) {
+        /* lock */
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        ptimedata->ml_phoffset = ml_phoffset;
+        ptimedata->ls_phoffset = ls_phoffset;
+        ptimedata->lq_phoffset = lq_phoffset;
+        ptimedata->ml_freqoffset = ml_freqoffset;
+        ptimedata->ls_freqoffset = ls_freqoffset;
+        ptimedata->lq_freqoffset = lq_freqoffset;
+        ptimedata->local_time = local_time;
+        ptimedata->sync_count   = sync_count;
+        ptimedata->pdelay_count = pdelay_count;
+        ptimedata->asCapable = asCapable;
+        ptimedata->port_state   = port_state;
+        ptimedata->process_id   = process_id;
+        ptimedata->lb_freqoffset = lb_freqoffset;
+        ptimedata->lb_phoffset = lb_phoffset;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+
+    return true;
+}
+
+bool LinuxSharedMemoryIPC::updateGmId(ClockIdentity& id, uint16_t portNumber)
+{
+    int buf_offset = 0;
+    char *shm_buffer = master_offset_buffer;
+    gPtpTimeData *ptimedata;
+
+    if ( shm_buffer != NULL ) {
+        /* lock */
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        id.getIdentityString(ptimedata->gmIdentifier);
+        ptimedata->portNumber = portNumber;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+
+    return true;
+}
+
+
+bool LinuxSharedMemoryIPC::updateSyncStatus(bool is_sync, PortState port_state)
+{
+    int buf_offset = 0;
+    int ret = 0;
+    char *shm_buffer = master_offset_buffer;
+    gPtpTimeData *ptimedata;
+
     if (shm_buffer != NULL) {
-	   /* lock */
-	   pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-	   buf_offset += sizeof(pthread_mutex_t);
-	   ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
-	   ptimedata->qtime_to_mono_offset = offset;
-	   /* unlock */
-	   pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
-	}
-	return true;
+        /* lock */
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        ptimedata->sync_status = is_sync;
+        ptimedata->port_state = port_state;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+
+#ifdef LE_SHARED_MEM
+    struct ptp_lib ptp_status;
+    ptp_status.status = is_sync;
+    ptp_status.port_status = port_state;
+    ret = ioctl(gptp_fd, SET_PTP_DATA, (uint32_t*)&ptp_status);
+
+    if (ret) {
+        GPTP_LOG_ERROR("set PTP status in kernel failed 0x%x (%s)\n", errno,
+                       strerror(errno));
+
+        if (gptp_fd != -1) {
+            close(gptp_fd);
+            gptp_fd = -1;
+        }
+    }
+
+    GPTP_LOG_DEBUG("set PTP status updated in kernel: %d port_status %d\n",
+                   ptp_status.status, ptp_status.port_status);
+#endif
+    return true;
+}
+
+bool LinuxSharedMemoryIPC::setProxyMode(int32_t proxy_value)
+{
+    int buf_offset = 0;
+    char* shm_buffer = master_offset_buffer;
+    gPtpTimeData* ptimedata;
+
+    if (shm_buffer != NULL) {
+        /* lock */
+        //pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata = (gPtpTimeData*)(shm_buffer + buf_offset);
+        ptimedata->in_proxy_mode = proxy_value;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+        GPTP_LOG_DEBUG("in_proxy_mode = %" PRIu8 "\n", ptimedata->in_proxy_mode);
+    }
+
+    return true;
+}
+
+bool LinuxSharedMemoryIPC::getSyncStatus(void)
+{
+    bool sync_stat = 0;
+    int buf_offset = 0;
+    char *shm_buffer = master_offset_buffer;
+    gPtpTimeData *ptimedata;
+
+    if (shm_buffer != NULL) {
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        sync_stat = ptimedata->sync_status;
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+
+    return sync_stat;
+}
+
+
+bool LinuxSharedMemoryIPC::updateQtimeToMonoOffset(int64_t offset)
+{
+    int buf_offset = 0;
+    char *shm_buffer = master_offset_buffer;
+    gPtpTimeData *ptimedata;
+
+    if (shm_buffer != NULL) {
+        /* lock */
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        ptimedata->qtime_to_mono_offset = offset;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+
+    return true;
 }
 
 bool LinuxSharedMemoryIPC::update_grandmaster(
-	uint8_t gptp_grandmaster_id[],
-	uint8_t gptp_domain_number )
+    uint8_t gptp_grandmaster_id[],
+    uint8_t gptp_domain_number )
 {
-	int buf_offset = 0;
-	char *shm_buffer = master_offset_buffer;
-	gPtpTimeData *ptimedata;
-	if( shm_buffer != NULL ) {
-		/* lock */
-		pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-		buf_offset += sizeof(pthread_mutex_t);
-		ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
-		memcpy(ptimedata->gptp_grandmaster_id, gptp_grandmaster_id, PTP_CLOCK_IDENTITY_LENGTH);
-		ptimedata->gptp_domain_number = gptp_domain_number;
-		/* unlock */
-		pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
-	}
-	return true;
+    int buf_offset = 0;
+    char *shm_buffer = master_offset_buffer;
+    gPtpTimeData *ptimedata;
+
+    if ( shm_buffer != NULL ) {
+        /* lock */
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        memcpy(ptimedata->gptp_grandmaster_id, gptp_grandmaster_id,
+               PTP_CLOCK_IDENTITY_LENGTH);
+        ptimedata->gptp_domain_number = gptp_domain_number;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+
+    return true;
 }
 
 bool LinuxSharedMemoryIPC::update_network_interface(
-	uint8_t  clock_identity[],
-	uint8_t  priority1,
-	uint8_t  clock_class,
-	int16_t  offset_scaled_log_variance,
-	uint8_t  clock_accuracy,
-	uint8_t  priority2,
-	uint8_t  domain_number,
-	int8_t   log_sync_interval,
-	int8_t   log_announce_interval,
-	int8_t   log_pdelay_interval,
-	uint16_t port_number )
+    uint8_t  clock_identity[],
+    uint8_t  priority1,
+    uint8_t  clock_class,
+    int16_t  offset_scaled_log_variance,
+    uint8_t  clock_accuracy,
+    uint8_t  priority2,
+    uint8_t  domain_number,
+    int8_t   log_sync_interval,
+    int8_t   log_announce_interval,
+    int8_t   log_pdelay_interval,
+    uint16_t port_number )
 {
-	int buf_offset = 0;
-	char *shm_buffer = master_offset_buffer;
-	gPtpTimeData *ptimedata;
-	if( shm_buffer != NULL ) {
-		/* lock */
-		pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-		buf_offset += sizeof(pthread_mutex_t);
-		ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
-		memcpy(ptimedata->clock_identity, clock_identity, PTP_CLOCK_IDENTITY_LENGTH);
-		ptimedata->priority1 = priority1;
-		ptimedata->clock_class = clock_class;
-		ptimedata->offset_scaled_log_variance = offset_scaled_log_variance;
-		ptimedata->clock_accuracy = clock_accuracy;
-		ptimedata->priority2 = priority2;
-		ptimedata->domain_number = domain_number;
-		ptimedata->log_sync_interval = log_sync_interval;
-		ptimedata->log_announce_interval = log_announce_interval;
-		ptimedata->log_pdelay_interval = log_pdelay_interval;
-		ptimedata->port_number   = port_number;
-		/* unlock */
-		pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
-	}
-	return true;
+    int buf_offset = 0;
+    char *shm_buffer = master_offset_buffer;
+    gPtpTimeData *ptimedata;
+
+    if ( shm_buffer != NULL ) {
+        /* lock */
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        memcpy(ptimedata->clock_identity, clock_identity, PTP_CLOCK_IDENTITY_LENGTH);
+        ptimedata->priority1 = priority1;
+        ptimedata->clock_class = clock_class;
+        ptimedata->offset_scaled_log_variance = offset_scaled_log_variance;
+        ptimedata->clock_accuracy = clock_accuracy;
+        ptimedata->priority2 = priority2;
+        ptimedata->domain_number = domain_number;
+        ptimedata->log_sync_interval = log_sync_interval;
+        ptimedata->log_announce_interval = log_announce_interval;
+        ptimedata->log_pdelay_interval = log_pdelay_interval;
+        ptimedata->port_number   = port_number;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+
+    return true;
 }
 
-void LinuxSharedMemoryIPC::stop() {
-	if( master_offset_buffer != NULL ) {
-		munmap( master_offset_buffer, SHM_SIZE );
+void LinuxSharedMemoryIPC::stop()
+{
+    if ( master_offset_buffer != NULL ) {
+        munmap( master_offset_buffer, SHM_SIZE );
 #ifdef ANDROID
-    	close(shm_fd);
+        close(shm_fd);
         unlink( SHM_NAME );
 #else
-    	shm_unlink(SHM_NAME);
+        shm_unlink(SHM_NAME);
 #endif
-	}
+#ifdef LE_SHARED_MEM
+
+        if (gptp_fd != -1) {
+            close(gptp_fd);
+            gptp_fd = -1;
+        }
+
+#endif
+    }
 }
 
 bool LinuxNetworkInterfaceFactory::createInterface
 ( OSNetworkInterface **net_iface, InterfaceLabel *label,
-  CommonTimestamper *timestamper ) {
-	struct ifreq device;
-	int err;
-	struct sockaddr_ll ifsock_addr;
-	struct packet_mreq mr_8021as;
-	LinkLayerAddress addr;
-	int ifindex;
+  CommonTimestamper *timestamper )
+{
+    struct ifreq device;
+    int err;
+    struct sockaddr_ll ifsock_addr;
+    struct packet_mreq mr_8021as;
+    LinkLayerAddress addr;
+    int ifindex;
+    LinuxNetworkInterface *net_iface_l = new LinuxNetworkInterface();
 
-	LinuxNetworkInterface *net_iface_l = new LinuxNetworkInterface();
+    if ( !net_iface_l->net_lock.init()) {
+        GPTP_LOG_ERROR( "Failed to initialize network lock");
+        delete net_iface_l;
+        return false;
+    }
 
-	if( !net_iface_l->net_lock.init()) {
-		GPTP_LOG_ERROR( "Failed to initialize network lock");
-		delete net_iface_l;
-		return false;
-	}
+    InterfaceName *ifname = dynamic_cast<InterfaceName *>(label);
 
-	InterfaceName *ifname = dynamic_cast<InterfaceName *>(label);
-	if( ifname == NULL ){
-		GPTP_LOG_ERROR( "ifname == NULL");
-		delete net_iface_l;
-		return false;
-	}
+    if ( ifname == NULL ) {
+        GPTP_LOG_ERROR( "ifname == NULL");
+        delete net_iface_l;
+        delete ifname;
+        return false;
+    }
 
-	net_iface_l->sd_general = socket( PF_PACKET, SOCK_DGRAM, 0 );
-	if( net_iface_l->sd_general == -1 ) {
-		GPTP_LOG_ERROR( "failed to open general socket: %s", strerror(errno));
-		delete net_iface_l;
-		return false;
-	}
-	net_iface_l->sd_event = socket( PF_PACKET, SOCK_DGRAM, 0 );
-	if( net_iface_l->sd_event == -1 ) {
-		GPTP_LOG_ERROR
-			( "failed to open event socket: %s ", strerror(errno));
-		close(net_iface_l->sd_general);
-		delete net_iface_l;
-		return false;
-	}
+    net_iface_l->sd_general = socket( PF_PACKET, SOCK_DGRAM, 0 );
 
-	memset( &device, 0, sizeof(device));
-	ifname->toString( device.ifr_name, IFNAMSIZ - 1 );
-	err = ioctl( net_iface_l->sd_event, SIOCGIFHWADDR, &device );
-	if( err == -1 ) {
-		GPTP_LOG_ERROR
-			( "Failed to get interface address: %s", strerror( errno ));
-		close(net_iface_l->sd_general);
-		close(net_iface_l->sd_event);
-		delete net_iface_l;
-		return false;
-	}
+    if ( net_iface_l->sd_general == -1 ) {
+        GPTP_LOG_ERROR( "failed to open general socket: %s", strerror(errno));
+        delete net_iface_l;
+        delete ifname;
+        return false;
+    }
 
-	addr = LinkLayerAddress( (uint8_t *)&device.ifr_hwaddr.sa_data );
-	net_iface_l->local_addr = addr;
-	err = ioctl( net_iface_l->sd_event, SIOCGIFINDEX, &device );
-	if( err == -1 ) {
-		GPTP_LOG_ERROR
-			( "Failed to get interface index: %s", strerror( errno ));
-		close(net_iface_l->sd_general);
-		close(net_iface_l->sd_event);
-		delete net_iface_l;
-		return false;
-	}
-	ifindex = device.ifr_ifindex;
-	net_iface_l->ifindex = ifindex;
-	memset( &mr_8021as, 0, sizeof( mr_8021as ));
-	mr_8021as.mr_ifindex = ifindex;
-	mr_8021as.mr_type = PACKET_MR_MULTICAST;
-	mr_8021as.mr_alen = 6;
-	memcpy( mr_8021as.mr_address, P8021AS_MULTICAST, mr_8021as.mr_alen );
-	err = setsockopt
-		( net_iface_l->sd_event, SOL_PACKET, PACKET_ADD_MEMBERSHIP,
-		  &mr_8021as, sizeof( mr_8021as ));
-	if( err == -1 ) {
-		GPTP_LOG_ERROR
-			( "Unable to add PTP multicast addresses to port id: %u",
-			  ifindex );
-		close(net_iface_l->sd_general);
-		close(net_iface_l->sd_event);
-		delete net_iface_l;
-		return false;
-	}
+    net_iface_l->sd_event = socket( PF_PACKET, SOCK_DGRAM, 0 );
 
-	memset( &ifsock_addr, 0, sizeof( ifsock_addr ));
-	ifsock_addr.sll_family = AF_PACKET;
-	ifsock_addr.sll_ifindex = ifindex;
-	ifsock_addr.sll_protocol = PLAT_htons( PTP_ETHERTYPE );
-	err = bind
-		( net_iface_l->sd_event, (sockaddr *) &ifsock_addr,
-		  sizeof( ifsock_addr ));
-	if( err == -1 ) {
-		GPTP_LOG_ERROR( "Call to bind() failed: %s", strerror(errno) );
-		close(net_iface_l->sd_general);
-		close(net_iface_l->sd_event);
-		delete net_iface_l;
-		return false;
-	}
+    if ( net_iface_l->sd_event == -1 ) {
+        GPTP_LOG_ERROR
+        ( "failed to open event socket: %s ", strerror(errno));
+        close(net_iface_l->sd_general);
+        delete net_iface_l;
+        delete ifname;
+        return false;
+    }
 
-	net_iface_l->timestamper =
-		dynamic_cast <LinuxTimestamper *>(timestamper);
-	if(net_iface_l->timestamper == NULL) {
-		GPTP_LOG_ERROR( "timestamper == NULL" );
-		close(net_iface_l->sd_general);
-		close(net_iface_l->sd_event);
-		delete net_iface_l;
-		return false;
-	}
-	if( !net_iface_l->timestamper->post_init
-		( ifindex, net_iface_l->sd_event, &net_iface_l->net_lock )) {
-		GPTP_LOG_ERROR( "post_init failed\n" );
-		close(net_iface_l->sd_general);
-		close(net_iface_l->sd_event);
-		delete net_iface_l;
-		return false;
-	}
-	*net_iface = net_iface_l;
+    memset( &device, 0, sizeof(device));
+    ifname->toString( device.ifr_name, IFNAMSIZ - 1 );
+    err = ioctl( net_iface_l->sd_event, SIOCGIFHWADDR, &device );
 
-	return true;
+    if ( err == -1 ) {
+        GPTP_LOG_ERROR
+        ( "Failed to get interface address: %s", strerror( errno ));
+        close(net_iface_l->sd_general);
+        close(net_iface_l->sd_event);
+        delete net_iface_l;
+        delete ifname;
+        return false;
+    }
+
+    addr = LinkLayerAddress( (uint8_t *)&device.ifr_hwaddr.sa_data );
+    net_iface_l->local_addr = addr;
+    err = ioctl( net_iface_l->sd_event, SIOCGIFINDEX, &device );
+
+    if ( err == -1 ) {
+        GPTP_LOG_ERROR
+        ( "Failed to get interface index: %s", strerror( errno ));
+        close(net_iface_l->sd_general);
+        close(net_iface_l->sd_event);
+        delete net_iface_l;
+        delete ifname;
+        return false;
+    }
+
+    ifindex = device.ifr_ifindex;
+    net_iface_l->ifindex = ifindex;
+    memset( &mr_8021as, 0, sizeof( mr_8021as ));
+    mr_8021as.mr_ifindex = ifindex;
+    mr_8021as.mr_type = PACKET_MR_MULTICAST;
+    mr_8021as.mr_alen = 6;
+    memcpy( mr_8021as.mr_address, P8021AS_MULTICAST, mr_8021as.mr_alen );
+    err = setsockopt
+          ( net_iface_l->sd_event, SOL_PACKET, PACKET_ADD_MEMBERSHIP,
+            &mr_8021as, sizeof( mr_8021as ));
+
+    if ( err == -1 ) {
+        GPTP_LOG_ERROR
+        ( "Unable to add PTP multicast addresses to port id: %u",
+          ifindex );
+        close(net_iface_l->sd_general);
+        close(net_iface_l->sd_event);
+        delete net_iface_l;
+        delete ifname;
+        return false;
+    }
+
+    memset( &ifsock_addr, 0, sizeof( ifsock_addr ));
+    ifsock_addr.sll_family = AF_PACKET;
+    ifsock_addr.sll_ifindex = ifindex;
+    ifsock_addr.sll_protocol = PLAT_htons( PTP_ETHERTYPE );
+    err = bind
+          ( net_iface_l->sd_event, (sockaddr *) &ifsock_addr,
+            sizeof( ifsock_addr ));
+
+    if ( err == -1 ) {
+        GPTP_LOG_ERROR( "Call to bind() failed: %s", strerror(errno) );
+        close(net_iface_l->sd_general);
+        close(net_iface_l->sd_event);
+        delete net_iface_l;
+        delete ifname;
+        return false;
+    }
+
+    net_iface_l->timestamper =
+        dynamic_cast <LinuxTimestamper *>(timestamper);
+
+    if (net_iface_l->timestamper == NULL) {
+        GPTP_LOG_ERROR( "timestamper == NULL" );
+        close(net_iface_l->sd_general);
+        close(net_iface_l->sd_event);
+        delete net_iface_l;
+        delete ifname;
+        return false;
+    }
+
+    if ( !net_iface_l->timestamper->post_init
+            ( ifindex, net_iface_l->sd_event, &net_iface_l->net_lock )) {
+        GPTP_LOG_ERROR( "post_init failed\n" );
+        close(net_iface_l->sd_general);
+        close(net_iface_l->sd_event);
+        delete net_iface_l;
+        delete ifname;
+        return false;
+    }
+
+    *net_iface = net_iface_l;
+    return true;
 }
