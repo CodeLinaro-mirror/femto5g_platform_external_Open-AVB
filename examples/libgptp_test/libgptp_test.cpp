@@ -490,7 +490,7 @@ int main(int argc, char *argv[])
     }
 #endif
 #else // LE_GVM
-    struct ptp_lib ptp_data;
+    gptpTimeInfo_t ptp_data;
     if (gptpGetStatusAndCurPtpTime(&ptp_data)) {
         test_gptp_time = (ptp_data.tv_sec)*1000000000LL + ptp_data.tv_nsec;
         printf("gptp status %d port status %d gptp time %" PRIu64 ".%" PRIu64 "\n",

@@ -278,9 +278,9 @@ bool LinuxTimestamperGeneric::HWTimestamper_init
         } else {
             GPTP_LOG_INFO("opened clock device: %s", ptp_device);
         }
-    } while ( ( phc_fd == -1 )
-              || ( (_private->clockid = FD_TO_CLOCKID(phc_fd)) == -1 )
-              || ( count > 100 ) );
+    } while ( ( ( phc_fd == -1 )
+              || ( (_private->clockid = FD_TO_CLOCKID(phc_fd)) == -1 ) )
+              && ( count < 100 ) );
 
 #ifdef PTP_HW_CROSSTSTAMP
 

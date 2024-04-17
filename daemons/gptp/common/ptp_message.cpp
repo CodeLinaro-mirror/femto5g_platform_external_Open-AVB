@@ -1087,6 +1087,12 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
                                                    GPTP_STATUS_LEAP_PAST;
         }
 
+        if (port->getPortState() == PTP_MASTER) {
+            port->sct_buffer->status.IsMaster = 1;
+        } else if (port->getPortState() ==  PTP_SLAVE) {
+            port->sct_buffer->status.IsMaster = 0;
+        }
+
         port->sct_buffer->status.gmTimeBaseIndicator = tlv.getGmTimeBaseIndicator();
         pthread_mutex_unlock((pthread_mutex_t *) &port->sct_buffer->lock);
     }
@@ -1866,6 +1872,12 @@ void PTPMessageSignalling::processMessage( EtherPort *port )
     int8_t linkDelayInterval = tlv.getLinkDelayInterval();
     int8_t timeSyncInterval = tlv.getTimeSyncInterval();
     int8_t announceInterval = tlv.getAnnounceInterval();
+
+    if ((true == port->getAutomotiveProfile()) && (port->getPortState() == PTP_SLAVE))
+    {
+        GPTP_LOG_WARNING("Ignoring SIGNALLING_MESSAGE as port is in automotive profile and in slave role");
+        return;
+    }
 
     if (linkDelayInterval == PTPMessageSignalling::sigMsgInterval_Initial) {
         port->setInitPDelayInterval();

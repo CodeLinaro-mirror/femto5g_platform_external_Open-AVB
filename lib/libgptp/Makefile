@@ -16,7 +16,7 @@ endif
 ifeq ($(RGPTP_CLNT_ENABLED),1)
 	CPPFLAGS += -DRGPTP_CLNT_ENABLED
 endif
-LDFLAGS= -shared -lrt -lpthread
+LDFLAGS+= -shared -lrt -lpthread
 
 ifeq ($(AVB_FEATURE_GVM_MODE),1)
 	LDFLAGS+= -luhab
@@ -32,4 +32,4 @@ clean:
 	rm -f $(OBJECTS) $(TARGET)
 
 $(TARGET) : $(OBJECTS)
-	$(CC) $(CPPFLAGS) $(INCLUDES) $(OBJECTS) -o $@ $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(CXXFLAGS) $(INCLUDES) $(OBJECTS) -o $@ $(LDFLAGS)

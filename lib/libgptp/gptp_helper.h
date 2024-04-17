@@ -136,12 +136,13 @@ struct gptp_update {
     int64_t clock_adjust;
 };
 
-struct ptp_lib {
+typedef struct __attribute__ ((packed))
+{
     bool status;
     int32_t port_status;
     int32_t tv_sec;
     int32_t tv_nsec;
-};
+} gptpTimeInfo_t;
 
 /* Get PTP time in nanoseconds for system time in nanoseconds */
 bool gptpGetPtpTimefromSystime(uint64_t *gptp_time_ns, uint64_t time_sys_ns);
@@ -185,7 +186,7 @@ bool gptpGetPDelayMeasurementData(pDelayMeasurementData_t *delayData);
 bool getgPTPStatus(gptpStatsType_t *status);
 
 /* Get current gptp status, port status and gptp time */
-bool gptpGetStatusAndCurPtpTime(struct ptp_lib *ptp_data);
+bool gptpGetStatusAndCurPtpTime(gptpTimeInfo_t *ptp_data);
 
 typedef void(*GPTP_UPDATE_NOTIFY_CALLBACK)(struct gptp_update update);
 

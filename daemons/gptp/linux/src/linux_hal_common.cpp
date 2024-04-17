@@ -55,7 +55,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #include <unistd.h>
 #include <errno.h>
-
+#include <inttypes.h>
 #include <signal.h>
 #include <net/ethernet.h> /* the L2 protocols */
 
@@ -70,11 +70,6 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <linux/rtnetlink.h>
 #include <linux/sockios.h>
 #include <gptp_cfg.hpp>
-
-struct ptp_lib {
-    bool status;
-    int32_t port_status;
-};
 
 Timestamp tsToTimestamp(struct timespec *ts)
 {
@@ -1087,6 +1082,7 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg )
     const char *group_name;
     pthread_mutexattr_t shared;
     mode_t oldumask = umask(0);
+    int count = 0;
 
     if ( barg == NULL ) {
         group_name = DEFAULT_GROUPNAME;
@@ -1119,11 +1115,19 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg )
     }
 
 #ifdef LE_SHARED_MEM
-    gptp_fd = open("/dev/gptp", O_RDWR );
+    do {
+        gptp_fd = open("/dev/gptp", O_RDWR );
 
-    if ( gptp_fd == -1 ) {
-        GPTP_LOG_ERROR( "open(): %s", strerror(errno) );
-    }
+        if ( gptp_fd == -1 || ( FD_TO_CLOCKID(gptp_fd)) == -1 ) {
+            GPTP_LOG_ERROR("Failed to open gPTP kernel device %d %d", gptp_fd, count);
+            usleep(50000);
+            count++;
+        } else {
+            GPTP_LOG_INFO("opened gptp kernel device: /dev/gptp");
+        }
+    } while ( ( ( gptp_fd == -1 )
+            || ( (FD_TO_CLOCKID(gptp_fd)) == -1 ) )
+            && ( count < 100 ) );
 
 #endif
     (void) umask(oldumask);
@@ -1274,10 +1278,10 @@ bool LinuxSharedMemoryIPC::updateSyncStatus(bool is_sync, PortState port_state)
     }
 
 #ifdef LE_SHARED_MEM
-    struct ptp_lib ptp_status;
+    gptpTimeInfo_t ptp_status;
     ptp_status.status = is_sync;
     ptp_status.port_status = port_state;
-    ret = ioctl(gptp_fd, SET_PTP_DATA, (uint32_t*)&ptp_status);
+    ret = ioctl(gptp_fd, SET_PTP_DATA, &ptp_status);
 
     if (ret) {
         GPTP_LOG_ERROR("set PTP status in kernel failed 0x%x (%s)\n", errno,
