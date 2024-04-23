@@ -420,38 +420,30 @@ int main(int argc, char *argv[])
     uint64_t test_vec_time;
     uint64_t test_gptp_time;
     bool gptp_scaling_available = false;
+    gptpTimeInfo_t ptp_data;
     int retry = 0;
-#ifdef GPTP_AUTO_START
-    struct timespec ts = { 0, 1000000 };
-#endif
 
     gptp_scaling_available = gptpInit();
 
     if (gptp_scaling_available)
-        printf("GPTP Scaling Available\n");
+        printf("Gptp Init Success\n");
     else {
-        printf("GPTP Scaling Not Available\n");
+        printf("GPTP Init Failure\n");
         return 0;
     }
-    printf("Real time test start...\n");
-#ifndef LE_GVM
-#ifndef AVB_FEATURE_GVM_MODE
-#ifdef GPTP_AUTO_START
-    while(1){
-        test_vec_time = systemTime(CLOCK_REALTIME);
 
-        if (gptpGetPtpTimefromSystime(&test_gptp_time, test_vec_time)){
-            printf("real_time %" PRIu64 ".%" PRIu64 "  gptp_time %" PRIu64 ".%" PRIu64 "\n",
-                    test_vec_time/1000000000UL, test_vec_time%1000000000UL,
-                    test_gptp_time/1000000000UL, test_gptp_time%1000000000UL);
-            break;
+    if (gptpGetStatusAndCurPtpTime(&ptp_data)) {
+        if (ptp_data.status) {
+            printf("gptp status %d port status %d gptp time %" PRIu64 ".%" PRIu64 "\n",
+                    ptp_data.status, ptp_data.port_status, ptp_data.tv_sec, ptp_data.tv_nsec);
         } else {
-            retry++;
+            printf("gptp status %d port status %d\n", ptp_data.status, ptp_data.port_status);
         }
-        nanosleep(&ts,NULL);
+    } else {
+        printf("GPTP time test failed\n");
     }
-    printf("Real time test successfully, retry %d\n", retry);
-#else
+
+#ifndef LE_GVM
     test_vec_time = systemTime(CLOCK_REALTIME);
     if (gptpGetPtpTimefromSystime(&test_gptp_time, test_vec_time)) {
             printf("real_time %" PRIu64 ".%" PRIu64 "  gptp_time %" PRIu64 ".%" PRIu64 "\n",
@@ -461,7 +453,7 @@ int main(int argc, char *argv[])
     } else {
         printf("Real time test failed\n");
     }
-#endif
+
     test_vec_time = getQtimerTime();
     if (gptpGetPtpTimeFromQTimeNs(&test_gptp_time, test_vec_time)) {
             printf("qtimer_time %" PRIu64 ".%" PRIu64 "  gptp_time %" PRIu64 ".%" PRIu64 "\n",
@@ -488,24 +480,7 @@ int main(int argc, char *argv[])
     } else {
         printf("Monotonic time test failed\n");
     }
-#endif
-#else // LE_GVM
-    gptpTimeInfo_t ptp_data;
-    if (gptpGetStatusAndCurPtpTime(&ptp_data)) {
-        test_gptp_time = (ptp_data.tv_sec)*1000000000LL + ptp_data.tv_nsec;
-        printf("gptp status %d port status %d gptp time %" PRIu64 ".%" PRIu64 "\n",
-                ptp_data.status, ptp_data.port_status, test_gptp_time/1000000000UL, test_gptp_time%1000000000UL);
-    } else {
-        printf("GPTP time test failed\n");
-    }
-
 #endif // END LE_GVM
-    if (gptpGetCurPtpTime(&test_gptp_time)) {
-            printf("gptp time %" PRIu64 ".%" PRIu64 "\n",
-					test_gptp_time/1000000000UL, test_gptp_time%1000000000UL);
-    } else {
-        printf("GPTP time test failed\n");
-    }
 
 #ifndef LE_GVM
     if (argc == 2) {

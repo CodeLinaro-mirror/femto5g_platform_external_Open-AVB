@@ -324,6 +324,7 @@ static void *wait_for_epoll_event(void *arg)
 static void gptpDaemonServDeInit(void)
 {
     int ret = 0;
+    unlink(ADDRESS);
     close(sock);
     ret = pthread_detach(thread_id);
 

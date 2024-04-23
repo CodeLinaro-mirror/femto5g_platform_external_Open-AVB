@@ -402,6 +402,10 @@ static int gptpScaling(gPtpTimeData * td, char *memory_offset_buffer)
         count++;
     } while ((a != b || a != seq0->load() || b != seq1->load()) && count < 3);
 
+    if (count >= 3) {
+        return false;
+    }
+
 #endif
     return true;
 }
@@ -567,10 +571,12 @@ static bool gptpTimeInit(void)
     }
 
     if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+        gptpMemDeinit(gPtpShmFd, gPtpMmap);
         return false;
     }
 
     if (!gptpClkInit(&gptpPhcFd)) {
+        gptpMemDeinit(gPtpShmFd, gPtpMmap);
         return false;
     }
 
@@ -646,8 +652,8 @@ static void *gptpDaemonSrvConnect(void *arg)
             }
         }
 
-        if (ret == -1) {
-            GPTP_LOG_ERROR("gptpDaemonSrvConnect: cleanup errno %d\n", errno);
+        if ((ret == -1) && bInitialized) {
+            GPTP_LOG_ERROR("gptpDaemonSrvConnect: cleanup errno %d %d\n", errno, bInitialized);
             LOCK();
             gptpMemDeinit(gPtpShmFd, gPtpMmap);
             gptpClkDeInit(gptpPhcFd);
@@ -662,28 +668,36 @@ static void *gptpDaemonSrvConnect(void *arg)
     return NULL;
 }
 
-static void gptpDaemonClientInit(void)
+static int gptpDaemonClientInit(void)
 {
     int ret = 0;
 
     if (bServiceConnect == true || sock != -1) {
         GPTP_LOG_INFO("gptpDaemonClientInit: already initialized\n");
-        return;
+        return true;
     }
 
-    bServiceConnect = true;
     pipefd[0] = -1;
     pipefd[1] = -1;
 
     if (pipe(pipefd) == -1) {
         GPTP_LOG_ERROR("pipe create error\n");
-        return;
+        return false;
     }
+
+    if (gptpTimeInit()) {
+        GPTP_LOG_INFO("gptpDaemonSrvConnect: success\n");
+        bInitialized = true;
+    } else {
+        return false;
+    }
+
 
     ret = pthread_create(&thread_id, NULL, gptpDaemonSrvConnect, NULL);
 
     if (ret != 0) {
         GPTP_LOG_ERROR("gptpDaemonClientInit: failed -->%s\n", strerror(errno));
+        return false;
     }
 
     ret = pthread_setname_np(thread_id, "GPTP-HELPER");
@@ -692,7 +706,7 @@ static void gptpDaemonClientInit(void)
         GPTP_LOG_ERROR("Failed to set thread name \n");
     }
 
-    return;
+    return true;
 }
 
 static void gptpDaemonClientDeInit(void)
@@ -1295,8 +1309,21 @@ bool gptpGetStatusAndCurPtpTime(gptpTimeInfo_t *ptp_data) {
     }
 
     return true;
+#else
+    uint64_t gptp_time = 0;
+    ptp_data->status = gptpGetSyncStatus();
+    ptp_data->port_status = gptpGetPortState();
+
+    if (gptpGetCurPtpTime(&gptp_time)) {
+        ptp_data->tv_sec = gptp_time/1000000000UL;
+        ptp_data->tv_nsec = gptp_time%1000000000UL;
+    } else {
+        return false;
+    }
+
+    return true;
+
 #endif
-    return false;
 }
 
 
@@ -1366,8 +1393,7 @@ bool gptpInit(void) {
     return true;
 #else
 #ifdef GPTP_AUTO_START
-	gptpDaemonClientInit();
-	return true;
+       return gptpDaemonClientInit();
 #else
 	LOCK();
 	if (!bInitialized) {
@@ -1477,6 +1503,18 @@ bool handleGetgPTPStatusIf(gptpStatsType_t *status)
 {
    return getgPTPStatus(status);
 }
+
+bool handleGPTPGetSyncStatusIf(void)
+{
+   return gptpGetSyncStatus();
+}
+
+bool handleGPTPGetPortStateIf(void)
+{
+   return gptpGetPortState();
+}
+
+
 bool handleGptpInitIf(void)
 {
    return gptpInit();
@@ -1509,7 +1547,9 @@ const static gPTPLibInterfaceReq gPTPReqIf {
      handleGptpInitIf,
      handleGptpDeinitIf,
      handleGptpRegisterEvent,
-     handleGptpUnregisterEvent
+     handleGptpUnregisterEvent,
+     handleGPTPGetSyncStatusIf,
+     handleGPTPGetPortStateIf
 };
 const gPTPLibInterfaceReq* get_gPTPLib_if(const gPTPLibInterfaceEvent* eventCallback)
 {
