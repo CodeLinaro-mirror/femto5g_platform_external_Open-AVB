@@ -24,9 +24,10 @@ LOCAL_SRC_FILES := linux/src/daemon_cl.cpp \
                    linux/src/linux_hal_persist_file.cpp \
                    linux/src/platform.cpp \
                    linux/src/linux_hal_generic.cpp \
-                   linux/src/linux_hal_generic_adj.cpp
+                   linux/src/linux_hal_generic_adj.cpp \
+                   linux/src/qgptp_rmgr.cpp
 
-LOCAL_MODULE := gptp
+LOCAL_MODULE := qgptp
 
 LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR)/bin
 

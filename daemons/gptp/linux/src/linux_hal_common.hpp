@@ -84,7 +84,8 @@ typedef struct __attribute__ ((packed))
     int32_t port_status;
     int32_t tv_sec;
     int32_t tv_nsec;
-} gptpTimeInfo_t;
+}
+gptpTimeInfo_t;
 
 /**
  * @brief Provides the type for the TicketingLock private structure
@@ -673,7 +674,11 @@ class LinuxIPCArg : public OS_IPC_ARG
         friend class LinuxSharedMemoryIPC;
 };
 
+#ifdef ANDROID
+#define DEFAULT_GROUPNAME "vehicle_network"     /*!< Default groupname for the shared memory interface*/
+#else
 #define DEFAULT_GROUPNAME "vnw"     /*!< Default groupname for the shared memory interface*/
+#endif
 
 /**
  * @brief Linux shared memory interface

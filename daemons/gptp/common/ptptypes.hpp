@@ -31,6 +31,13 @@
 
 ******************************************************************************/
 
+/************************************************************************************************************
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+*************************************************************************************************************/
+
 #ifndef PTP_TYPES_HPP
 #define PTP_TYPES_HPP
 
@@ -38,30 +45,31 @@
 
 #if defined(__clang__) &&  defined(__x86_64__)
 // Clang/llvm has incompatible long double (fp128) for x86_64.
-typedef double FrequencyRatio;		/*!< Frequency Ratio */
+typedef double FrequencyRatio;      /*!< Frequency Ratio */
 #else
-typedef long double FrequencyRatio;	/*!< Frequency Ratio */
+typedef long double FrequencyRatio; /*!< Frequency Ratio */
 #endif
 
-#define ETHER_ADDR_OCTETS	6		/*!< Number of octets in a link layer address*/
-#define IP_ADDR_OCTETS		4		/*!< Number of octets in a ip address*/
-#define PTP_ETHERTYPE 0x88F7		/*!< PTP ethertype */
-#define AVTP_ETHERTYPE 0x22F0		/*!< AVTP ethertype used for Test Status Message */
+#define ETHER_ADDR_OCTETS   6       /*!< Number of octets in a link layer address*/
+#define IP_ADDR_OCTETS      4       /*!< Number of octets in a ip address*/
+#define PTP_ETHERTYPE 0x88F7        /*!< PTP ethertype */
+#define AVTP_ETHERTYPE 0x22F0       /*!< AVTP ethertype used for Test Status Message */
 
-#define PTP_CLOCK_IDENTITY_LENGTH 8	/*!< Size of a clock identifier stored in the ClockIndentity class, described at IEEE 802.1AS-2011 Clause 8.5.2.4*/
+#define PTP_CLOCK_IDENTITY_LENGTH 8 /*!< Size of a clock identifier stored in the ClockIndentity class, described at IEEE 802.1AS-2011 Clause 8.5.2.4*/
+#define PTP_CLOCK_DEVICE_LENGTH 3   /*!< PTP device used*/
 
 /**
  * @brief PortState enumeration
  */
 typedef enum {
-	PTP_MASTER = 7,		//!< Port is PTP Master
-	PTP_PRE_MASTER,		//!< Port is not PTP Master yet.
-	PTP_SLAVE,			//!< Port is PTP Slave
-	PTP_UNCALIBRATED,	//!< Port is uncalibrated.
-	PTP_DISABLED,		//!< Port is not PTP enabled. All messages are ignored when in this state.
-	PTP_FAULTY,			//!< Port is in a faulty state. Recovery is implementation specific.
-	PTP_INITIALIZING,	//!< Port's initial state.
-	PTP_LISTENING		//!< Port is in a PTP listening state. Currently not in use.
+    PTP_MASTER = 7,     //!< Port is PTP Master
+    PTP_PRE_MASTER,     //!< Port is not PTP Master yet.
+    PTP_SLAVE,          //!< Port is PTP Slave
+    PTP_UNCALIBRATED,   //!< Port is uncalibrated.
+    PTP_DISABLED,       //!< Port is not PTP enabled. All messages are ignored when in this state.
+    PTP_FAULTY,         //!< Port is in a faulty state. Recovery is implementation specific.
+    PTP_INITIALIZING,   //!< Port's initial state.
+    PTP_LISTENING       //!< Port is in a PTP listening state. Currently not in use.
 } PortState;
 
 #endif/*PTP_TYPES_HPP*/

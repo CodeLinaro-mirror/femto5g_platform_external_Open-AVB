@@ -28,6 +28,13 @@ Complete license and copyright information can be found at
 https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 *************************************************************************************************************/
 
+/*
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+*/
+
 /**
  * @file
  * MODULE SUMMARY : Reads the .ini file and parses it into information
@@ -68,251 +75,224 @@ int GptpIniParser::parserError(void)
 
 /****************************************************************************/
 
-int GptpIniParser::iniCallBack(void *user, const char *section, const char *name, const char *value)
+int GptpIniParser::iniCallBack(void *user, const char *section,
+                               const char *name, const char *value)
 {
     GptpIniParser *parser = (GptpIniParser*)user;
     bool valOK = false;
 
-    if( parseMatch(section, "ptp") )
-    {
-        if( parseMatch(name, "priority1") )
-        {
+    if ( parseMatch(section, "ptp") ) {
+        if ( parseMatch(name, "priority1") ) {
             errno = 0;
             char *pEnd;
             uint8_t p1 = (uint8_t) strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.priority1 = p1;
             }
-        }
-        else if( parseMatch(name, "priority2") )
-        {
+        } else if ( parseMatch(name, "priority2") ) {
             errno = 0;
             char *pEnd;
             uint8_t p2 = (uint8_t) strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.priority2 = p2;
             }
-        }
-        else if( parseMatch(name, "clockClass") )
-        {
+        } else if ( parseMatch(name, "clockClass") ) {
             errno = 0;
             char *pEnd;
             uint8_t clockClass = (uint8_t) strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.clockClass = clockClass;
             }
         }
-    }
-    else if( parseMatch(section, "port") )
-    {
-        if( parseMatch(name, "announceReceiptTimeout") )
-        {
+    } else if ( parseMatch(section, "port") ) {
+        if ( parseMatch(name, "announceReceiptTimeout") ) {
             errno = 0;
             char *pEnd;
             unsigned int art = strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.announceReceiptTimeout = art;
             }
-        }
-        else if( parseMatch(name, "syncReceiptTimeout") )
-        {
+        } else if ( parseMatch(name, "syncReceiptTimeout") ) {
             errno = 0;
             char *pEnd;
             unsigned int srt = strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.syncReceiptTimeout = srt;
             }
-        }
-        else if( parseMatch(name, "neighborPropDelayThresh") )
-        {
+        } else if ( parseMatch(name, "neighborPropDelayThresh") ) {
             errno = 0;
             char *pEnd;
             int64_t nt = strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.neighborPropDelayThresh = nt;
             }
-        }
-        else if( parseMatch(name, "syncReceiptThresh") )
-        {
+        } else if ( parseMatch(name, "syncReceiptThresh") ) {
             errno = 0;
             char *pEnd;
             unsigned int st = strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.syncReceiptThresh = st;
             }
-        }
-        else if( parseMatch(name, "seqIdAsCapableThresh") )
-        {
+        } else if ( parseMatch(name, "seqIdAsCapableThresh") ) {
             errno = 0;
             char *pEnd;
             unsigned int sidt = strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.seqIdAsCapableThresh = sidt;
             }
-        }
-        else if( parseMatch( name, "lostPdelayRespThresh") )
-        {
+        } else if ( parseMatch( name, "lostPdelayRespThresh") ) {
             errno = 0;
             char *pEnd;
             uint16_t lostpdelayth = (uint16_t) strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0 ) {
+
+            if ( *pEnd == '\0' && errno == 0 ) {
                 valOK = true;
                 parser->_config.lostPdelayRespThresh = lostpdelayth;
             }
-        }
-        else if( parseMatch( name, "initialLogSyncInterval") )
-        {
+        } else if ( parseMatch( name, "initialLogSyncInterval") ) {
             errno = 0;
             char *pEnd;
-            int8_t syncdelay= (int8_t) strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0 ) {
+            int8_t syncdelay = (int8_t) strtoul(value, &pEnd, 10);
+
+            if ( *pEnd == '\0' && errno == 0 ) {
                 valOK = true;
                 parser->_config.initialLogSyncInterval = syncdelay;
             }
-        }
-        else if( parseMatch( name, "initialLogPdelayReqInterval") )
-        {
+        } else if ( parseMatch( name, "initialLogPdelayReqInterval") ) {
             errno = 0;
             char *pEnd;
-            int8_t pdelay= (int8_t) strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0 ) {
+            int8_t pdelay = (int8_t) strtoul(value, &pEnd, 10);
+
+            if ( *pEnd == '\0' && errno == 0 ) {
                 valOK = true;
-				parser->_config.initialLogPdelayReqInterval = pdelay;
+                parser->_config.initialLogPdelayReqInterval = pdelay;
             }
-        }
-        else if( parseMatch( name, "operLogSyncInterval") )
-        {
+        } else if ( parseMatch( name, "operLogSyncInterval") ) {
             errno = 0;
             char *pEnd;
-            int8_t osync= (int8_t) strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0 ) {
+            int8_t osync = (int8_t) strtoul(value, &pEnd, 10);
+
+            if ( *pEnd == '\0' && errno == 0 ) {
                 valOK = true;
-				parser->_config.operLogSyncInterval = osync;
+                parser->_config.operLogSyncInterval = osync;
             }
-        }
-        else if( parseMatch( name, "operLogPdelayReqInterval") )
-        {
+        } else if ( parseMatch( name, "operLogPdelayReqInterval") ) {
             errno = 0;
             char *pEnd;
-            int8_t opdelay= (int8_t) strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0 ) {
+            int8_t opdelay = (int8_t) strtoul(value, &pEnd, 10);
+
+            if ( *pEnd == '\0' && errno == 0 ) {
                 valOK = true;
-				parser->_config.operLogPdelayReqInterval = opdelay;
+                parser->_config.operLogPdelayReqInterval = opdelay;
             }
-        }
-        else if( parseMatch( name, "portRole") )
-        {
-            if( parseMatch( value, "Master"))
-			{
+        } else if ( parseMatch( name, "portRole") ) {
+            if ( parseMatch( value, "Master")) {
                 valOK = true;
-				parser->_config.port_state = PTP_MASTER;
-            }
-            else if( parseMatch( value, "Slave"))
-			{
+                parser->_config.port_state = PTP_MASTER;
+            } else if ( parseMatch( value, "Slave")) {
                 valOK = true;
-				parser->_config.port_state = PTP_SLAVE;
+                parser->_config.port_state = PTP_SLAVE;
             }
-        }
-        else if( parseMatch( name, "automotive_profile") )
-        {
+        } else if ( parseMatch( name, "automotive_profile") ) {
             bool automotive_profile = parseMatch( value, "1");
             valOK = true;
             parser->_config.automotive_profile = automotive_profile;
-        }
-		else if( parseMatch( name, "asCapable") )
-        {
+        } else if ( parseMatch( name, "asCapable") ) {
             bool asCapable = parseMatch( value, "1");
             valOK = true;
             parser->_config.asCapable = asCapable;
-        }
-		else if( parseMatch( name, "isGM") )
-        {
+        } else if ( parseMatch( name, "isGM") ) {
             bool isGM = parseMatch( value, "1");
             valOK = true;
             parser->_config.isGm = isGM;
         }
-
-    }
-    else if( parseMatch(section, "eth") )
-    {
-        if( parseMatch(name, "phy_delay_gb_tx") )
-        {
+    } else if ( parseMatch(section, "eth") ) {
+        if ( parseMatch(name, "phy_delay_gb_tx") ) {
             errno = 0;
             char *pEnd;
             int phdly = strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.phy_delay[LINKSPEED_1G].set_tx_delay( phdly );
             }
-        }
-
-        else if( parseMatch(name, "phy_delay_gb_rx") )
-        {
+        } else if ( parseMatch(name, "phy_delay_gb_rx") ) {
             errno = 0;
             char *pEnd;
             int phdly = strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.phy_delay[LINKSPEED_1G].set_rx_delay( phdly );
             }
-        }
-
-        else if( parseMatch(name, "phy_delay_mb_tx") )
-        {
+        } else if ( parseMatch(name, "phy_delay_mb_tx") ) {
             errno = 0;
             char *pEnd;
             int phdly = strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.phy_delay[LINKSPEED_100MB].
-			set_tx_delay( phdly );
+                set_tx_delay( phdly );
             }
-        }
-
-        else if( parseMatch(name, "phy_delay_mb_rx") )
-        {
+        } else if ( parseMatch(name, "phy_delay_mb_rx") ) {
             errno = 0;
             char *pEnd;
             int phdly = strtoul(value, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.phy_delay[LINKSPEED_100MB].
-			set_rx_delay( phdly );
+                set_rx_delay( phdly );
             }
-        }
-
-        else if( parseMatch(name, "phy_delay") )
-        {
+        } else if ( parseMatch(name, "phy_delay") ) {
             errno = 0;
             char *pEnd;
             const char *c_pEnd;
-	    uint32_t speed = findSpeedByName( value, &c_pEnd );
-	    if( speed == INVALID_LINKSPEED )
-	    {
-		    speed = strtoul( value, &pEnd, 10 );
-		    c_pEnd = pEnd;
-	    }
+            uint32_t speed = findSpeedByName( value, &c_pEnd );
+
+            if ( speed == INVALID_LINKSPEED ) {
+                speed = strtoul( value, &pEnd, 10 );
+                c_pEnd = pEnd;
+            }
+
             int ph_tx_dly = strtoul(c_pEnd, &pEnd, 10);
             int ph_rx_dly = strtoul(pEnd, &pEnd, 10);
-            if( *pEnd == '\0' && errno == 0) {
+
+            if ( *pEnd == '\0' && errno == 0) {
                 valOK = true;
                 parser->_config.phy_delay[speed].
-			set_delay( ph_tx_dly, ph_rx_dly );
+                set_delay( ph_tx_dly, ph_rx_dly );
             }
+        } else if ( parseMatch(name, "bypass_if_wait") ) {
+            bool bypassIfWait = parseMatch( value, "1");
+            valOK = true;
+            parser->_config.bypassIfWait = bypassIfWait;
+        } else if ( parseMatch(name, "intf") ) {
+            valOK = true;
+            parser->_config.ifname = value;
         }
     }
 
-    if(!valOK)
-    {
-        std::cerr << "Unrecognized configuration item: section=" << section << ", name=" << name << std::endl;
+    if (!valOK) {
+        std::cerr << "Unrecognized configuration item: section=" << section << ", name="
+                  << name << std::endl;
         return 0;
     }
 
@@ -331,86 +311,80 @@ bool GptpIniParser::parseMatch(const char *s1, const char *s2)
 
 void GptpIniParser::print_phy_delay( void )
 {
+    phy_delay_map_t map = this->getPhyDelay();
 
-	phy_delay_map_t map = this->getPhyDelay();
-	for( phy_delay_map_t::const_iterator i = map.cbegin();
-	     i != map.cend(); ++i )
-	{
-		uint32_t speed;
-		uint16_t tx, rx;
-		const char *speed_name;
-		char phy_delay_desc[PHY_DELAY_DESC_LEN+1];
+    for ( phy_delay_map_t::const_iterator i = map.cbegin();
+            i != map.cend(); ++i ) {
+        uint32_t speed;
+        uint16_t tx, rx;
+        const char *speed_name;
+        char phy_delay_desc[PHY_DELAY_DESC_LEN + 1];
+        speed = (*i).first;
+        tx = i->second.get_tx_delay();
+        rx = i->second.get_rx_delay();
+        snprintf( phy_delay_desc, PHY_DELAY_DESC_LEN + 1,
+                  "TX: %hu | RX: %hu", tx, rx );
+        speed_name = findNameBySpeed( speed );
 
-		speed = (*i).first;
-		tx = i->second.get_tx_delay();
-		rx = i->second.get_rx_delay();
-
-		snprintf( phy_delay_desc, PHY_DELAY_DESC_LEN+1,
-			  "TX: %hu | RX: %hu", tx, rx );
-
-		speed_name = findNameBySpeed( speed );
-		if( speed_name != NULL )
-			GPTP_LOG_INFO( "%s - PHY delay\n\t\t\t%s",
-				       speed_name, phy_delay_desc );
-		else
-			GPTP_LOG_INFO( "link speed %u - PHY delay\n\t\t\t%s",
-				       speed, phy_delay_desc );
-	}
+        if ( speed_name != NULL )
+            GPTP_LOG_INFO( "%s - PHY delay\n\t\t\t%s",
+                           speed_name, phy_delay_desc );
+        else
+            GPTP_LOG_INFO( "link speed %u - PHY delay\n\t\t\t%s",
+                           speed, phy_delay_desc );
+    }
 }
 
 
-#define DECLARE_SPEED_NAME_MAP( name )	\
-	{ name, #name }
+#define DECLARE_SPEED_NAME_MAP( name )  \
+    { name, #name }
 
-typedef struct
-{
-	const uint32_t speed;
-	const char *name;
+typedef struct {
+    const uint32_t speed;
+    const char *name;
 } speed_name_map_t;
 
-speed_name_map_t speed_name_map[] =
-{
-	DECLARE_SPEED_NAME_MAP( LINKSPEED_10G ),
-	DECLARE_SPEED_NAME_MAP( LINKSPEED_2_5G ),
-	DECLARE_SPEED_NAME_MAP( LINKSPEED_1G ),
-	DECLARE_SPEED_NAME_MAP( LINKSPEED_100MB ),
-	DECLARE_SPEED_NAME_MAP( INVALID_LINKSPEED )
+speed_name_map_t speed_name_map[] = {
+    DECLARE_SPEED_NAME_MAP( LINKSPEED_10G ),
+    DECLARE_SPEED_NAME_MAP( LINKSPEED_2_5G ),
+    DECLARE_SPEED_NAME_MAP( LINKSPEED_1G ),
+    DECLARE_SPEED_NAME_MAP( LINKSPEED_100MB ),
+    DECLARE_SPEED_NAME_MAP( INVALID_LINKSPEED )
 };
 
 const char *findNameBySpeed( uint32_t speed )
 {
-	speed_name_map_t *iter = speed_name_map;
+    speed_name_map_t *iter = speed_name_map;
 
-	while( iter->speed != INVALID_LINKSPEED )
-	{
-		if( iter->speed == speed )
-		{
-			break;
-		}
-		++iter;
-	}
+    while ( iter->speed != INVALID_LINKSPEED ) {
+        if ( iter->speed == speed ) {
+            break;
+        }
 
-	if( iter->speed != INVALID_LINKSPEED )
-		return iter->name;
+        ++iter;
+    }
 
-	return NULL;
+    if ( iter->speed != INVALID_LINKSPEED ) {
+        return iter->name;
+    }
+
+    return NULL;
 }
 
 uint32_t findSpeedByName( const char *name, const char **end )
 {
-	speed_name_map_t *iter = speed_name_map;
-	*end = name;
+    speed_name_map_t *iter = speed_name_map;
+    *end = name;
 
-	while( iter->speed != INVALID_LINKSPEED )
-	{
-		if( strncmp( name, iter->name, strlen( iter->name )) == 0 )
-		{
-			*end = name + strlen( iter->name );
-			break;
-		}
-		++iter;
-	}
+    while ( iter->speed != INVALID_LINKSPEED ) {
+        if ( strncmp( name, iter->name, strlen( iter->name )) == 0 ) {
+            *end = name + strlen( iter->name );
+            break;
+        }
 
-	return iter->speed;
+        ++iter;
+    }
+
+    return iter->speed;
 }
 

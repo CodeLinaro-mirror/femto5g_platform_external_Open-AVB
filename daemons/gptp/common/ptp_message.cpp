@@ -46,6 +46,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <ether_port.hpp>
 #include <avbts_ostimer.hpp>
 #include <ether_tstamper.hpp>
+#include <pthread.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -1499,7 +1500,9 @@ PTPMessagePathDelayRespFollowUp::~PTPMessagePathDelayRespFollowUp()
     delete requestingPortIdentity;
 }
 
+#ifndef ANDROID
 #define US_PER_SEC 1000000
+#endif
 void PTPMessagePathDelayRespFollowUp::processMessage
 ( EtherPort *port )
 {
@@ -1873,8 +1876,8 @@ void PTPMessageSignalling::processMessage( EtherPort *port )
     int8_t timeSyncInterval = tlv.getTimeSyncInterval();
     int8_t announceInterval = tlv.getAnnounceInterval();
 
-    if ((true == port->getAutomotiveProfile()) && (port->getPortState() == PTP_SLAVE))
-    {
+    if ((true == port->getAutomotiveProfile())
+            && (port->getPortState() == PTP_SLAVE)) {
         GPTP_LOG_WARNING("Ignoring SIGNALLING_MESSAGE as port is in automotive profile and in slave role");
         return;
     }

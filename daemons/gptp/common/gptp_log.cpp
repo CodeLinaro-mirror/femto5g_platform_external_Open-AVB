@@ -43,12 +43,6 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 // MS VC++ 2013 has C++11 but not C11 support, use this to get millisecond resolution
 #include <chrono>
 
-#ifdef ANDROID
-#define LOG_TAG "gPTP"
-#include <utils/Log.h>
-#else
-#define ALOGE(format, ...)
-#endif
 
 #ifdef GENIVI_DLT
 DLT_DECLARE_CONTEXT(dlt_con_gptp);
@@ -71,8 +65,17 @@ void gptplogUnregister(void)
 }
 
 // logcat support
-gptplogcat_t gptplogcat = GPTP_LOGCAT_OFF;
-gptplogcat_t systemlogcat = GPTP_LOGCAT_OFF;
+#ifdef ANDROID
+gptplogcat_t gptplogcat = GPTP_LOG_ON;
+#else
+gptplogcat_t gptplogcat = GPTP_LOG_OFF;
+#endif
+
+#ifdef GPTP_AUTO_START
+gptplogcat_t systemlogcat = GPTP_LOG_ON;
+#else
+gptplogcat_t systemlogcat = GPTP_LOG_OFF;
+#endif
 
 void gptpLog(GPTP_LOG_LEVEL level, const char *tag, const char *path, int line,
              const char *fmt, ...)
@@ -93,8 +96,7 @@ void gptpLog(GPTP_LOG_LEVEL level, const char *tag, const char *path, int line,
 
     if (path) {
         if (gptplogcat) {
-            ALOGE("%s: GPTP [%2.2d:%2.2d:%2.2d:%3.3ld] [%s:%u] %s\n",
-                  tag, tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, path, line, msg);
+            LOGE(level, "%s: %d %s", path, line, msg);
         } else if (systemlogcat) {
             syslog(level, "%s: GPTP [%2.2d:%2.2d:%2.2d:%3.3ld] [%s:%u] %s\n", tag,
                    tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, path, line, msg);
@@ -104,8 +106,7 @@ void gptpLog(GPTP_LOG_LEVEL level, const char *tag, const char *path, int line,
         }
     } else {
         if (gptplogcat) {
-            ALOGE("%s: GPTP [%2.2d:%2.2d:%2.2d:%3.3ld] %s\n",
-                  tag, tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, msg);
+            LOGE(level, "%d %s", line, msg);
         } else if (systemlogcat) {
             syslog(level, "%s: GPTP [%2.2d:%2.2d:%2.2d:%3.3ld] [%s:%u] %s\n", tag,
                    tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, path, line, msg);

@@ -104,7 +104,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #define RGPTP_MIN_GPIO_PULSE_TIME_MS 125
 #define RGPTP_MAX_GPIO_PULSE_TIME_MS 5000
 #endif
-char ifname_eth[IFNAME_SIZE];
+char ifname_eth[IFNAME_SIZE] = {0};
 
 void gPTPPersistWriteCB(char *bufPtr, uint32_t bufSize);
 
@@ -147,19 +147,19 @@ static inline int64_t pctns(struct ptp_clock_time t)
 }
 
 #define CLEANUP_RESOURCES() {\
-                if( thread_factory != NULL ) delete thread_factory; \
-                if( default_factory != NULL ) delete default_factory; \
-                if( timerq_factory != NULL ) delete timerq_factory; \
-                if( lock_factory != NULL ) delete lock_factory; \
-                if( timer_factory != NULL ) delete timer_factory; \
-                if( condition_factory != NULL ) delete condition_factory; \
-                if( ipc != NULL ) delete ipc; \
-                if( ifname != NULL ) delete ifname; \
-                if( ipc_arg != NULL ) delete ipc_arg; \
-                if( timestamper != NULL ) delete timestamper; \
+                if( thread_factory != NULL ) delete thread_factory; thread_factory = NULL; \
+                if( default_factory != NULL ) delete default_factory; default_factory = NULL; \
+                if( timerq_factory != NULL ) delete timerq_factory; timerq_factory = NULL; \
+                if( lock_factory != NULL ) delete lock_factory; lock_factory = NULL; \
+                if( timer_factory != NULL ) delete timer_factory; timer_factory = NULL; \
+                if( condition_factory != NULL ) delete condition_factory; condition_factory = NULL; \
+                if( ipc != NULL ) delete ipc; ipc = NULL; \
+                if( ifname != NULL ) delete ifname; ifname = NULL; \
+                if( ipc_arg != NULL ) delete ipc_arg; ipc_arg = NULL; \
+                if( timestamper != NULL ) delete timestamper; timestamper = NULL; \
                 if( pGPTPPersist != NULL ) { \
                     pGPTPPersist->closeStorage(); \
-                    delete pGPTPPersist;    \
+                    delete pGPTPPersist; pGPTPPersist = NULL;    \
                     }\
                 }
 
@@ -170,7 +170,7 @@ void print_usage( char *arg0 )
              "%s <network interface> [-S] [-P] [-M <filename>] "
              "[-l <logcat>] [-G <group>] [-R <priority 1>] "
              "[-D <gb_tx_delay,gb_rx_delay,mb_tx_delay,mb_rx_delay>] "
-             "[-T] [-L] [-E] [-GM] [-INITSYNC <value>] [-OPERSYNC <value>] "
+             "[-T] [-L] [-E] [-B] [-GM] [-INITSYNC <value>] [-OPERSYNC <value>] "
              "[-INITPDELAY <value>] [-OPERPDELAY <value>] [-SYNCLOSSTHRESH <value>] "
              "[-F <path to gptp_cfg.ini file>] "
              "\n",
@@ -186,6 +186,7 @@ void print_usage( char *arg0 )
       "\t-T force master (ignored when Automotive Profile set)\n"
       "\t-L force slave (ignored when Automotive Profile set)\n"
       "\t-E enable test mode (as defined in AVnu automotive profile)\n"
+      "\t-B to bypass Interface check & wait\n"
       "\t-V enable AVnu Automotive Profile\n"
       "\t-N Neighbor prop delay threshold\n"
       "\t-GM set grandmaster for Automotive Profile\n"
@@ -449,6 +450,7 @@ int main(int argc, char **argv)
     LinuxIPCArg *ipc_arg = NULL;
     EtherTimestamper *timestamper = NULL;
     bool use_config_file = false;
+    bool bypass_if_wait = false;
     char config_file_path[512];
     struct timespec timeout;
 #ifdef RGPTP_ENABLED
@@ -532,27 +534,10 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    PLAT_strlcpy(ifname_eth, argv[1], IFNAME_SIZE);
-    timeout.tv_sec = 1;
-    timeout.tv_nsec = 0;
-    GPTP_LOG_INFO( "waiting for eth interface to be up.. \n");
-
-    while (waitForInterface()) {
-        sig = sigtimedwait(&set, NULL, &timeout);
-
-        if (sig == SIGINT || sig == SIGTERM || sig == SIGHUP || sig == SIGUSR2 ) {
-            perror("sigtimedwait()");
-            GPTP_LOG_UNREGISTER();
-            CLEANUP_RESOURCES();
-            return -1;
-        }
-
-        GPTP_LOG_DEBUG( "waitForInterface %d \n", sig);
+    if (strcmp(argv[1], "ini") != 0) {
+        PLAT_strlcpy(ifname_eth, argv[1], IFNAME_SIZE);
+        ifname = new InterfaceName( argv[1], strlen(argv[1]) );
     }
-
-    GPTP_LOG_INFO( "eth interface is up.. \n");
-    sig = 0;
-    ifname = new InterfaceName( argv[1], strlen(argv[1]) );
 
     /* Process optional arguments */
     for ( i = 2; i < argc; ++i ) {
@@ -568,13 +553,13 @@ int main(int argc, char **argv)
                 port_state = PTP_SLAVE;
             } else if ( strcmp(argv[i] + 1,  "l" ) == 0 ) {
 #ifdef ANDROID
-                gptplogcat = GPTP_LOGCAT_ON;
+                gptplogcat = GPTP_LOG_ON;
                 fprintf(stderr, "redirecting logs to logcat ..\n");
 #else
                 GPTP_LOG_ERROR( "unsupported on current platform \n" );
 #endif
             } else if ( strcmp(argv[i] + 1,  "J" ) == 0 ) {
-                systemlogcat = GPTP_LOGCAT_ON;
+                systemlogcat = GPTP_LOG_ON;
                 fprintf(stderr, "redirecting logs to journctl ..\n");
             } else if ( strcmp(argv[i] + 1,  "M" )  == 0 ) {
                 // Open file
@@ -659,6 +644,8 @@ int main(int argc, char **argv)
                 portInit.isGM = true;
             } else if (strcmp(argv[i] + 1, "E") == 0) {
                 portInit.testMode = true;
+            } else if (strcmp(argv[i] + 1, "B") == 0) {
+                bypass_if_wait = true;
             } else if (strcmp(argv[i] + 1, "INITSYNC") == 0) {
                 portInit.initialLogSyncInterval = atoi(argv[++i]);
             } else if (strcmp(argv[i] + 1, "OPERSYNC") == 0) {
@@ -763,7 +750,6 @@ int main(int argc, char **argv)
     //portInit.clock = pClock;
     portInit.index = 1;
     portInit.timestamper = timestamper;
-    portInit.net_label = ifname;
     portInit.condition_factory = condition_factory;
     portInit.thread_factory = thread_factory;
     portInit.timer_factory = timer_factory;
@@ -793,6 +779,13 @@ int main(int argc, char **argv)
             priority2 =  iniParser.getPriority2();
             clockClass = iniParser.getclockClass();
             port_state = iniParser.getPortState();
+            bypass_if_wait = iniParser.getIsIfCheckBypass();
+
+            if (strcmp(argv[1], "ini") == 0) {
+                std::string if_name = iniParser.getIfaceName();
+                PLAT_strlcpy(ifname_eth, if_name.c_str(), IFNAME_SIZE);
+                ifname = new InterfaceName( ifname_eth, strlen(ifname_eth) );
+            }
 
             if (port_state == PTP_MASTER) {
                 override_portstate = true;
@@ -842,6 +835,39 @@ int main(int argc, char **argv)
                 ether_phy_delay = iniParser.getPhyDelay();
             }
         }
+    }
+
+    portInit.net_label = ifname;
+
+    if ((strcmp(ifname_eth, "eth0") != 0) && (strcmp(ifname_eth, "eth1") != 0) ) {
+        GPTP_LOG_INFO( "Valid Interface name required\n" );
+        GPTP_LOG_UNREGISTER();
+        CLEANUP_RESOURCES();
+        return -1;
+    }
+
+    if (!bypass_if_wait) {
+        timeout.tv_sec = 1;
+        timeout.tv_nsec = 0;
+        GPTP_LOG_INFO( "waiting for eth interface to be up.. \n");
+
+        while (waitForInterface()) {
+            sig = sigtimedwait(&set, NULL, &timeout);
+
+            if (sig == SIGINT || sig == SIGTERM || sig == SIGHUP || sig == SIGUSR2 ) {
+                perror("sigtimedwait()");
+                GPTP_LOG_UNREGISTER();
+                CLEANUP_RESOURCES();
+                return -1;
+            }
+
+            GPTP_LOG_DEBUG( "waitForInterface %d \n", sig);
+        }
+
+        GPTP_LOG_INFO( "eth interface is up.. \n");
+        sig = 0;
+    } else {
+        GPTP_LOG_INFO( "Bypass Ethernet check.. \n");
     }
 
     pClock = new IEEE1588Clock

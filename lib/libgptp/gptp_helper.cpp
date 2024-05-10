@@ -89,6 +89,12 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <stdarg.h>
 #include <stdio.h>
 
+#ifdef ANDROID
+#include <log/log.h>
+#else
+#include <syslog.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -133,10 +139,39 @@ pthread_mutex_t gInitMutex = PTHREAD_MUTEX_INITIALIZER;
 #define LOG_DEBUG    4
 #endif
 #define GPTP_LOG_LEVEL LOG_INFO
+#ifdef ANDROID
+
+#define LOGE(tag, ...) __android_log_print (ANDROID_LOG_ERROR,"gptphelper", tag, __VA_ARGS__)
+#define LOGW(tag, ...) __android_log_print (ANDROID_LOG_WARN,"gptphelper", tag, __VA_ARGS__)
+#define LOGI(tag, ...) __android_log_print (ANDROID_LOG_INFO,"gptphelper", tag, __VA_ARGS__)
+#define LOGD(tag, ...) __android_log_print (ANDROID_LOG_DEBUG,"gptphelper", tag, __VA_ARGS__)
+
+enum _LOGGER_SEVERITY {
+    QCLOG_ERROR         = ANDROID_LOG_ERROR,
+    QCLOG_WARNING       = ANDROID_LOG_WARN,
+    QCLOG_INFO          = ANDROID_LOG_INFO,
+    QCLOG_DEBUG2        = ANDROID_LOG_DEBUG
+};
+
+#endif
+#ifndef ANDROID
+
 #define GPTP_LOG_ERROR(fmt, ...) system_log(LOG_ERROR, "[tid : %d %s %d] : " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
 #define GPTP_LOG_WARNING(fmt, ...) system_log(LOG_WARNING, "[tid : %d %s %d] : " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
 #define GPTP_LOG_INFO(fmt, ...) system_log(LOG_INFO, "[tid : %d %s %d] : " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
 #define GPTP_LOG_DEBUG(fmt, ...) system_log(LOG_DEBUG, "[tid : %d %s %d] : " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
+
+#else
+
+#define GPTP_LOG_ERROR(fmt, ...) LOGE("%s: %d " fmt, __func__, __LINE__, ##__VA_ARGS__)
+#define GPTP_LOG_WARNING(fmt, ...) LOGW("%s: %d " fmt, __func__, __LINE__, ##__VA_ARGS__)
+#define GPTP_LOG_INFO(fmt, ...) LOGI("%s: %d " fmt, __func__, __LINE__, ##__VA_ARGS__)
+#define GPTP_LOG_DEBUG(fmt, ...) LOGD("%s: %d " fmt, __func__, __LINE__, ##__VA_ARGS__)
+
+#endif
+
+#define PTP_DEVICE "/dev/ptpXX"         /*!< Default PTP device */
+#define PTP_DEVICE_IDX_OFFS 8           /*!< PTP device index offset*/
 
 
 static bool bInitialized = false;
@@ -209,7 +244,15 @@ void system_log(int loglevel, const char *s, ...)
 
 static int gptpClkInit(int *gptp_phc_fd)
 {
+#ifdef AVB_FEATURE_GVM_MODE
     *gptp_phc_fd = open("/dev/ptp0", O_RDWR );
+#else
+    char ptp_device[] = PTP_DEVICE;
+    memcpy( ptp_device + PTP_DEVICE_IDX_OFFS,
+            gPtpTD.ptp_dev_index,  sizeof(ptp_device) - PTP_DEVICE_IDX_OFFS);
+    GPTP_LOG_INFO("opening clock device: %s", ptp_device);
+    *gptp_phc_fd = open(ptp_device, O_RDWR );
+#endif
 
     if ( *gptp_phc_fd == -1 ||
             (gPtpClockid = FD_TO_CLOCKID(*gptp_phc_fd)) == -1 ) {
@@ -237,7 +280,7 @@ static bool gptpSCTMemInit()
         gPtpSCTShmFd = open( SCT_SHM_NAME, O_RDWR, 0);
 #else
 #ifdef ANDROID
-        gPtpSCTShmFd = open( SCT_SHM_NAME, O_RDWR | O_CREAT, 0);
+        gPtpSCTShmFd = open( SCT_SHM_NAME, O_RDWR, 0);
 #else
         gPtpSCTShmFd = shm_open(SCT_SHM_NAME, O_RDWR, 0);
 #endif
@@ -307,7 +350,7 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
     *gptp_shm_fd = open( SHM_NAME, O_RDWR, 0);
 #else
 #ifdef ANDROID
-    *gptp_shm_fd = open( SHM_NAME, O_RDWR | O_CREAT, 0);
+    *gptp_shm_fd = open( SHM_NAME, O_RDWR, 0);
 #else
     *gptp_shm_fd = shm_open(SHM_NAME, O_RDWR, 0);
 #endif
@@ -653,7 +696,8 @@ static void *gptpDaemonSrvConnect(void *arg)
         }
 
         if ((ret == -1) && bInitialized) {
-            GPTP_LOG_ERROR("gptpDaemonSrvConnect: cleanup errno %d %d\n", errno, bInitialized);
+            GPTP_LOG_ERROR("gptpDaemonSrvConnect: cleanup errno %d %d\n", errno,
+                           bInitialized);
             LOCK();
             gptpMemDeinit(gPtpShmFd, gPtpMmap);
             gptpClkDeInit(gptpPhcFd);
@@ -691,7 +735,6 @@ static int gptpDaemonClientInit(void)
     } else {
         return false;
     }
-
 
     ret = pthread_create(&thread_id, NULL, gptpDaemonSrvConnect, NULL);
 
@@ -880,7 +923,7 @@ bool gptpGetPtpTimeFromBootTime(uint64_t *gptp_time_bt, uint64_t time_boot_ns)
     } while ((a != b || a != seq0->load() || b != seq1->load()) && count < 3);
 
     if (count < 3) {
-        int gptpdiff = *gptp_mem - ptp_time_ns;
+        int gptpdiff = *gptp_mem - time_boot_ns;
 
         if (gptpdiff > GPTP_BOOTTIME_VALIDTY_RANGE
                 || gptpdiff < -GPTP_BOOTTIME_VALIDTY_RANGE) {
@@ -1231,75 +1274,69 @@ bool gptpGetPDelayMeasurementData(pDelayMeasurementData_t *delayData)
     memcpy(delayData, &data->delayData,
            sizeof(pDelayMeasurementData_t));
     pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
-    GPTP_LOG_INFO("libgptp library: resp_clockIdentity "CLK_STR"", CLK_TO_STR(delayData->resp_clockIdentity));
-
+    GPTP_LOG_INFO("libgptp library: resp_clockIdentity " CLK_STR "",
+                  CLK_TO_STR(delayData->resp_clockIdentity));
 #ifdef LIBGPTP_DEBUG
-	GPTP_LOG_INFO("qgptp PDelay Measurement Data: request_origin_timestamp %"PRIu64" request_receipt_timestamp %"PRIu64"\
+    GPTP_LOG_INFO("qgptp PDelay Measurement Data: request_origin_timestamp %"PRIu64" request_receipt_timestamp %"PRIu64"\
 			response_origin_timestamp %"PRIu64" response_receipt_timestamp %"PRIu64" reference_local_timestamp %"PRIu64"\
 			sequence_id %d pDelay %"PRIu64" req_portNumber %d req_clockIdentity "CLK_STR" resp_portNumber %d resp_clockIdentity "CLK_STR"\n",
-			delayData->request_origin_timestamp,
-			delayData->request_receipt_timestamp,
-			delayData->response_origin_timestamp,
-			delayData->response_receipt_timestamp,
-			delayData->reference_local_timestamp,
-			delayData->sequence_id,
-			delayData->pDelay,
-			delayData->req_portNumber,
-			CLK_TO_STR(delayData->req_clockIdentity),
-			delayData->resp_portNumber,
-			CLK_TO_STR(delayData->resp_clockIdentity));
+                  delayData->request_origin_timestamp,
+                  delayData->request_receipt_timestamp,
+                  delayData->response_origin_timestamp,
+                  delayData->response_receipt_timestamp,
+                  delayData->reference_local_timestamp,
+                  delayData->sequence_id,
+                  delayData->pDelay,
+                  delayData->req_portNumber,
+                  CLK_TO_STR(delayData->req_clockIdentity),
+                  delayData->resp_portNumber,
+                  CLK_TO_STR(delayData->resp_clockIdentity));
 #endif
-
-	return true;
+    return true;
 }
 
-bool getgPTPStatus(gptpStatsType_t *status) {
-	int ret = false;
+bool getgPTPStatus(gptpStatsType_t *status)
+{
+    int ret = false;
 
-	if(status == NULL)
-	{
+    if (status == NULL) {
         GPTP_LOG_ERROR("Invalid SyncData parameter");
         return false;
-	}
+    }
 
-	if (gPtpSCTMmap == NULL)
-	{
-		GPTP_LOG_ERROR("getgPTPStatus memory failure %p\n",gPtpSCTMmap);
-		gptpSCTMemInit();
-		return false;
-	}
+    if (gPtpSCTMmap == NULL) {
+        GPTP_LOG_ERROR("getgPTPStatus memory failure %p\n", gPtpSCTMmap);
+        gptpSCTMemInit();
+        return false;
+    }
 
-	sct_gptp_data* data = (sct_gptp_data*)gPtpSCTMmap;
-
-
-	pthread_mutex_lock((pthread_mutex_t *) &data->lock);
-	memcpy(status, &data->status,
-		   sizeof(gptpStatsType_t));
-	pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
-
-
+    sct_gptp_data* data = (sct_gptp_data*)gPtpSCTMmap;
+    pthread_mutex_lock((pthread_mutex_t *) &data->lock);
+    memcpy(status, &data->status,
+           sizeof(gptpStatsType_t));
+    pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
 #ifdef LIBGPTP_DEBUG
-	GPTP_LOG_INFO("qgptp Status Data: gptp_status %d rate_deviation %f IsMaster %d offset %"PRIu64" ",
-			status->gptp_status,
-			status->rate_deviation,
-			status->IsMaster,
-			status->offset);
+    GPTP_LOG_INFO("qgptp Status Data: gptp_status %d rate_deviation %f IsMaster %d offset %"PRIu64" ",
+                  status->gptp_status,
+                  status->rate_deviation,
+                  status->IsMaster,
+                  status->offset);
 #endif
-
-	return true;
+    return true;
 }
 
 /* public API to query gptp status, port status and current gptp time */
-bool gptpGetStatusAndCurPtpTime(gptpTimeInfo_t *ptp_data) {
-
+bool gptpGetStatusAndCurPtpTime(gptpTimeInfo_t *ptp_data)
+{
 #ifdef LE_GVM
     int ret = 0;
 
     if (gptp_fd != -1) {
         ret = ioctl(gptp_fd, GET_PTP_DATA, ptp_data);
-        if (ret)
-        {
-            GPTP_LOG_ERROR(" Ioctl failed to get ptp data 0x%x (%s)\n", errno, strerror(errno));
+
+        if (ret) {
+            GPTP_LOG_ERROR(" Ioctl failed to get ptp data 0x%x (%s)\n", errno,
+                           strerror(errno));
             close(gptp_fd);
             gptp_fd = -1;
             return false;
@@ -1315,118 +1352,134 @@ bool gptpGetStatusAndCurPtpTime(gptpTimeInfo_t *ptp_data) {
     ptp_data->port_status = gptpGetPortState();
 
     if (gptpGetCurPtpTime(&gptp_time)) {
-        ptp_data->tv_sec = gptp_time/1000000000UL;
-        ptp_data->tv_nsec = gptp_time%1000000000UL;
+        ptp_data->tv_sec = gptp_time / 1000000000UL;
+        ptp_data->tv_nsec = gptp_time % 1000000000UL;
     } else {
         return false;
     }
 
     return true;
-
 #endif
 }
 
 
-bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur, uint64_t *mono_time_cur) {
-
-	*gptp_time_cur = 0;
-	*mono_time_cur = 0;
-
+bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur,
+                                 uint64_t *mono_time_cur)
+{
+    *gptp_time_cur = 0;
+    *mono_time_cur = 0;
 #ifdef AVB_FEATURE_GVM_MODE
-
-	uint64_t *gptp_mem;
+    uint64_t *gptp_mem;
     uint64_t *mono_mem;
-	struct timespec ts;
-	std::atomic<uint32_t> *seq0;
-	std::atomic<uint32_t> *seq1;
-	uint32_t a,b;
-	int count = 0;
-
+    struct timespec ts;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
+    uint32_t a, b;
+    int count = 0;
     ts.tv_sec = ts.tv_nsec = 0;
     *gptp_time_cur = 0;
-	*mono_time_cur =0;
+    *mono_time_cur = 0;
 
     if (!bInitialized) {
-	return false;
+        return false;
     }
 
-	seq0 = (std::atomic<uint32_t> *)gPtpMmap;
-	seq1 = (std::atomic<uint32_t> *)(gPtpMmap + sizeof(std::atomic<uint32_t>));
+    seq0 = (std::atomic<uint32_t> *)gPtpMmap;
+    seq1 = (std::atomic<uint32_t> *)(gPtpMmap + sizeof(std::atomic<uint32_t>));
 
-	do {
-	a = seq0->load();
-	b = seq1->load();
-    if (clock_gettime(gPtpClockid, &ts)) {
-	GPTP_LOG_ERROR("clock_gettime failed");
-	return false;
+    do {
+        a = seq0->load();
+        b = seq1->load();
+
+        if (clock_gettime(gPtpClockid, &ts)) {
+            GPTP_LOG_ERROR("clock_gettime failed");
+            return false;
+        }
+
+        if (ts.tv_sec == 0 && ts.tv_nsec == 0) {
+            GPTP_LOG_ERROR("gptp time read taking longer time\n");
+            return false;
+        }
+
+        gptp_mem = (uint64_t *) (gPtpMmap + 0x1000 - 3 * sizeof(uint64_t));
+        mono_mem = (uint64_t *) (gPtpMmap + 0x1000 - 4 * sizeof(uint64_t));
+        *gptp_time_cur = *gptp_mem;
+        *mono_time_cur = *mono_mem;
+        count++;
+    } while ((a != b || a != seq0->load() || b != seq1->load()) && count < 3);
+
+    if (count >= 3) {
+        return false;
     }
 
-	if(ts.tv_sec == 0 && ts.tv_nsec == 0) {
-	GPTP_LOG_ERROR("gptp time read taking longer time\n");
-	return false;
-	}
-
-	gptp_mem = (uint64_t *) (gPtpMmap + 0x1000 - 3*sizeof(uint64_t));
-	mono_mem = (uint64_t *) (gPtpMmap + 0x1000 - 4*sizeof(uint64_t));
-	*gptp_time_cur = *gptp_mem;
-	*mono_time_cur = *mono_mem;
-	count++;
-
-	}while((a!=b || a!=seq0->load() || b != seq1->load())&&count<3);
+#else
+    struct timespec t;
+    t.tv_sec = t.tv_nsec = 0;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    *mono_time_cur = (t.tv_sec) * 1000000000LL + t.tv_nsec;
+    return gptpGetPtpTimeFromMonoTime(gptp_time_cur, *mono_time_cur);
 #endif
-
-	return true;
-
+    return true;
 }
 
 
 
 /* public API to init gptp time scaling */
-bool gptpInit(void) {
+bool gptpInit(void)
+{
 #ifdef LE_GVM
     gptp_fd = open("/dev/gptp", O_RDWR);
+
     if ( gptp_fd == -1 ) {
         GPTP_LOG_ERROR("Failed to open /dev/gptp error 0x%x(%s)\n", errno,
-                strerror(errno));
+                       strerror(errno));
         return false;
     }
+
     return true;
 #else
 #ifdef GPTP_AUTO_START
-       return gptpDaemonClientInit();
+    return gptpDaemonClientInit();
 #else
-	LOCK();
-	if (!bInitialized) {
-		if (gptpTimeInit())
-			bInitialized = true;
-	}
-	UNLOCK();
-	return bInitialized;
+    LOCK();
+
+    if (!bInitialized) {
+        if (gptpTimeInit()) {
+            bInitialized = true;
+        }
+    }
+
+    UNLOCK();
+    return bInitialized;
 #endif
 #endif
 }
 
 /* public API to deinit gptp time scaling */
-bool gptpDeinit(void) {
+bool gptpDeinit(void)
+{
 #ifdef LE_GVM
+
     if (gptp_fd != -1) {
         close(gptp_fd);
         gptp_fd = -1;
     }
+
 #else
-	gptpMemDeinit(gPtpShmFd, gPtpMmap);
-	gptpClkDeInit(gptpPhcFd);
+    gptpMemDeinit(gPtpShmFd, gPtpMmap);
+    gptpClkDeInit(gptpPhcFd);
 #ifdef GPTP_AUTO_START
-	gptpDaemonClientDeInit();
+    gptpDaemonClientDeInit();
 #endif
-	bInitialized = false;
+    bInitialized = false;
 #endif
-	return true;
+    return true;
 }
 
 #ifdef  RGPTP_CLNT_ENABLED
 /* public API to query current rgptp time */
-bool rgptpGetCurPtpTime(uint64_t *rgptp_time) {
+bool rgptpGetCurPtpTime(uint64_t *rgptp_time)
+{
     struct timespec ts;
     ts.tv_sec = ts.tv_nsec = 0;
     *rgptp_time = 0;
@@ -1435,128 +1488,135 @@ bool rgptpGetCurPtpTime(uint64_t *rgptp_time) {
         GPTP_LOG_ERROR("clock_gettime failed");
         return false;
     }
-    *rgptp_time = (ts.tv_sec)*1000000000LL + ts.tv_nsec;
+
+    *rgptp_time = (ts.tv_sec) * 1000000000LL + ts.tv_nsec;
     return true;
 }
 
 /* public API to init rgptp time scaling */
-bool rgptpInit(void) {
+bool rgptpInit(void)
+{
     rptp_fd = open("/dev/ptp1", O_RDWR );
 
-    if( rptp_fd == -1 ||
+    if ( rptp_fd == -1 ||
             (rgptp_clkid = FD_TO_CLOCKID(rptp_fd)) == -1 ) {
         GPTP_LOG_ERROR("%s, Failed to open PTP clock device\n", __func__);
         return false;
     }
+
     return true;
 }
 
 /* public API to deinit rgptp time scaling */
-bool rgptpDeinit(void) {
-    if (rptp_fd < 0)
+bool rgptpDeinit(void)
+{
+    if (rptp_fd < 0) {
         close(rptp_fd);
-    rgptp_clkid = -1;
+    }
 
+    rgptp_clkid = -1;
     return true;
 }
 #endif
 
 bool handleGptpGetTimeIf(uint64_t *gptp_time_ns, uint64_t time_sys_ns)
 {
-   return gptpGetTime(gptp_time_ns, time_sys_ns);
+    return gptpGetTime(gptp_time_ns, time_sys_ns);
 }
 bool handleGptpGetPtpTimeFromQTimeNsIf(uint64_t *gptp_time_ns,
-                                      uint64_t time_qtimer_ns)
+                                       uint64_t time_qtimer_ns)
 {
-  return gptpGetPtpTimeFromQTimeNs(gptp_time_ns, time_qtimer_ns);
+    return gptpGetPtpTimeFromQTimeNs(gptp_time_ns, time_qtimer_ns);
 }
 bool handleGptpGetPtpTimeFromQTimeTickCountIf(uint64_t *gptp_time_ns,
-                                      uint64_t qtime_ticks)
+        uint64_t qtime_ticks)
 {
-   return gptpGetPtpTimeFromQTimeTickCount(gptp_time_ns, qtime_ticks);
+    return gptpGetPtpTimeFromQTimeTickCount(gptp_time_ns, qtime_ticks);
 }
 bool handleGptpGetPtpTimeFromMonoTimeIf(uint64_t *gptp_time_ns,
-                                      uint64_t time_mono_ns)
+                                        uint64_t time_mono_ns)
 {
-   return gptpGetPtpTimeFromMonoTime(gptp_time_ns, time_mono_ns);
+    return gptpGetPtpTimeFromMonoTime(gptp_time_ns, time_mono_ns);
 }
 bool handleGptpGetCurPtpTimeIf(uint64_t *gptp_time_ns)
 {
-   return gptpGetCurPtpTime(gptp_time_ns);
+    return gptpGetCurPtpTime(gptp_time_ns);
 }
 bool handleGptpGetCurgPtpMonotonicPairIf(uint64_t *gptp_time_cur,
-                                      uint64_t *mono_time_cur)
+        uint64_t *mono_time_cur)
 {
-   return gptpGetCurgPtpMonotonicPair(gptp_time_cur, mono_time_cur);
+    return gptpGetCurgPtpMonotonicPair(gptp_time_cur, mono_time_cur);
 }
 bool handleGptpGetBootTimeFromPtpTimeIf(uint64_t *boot_time_ns,
-                                      uint64_t ptp_time_ns)
+                                        uint64_t ptp_time_ns)
 {
-   return gptpGetBootTimeFromPtpTime(boot_time_ns, ptp_time_ns);
+    return gptpGetBootTimeFromPtpTime(boot_time_ns, ptp_time_ns);
 }
 bool handleGptpGetPtpTimeFromBootTimeIf(uint64_t *ptp_time_ns,
-                                      uint64_t boot_time_ns)
+                                        uint64_t boot_time_ns)
 {
-   return gptpGetPtpTimeFromBootTime(ptp_time_ns, boot_time_ns);
+    return gptpGetPtpTimeFromBootTime(ptp_time_ns, boot_time_ns);
 }
 bool handleGetgPTPStatusIf(gptpStatsType_t *status)
 {
-   return getgPTPStatus(status);
+    return getgPTPStatus(status);
 }
 
 bool handleGPTPGetSyncStatusIf(void)
 {
-   return gptpGetSyncStatus();
+    return gptpGetSyncStatus();
 }
 
 bool handleGPTPGetPortStateIf(void)
 {
-   return gptpGetPortState();
+    return gptpGetPortState();
 }
 
 
 bool handleGptpInitIf(void)
 {
-   return gptpInit();
+    return gptpInit();
 }
 bool handleGptpDeinitIf(void)
 {
-   return gptpDeinit();
+    return gptpDeinit();
 }
 const gPTPLibInterfaceEvent* gPTPEventIf = nullptr;
 bool handleGptpRegisterEvent(void)
 {
-   gptpRegisterCallback(gPTPEventIf->gPTP_Update_Event);
-   return true;
+    gptpRegisterCallback(gPTPEventIf->gPTP_Update_Event);
+    return true;
 }
 bool handleGptpUnregisterEvent(void)
 {
-   gptpRegisterCallback(nullptr);
-   return true;
+    gptpRegisterCallback(nullptr);
+    return true;
 }
 const static gPTPLibInterfaceReq gPTPReqIf {
-     handleGptpGetTimeIf,
-     handleGptpGetPtpTimeFromQTimeNsIf,
-     handleGptpGetPtpTimeFromQTimeTickCountIf,
-     handleGptpGetPtpTimeFromMonoTimeIf,
-     handleGptpGetCurPtpTimeIf,
-     handleGptpGetCurgPtpMonotonicPairIf,
-     handleGptpGetBootTimeFromPtpTimeIf,
-     handleGptpGetPtpTimeFromBootTimeIf,
-     handleGetgPTPStatusIf,
-     handleGptpInitIf,
-     handleGptpDeinitIf,
-     handleGptpRegisterEvent,
-     handleGptpUnregisterEvent,
-     handleGPTPGetSyncStatusIf,
-     handleGPTPGetPortStateIf
+    handleGptpGetTimeIf,
+    handleGptpGetPtpTimeFromQTimeNsIf,
+    handleGptpGetPtpTimeFromQTimeTickCountIf,
+    handleGptpGetPtpTimeFromMonoTimeIf,
+    handleGptpGetCurPtpTimeIf,
+    handleGptpGetCurgPtpMonotonicPairIf,
+    handleGptpGetBootTimeFromPtpTimeIf,
+    handleGptpGetPtpTimeFromBootTimeIf,
+    handleGetgPTPStatusIf,
+    handleGptpInitIf,
+    handleGptpDeinitIf,
+    handleGptpRegisterEvent,
+    handleGptpUnregisterEvent,
+    handleGPTPGetSyncStatusIf,
+    handleGPTPGetPortStateIf
 };
-const gPTPLibInterfaceReq* get_gPTPLib_if(const gPTPLibInterfaceEvent* eventCallback)
+const gPTPLibInterfaceReq* get_gPTPLib_if(const gPTPLibInterfaceEvent*
+        eventCallback)
 {
     if ((nullptr != eventCallback) &&
-        (nullptr != eventCallback->gPTP_Update_Event)) {
-       gPTPEventIf = eventCallback;
+            (nullptr != eventCallback->gPTP_Update_Event)) {
+        gPTPEventIf = eventCallback;
     }
+
     return (&gPTPReqIf);
 }
 #ifdef __cplusplus

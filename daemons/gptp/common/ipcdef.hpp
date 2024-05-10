@@ -117,7 +117,7 @@ typedef struct {
 
     int64_t lb_phoffset;            //!< Local to boottime phase offset
     FrequencyRatio lb_freqoffset;   //!< Local to boottime frequency offset
-
+    char ptp_dev_index[PTP_CLOCK_DEVICE_LENGTH] = {0};
 } gPtpTimeData;
 
 /*

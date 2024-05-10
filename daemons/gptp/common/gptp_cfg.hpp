@@ -94,6 +94,7 @@ class GptpIniParser
             bool automotive_profile;
             bool asCapable;
             bool isGm;
+            bool bypassIfWait = false;
             PortState port_state;
 
             /*ethernet adapter data set*/
@@ -243,6 +244,16 @@ class GptpIniParser
         bool getAutomotiveProfile(void)
         {
             return _config.automotive_profile;
+        }
+
+        bool getIsIfCheckBypass()
+        {
+            return _config.bypassIfWait;
+        }
+
+        std::string getIfaceName()
+        {
+            return _config.ifname;
         }
 
         PortState getPortState(void)

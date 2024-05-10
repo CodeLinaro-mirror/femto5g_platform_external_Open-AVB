@@ -38,120 +38,135 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <gptp_log.hpp>
 #include "linux_hal_persist_file.hpp"
 
-class LinuxGPTPPersistFile : public GPTPPersist {
-private:
-	std::string persistIDStr;
-	gPTPPersistWriteCB_t writeCB;
+class LinuxGPTPPersistFile : public GPTPPersist
+{
+    private:
+        std::string persistIDStr;
+        gPTPPersistWriteCB_t writeCB;
 
-	int persistFD;
-	void *restoredata;
-	off_t storedDataLength;
-	off_t memoryDataLength;
+        int persistFD;
+        void *restoredata;
+        off_t storedDataLength;
+        off_t memoryDataLength;
 
-public:
-	LinuxGPTPPersistFile() {
-		persistFD = -1;
-		restoredata = ((void *)-1);
-		storedDataLength = 0;
-		memoryDataLength = 0;
-	}
+    public:
+        LinuxGPTPPersistFile()
+        {
+            persistFD = -1;
+            restoredata = ((void *) -1);
+            storedDataLength = 0;
+            memoryDataLength = 0;
+        }
 
-	~LinuxGPTPPersistFile() {} ;
+        ~LinuxGPTPPersistFile() {} ;
 
-	bool initStorage(const char *persistID) {
-		persistIDStr = persistID;
+        bool initStorage(const char *persistID)
+        {
+            persistIDStr = persistID;
+            persistFD = open(persistID, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
 
-		persistFD = open(persistID, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-		if (persistFD == -1) {
-			GPTP_LOG_ERROR("Failed to open restore file");
-			return false;
-		}
-		return true;
-	}
+            if (persistFD == -1) {
+                GPTP_LOG_ERROR("Failed to open restore file");
+                return false;
+            }
 
-	bool closeStorage(void) {
-		if (persistFD != -1) {
-			if (restoredata != ((void *) -1))
-				munmap(restoredata, storedDataLength);
-			close(persistFD);
-		}
-		return true;
-	}
+            return true;
+        }
 
-	bool readStorage(char **bufPtr, uint32_t *bufSize) {
-		bool result = false;
-		if (persistFD != -1) {
-			// MMAP file
-			struct stat stat0;
-			if (fstat(persistFD, &stat0) == -1) {
-				GPTP_LOG_ERROR("Failed to stat restore file, %s", strerror(errno));
-				storedDataLength = 0;
-			}
-			else {
-				storedDataLength = stat0.st_size;
-				if (storedDataLength != 0) {
-					if ((restoredata = mmap(NULL, storedDataLength, PROT_READ | PROT_WRITE, MAP_SHARED, persistFD, 0)) == ((void *)-1)) {
-						GPTP_LOG_ERROR("Failed to mmap restore file, %s", strerror(errno));
-					}
-					else {
-						*bufSize = storedDataLength;
-						*bufPtr = (char *)restoredata;
-						result = true;
-					}
-				}
-			}
-		}
+        bool closeStorage(void)
+        {
+            if (persistFD != -1) {
+                if (restoredata != ((void *) -1)) {
+                    munmap(restoredata, storedDataLength);
+                }
 
-		return result;
-	}
+                close(persistFD);
+            }
 
-	void registerWriteCB(gPTPPersistWriteCB_t writeCB)
-	{
-		this->writeCB = writeCB;
-	}
+            return true;
+        }
 
-	void setWriteSize(uint32_t dataSize)
-	{
-		memoryDataLength = dataSize;
-	}
+        bool readStorage(char **bufPtr, uint32_t *bufSize)
+        {
+            bool result = false;
 
-	bool triggerWriteStorage(void)
-	{
+            if (persistFD != -1) {
+                // MMAP file
+                struct stat stat0;
 
-		bool result = false;
-		if (!writeCB) {
-			GPTP_LOG_ERROR("Persistent write callback not registered");
-			return result;
-		}
+                if (fstat(persistFD, &stat0) == -1) {
+                    GPTP_LOG_ERROR("Failed to stat restore file, %s", strerror(errno));
+                    storedDataLength = 0;
+                } else {
+                    storedDataLength = stat0.st_size;
 
-		if (memoryDataLength > storedDataLength) {
-			int ret = ftruncate(persistFD, memoryDataLength);
-			if (ret != 0) {
-				GPTP_LOG_ERROR("Failed to extend stored data length from %ld to %ld, %s", storedDataLength, memoryDataLength, strerror(errno));
-			}
-			if (restoredata != ((void *)-1)) {
-				restoredata = mremap(restoredata, storedDataLength, memoryDataLength, MREMAP_MAYMOVE);
-			}
-			else {
-				restoredata = mmap(NULL, memoryDataLength, PROT_READ | PROT_WRITE, MAP_SHARED, persistFD, 0);
-			}
-			if (restoredata == ((void *)-1)) {
+                    if (storedDataLength != 0) {
+                        if ((restoredata = mmap(NULL, storedDataLength, PROT_READ | PROT_WRITE,
+                                                MAP_SHARED, persistFD, 0)) == ((void *) -1)) {
+                            GPTP_LOG_ERROR("Failed to mmap restore file, %s", strerror(errno));
+                        } else {
+                            *bufSize = storedDataLength;
+                            *bufPtr = (char *)restoredata;
+                            result = true;
+                        }
+                    }
+                }
+            }
 
-			}
-			else {
-				storedDataLength = memoryDataLength;
-				result = true;
-			}
-		}
+            return result;
+        }
 
-		writeCB((char *)restoredata, storedDataLength);
-		return result;
-	}
+        void registerWriteCB(gPTPPersistWriteCB_t writeCB)
+        {
+            this->writeCB = writeCB;
+        }
+
+        void setWriteSize(uint32_t dataSize)
+        {
+            memoryDataLength = dataSize;
+        }
+
+        bool triggerWriteStorage(void)
+        {
+            bool result = false;
+
+            if (!writeCB) {
+                GPTP_LOG_ERROR("Persistent write callback not registered");
+                return result;
+            }
+
+            if (memoryDataLength > storedDataLength) {
+                int ret = ftruncate(persistFD, memoryDataLength);
+
+                if (ret != 0) {
+                    GPTP_LOG_ERROR("Failed to extend stored data length from %ld to %ld, %s",
+                                   storedDataLength, memoryDataLength, strerror(errno));
+                }
+
+                if (restoredata != ((void *) -1)) {
+                    restoredata = mremap(restoredata, storedDataLength, memoryDataLength,
+                                         MREMAP_MAYMOVE);
+                } else {
+                    restoredata = mmap(NULL, memoryDataLength, PROT_READ | PROT_WRITE, MAP_SHARED,
+                                       persistFD, 0);
+                }
+
+                if (restoredata == ((void *) -1)) {
+                } else {
+                    storedDataLength = memoryDataLength;
+                    result = true;
+                }
+            }
+
+            writeCB((char *)restoredata, storedDataLength);
+            return result;
+        }
 };
 
 
 
-GPTPPersist* makeLinuxGPTPPersistFile() {
-	return new LinuxGPTPPersistFile();
+GPTPPersist* makeLinuxGPTPPersistFile()
+{
+    return new LinuxGPTPPersistFile();
 }
 
