@@ -233,6 +233,8 @@ typedef struct {
     bool (*gptpDeinitIf)(void);
     bool (*gptpRegisterEvent)(void);
     bool (*gptpUnregisterEvent)(void);
+    bool (*gptpGetSyncStatusIf)(void);
+    bool (*gptpGetPortStateIf)(void);
 
 } gPTPLibInterfaceReq;
 

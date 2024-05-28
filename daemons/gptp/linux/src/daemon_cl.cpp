@@ -324,6 +324,7 @@ static void *wait_for_epoll_event(void *arg)
 static void gptpDaemonServDeInit(void)
 {
     int ret = 0;
+    unlink(ADDRESS);
     close(sock);
     ret = pthread_detach(thread_id);
 
@@ -388,6 +389,7 @@ static EtherPort *pPort = NULL;
 
 bool waitForInterface()
 {
+#if 0
     struct ifreq ifrq;
     int sockfd = socket(PF_PACKET, SOCK_DGRAM, 0);
     memset(&ifrq, 0, sizeof(ifrq));
@@ -400,6 +402,29 @@ bool waitForInterface()
     close(sockfd);
     GPTP_LOG_DEBUG( "waitForInterface %d %d \n", ifrq.ifr_flags, IFF_UP);
     return !(ifrq.ifr_flags & IFF_UP);
+#else
+    FILE* fp;
+    char status[5] = {0};
+    char buff[1024] = {0};
+    snprintf(buff, 1024, "/sys/class/net/%s/operstate", ifname_eth);
+    fp = fopen(buff, "r");
+
+    if (!fp) {
+        return true;
+    }
+
+    fread(status, 1, 5, fp);
+    fclose(fp);
+    GPTP_LOG_DEBUG( "waitForInterface status %c%c%c%c \n", status[0], status[1],
+                    status[2], status[3]);
+
+    if ((status[0] == 'u' && status[1] == 'p') || (status[0] == 'U'
+            && status[1] == 'P')) {
+        return false;
+    }
+
+    return true;
+#endif
 }
 
 int main(int argc, char **argv)
@@ -510,6 +535,7 @@ int main(int argc, char **argv)
     PLAT_strlcpy(ifname_eth, argv[1], IFNAME_SIZE);
     timeout.tv_sec = 1;
     timeout.tv_nsec = 0;
+    GPTP_LOG_INFO( "waiting for eth interface to be up.. \n");
 
     while (waitForInterface()) {
         sig = sigtimedwait(&set, NULL, &timeout);
@@ -524,6 +550,7 @@ int main(int argc, char **argv)
         GPTP_LOG_DEBUG( "waitForInterface %d \n", sig);
     }
 
+    GPTP_LOG_INFO( "eth interface is up.. \n");
     sig = 0;
     ifname = new InterfaceName( argv[1], strlen(argv[1]) );
 
