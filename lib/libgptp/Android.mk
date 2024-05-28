@@ -30,7 +30,7 @@ LOCAL_SHARED_LIBRARIES := libuhab libion
 endif
 endif
 
-LOCAL_CFLAGS += -DANDROID
+LOCAL_CFLAGS += -DANDROID -DSYSTEMD
 
 LOCAL_CLANG := true
 

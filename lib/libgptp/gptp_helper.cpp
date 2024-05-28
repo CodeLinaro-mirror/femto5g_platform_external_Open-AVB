@@ -78,10 +78,8 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <inttypes.h>
 #include <fcntl.h>           /* For O_* constants */
 #include <linux_ipc.hpp>
-#ifdef GPTP_AUTO_START
 #include <signal.h>
 #include <sys/un.h>
-#endif
 #include "gptp_helper.h"
 #include <atomic>
 #include <limits.h>
@@ -107,14 +105,13 @@ pthread_mutex_t gInitMutex = PTHREAD_MUTEX_INITIALIZER;
 #define BUF_SIZE 500
 #define GPTP_BOOTTIME_VALIDTY_RANGE 10000000000LL //using 10 sec max time difference to find the boot time ratio
 
-#ifdef GPTP_AUTO_START
 #ifdef SYSTEMD
-#define ADDRESS     "/dev/socket/gptp/gptp_socket"
+#define ADDRESS     "/dev/socket/gptp_socket"
 #else
 #define ADDRESS     "/tmp/gptp_socket"
 #endif
 #define CONNECT_RETRY_PERIOD_us  1000
-#endif
+
 
 #ifdef AVB_FEATURE_GVM_MODE
 #define SCT_SHM_NAME  "/dev/sct_gptp_shm"     /*!< Shared memory name*/
@@ -141,10 +138,10 @@ pthread_mutex_t gInitMutex = PTHREAD_MUTEX_INITIALIZER;
 #define GPTP_LOG_LEVEL LOG_INFO
 #ifdef ANDROID
 
-#define LOGE(tag, ...) __android_log_print (ANDROID_LOG_ERROR,"gptphelper", tag, __VA_ARGS__)
-#define LOGW(tag, ...) __android_log_print (ANDROID_LOG_WARN,"gptphelper", tag, __VA_ARGS__)
-#define LOGI(tag, ...) __android_log_print (ANDROID_LOG_INFO,"gptphelper", tag, __VA_ARGS__)
-#define LOGD(tag, ...) __android_log_print (ANDROID_LOG_DEBUG,"gptphelper", tag, __VA_ARGS__)
+#define LOGE(fmt, ...) __android_log_print (ANDROID_LOG_ERROR,"libgptp", fmt, __VA_ARGS__)
+#define LOGW(fmt, ...) __android_log_print (ANDROID_LOG_WARN,"libgptp", fmt, __VA_ARGS__)
+#define LOGI(fmt, ...) __android_log_print (ANDROID_LOG_INFO,"libgptp", fmt, __VA_ARGS__)
+#define LOGD(fmt, ...) __android_log_print (ANDROID_LOG_DEBUG,"libgptp", fmt, __VA_ARGS__)
 
 enum _LOGGER_SEVERITY {
     QCLOG_ERROR         = ANDROID_LOG_ERROR,
@@ -156,17 +153,17 @@ enum _LOGGER_SEVERITY {
 #endif
 #ifndef ANDROID
 
-#define GPTP_LOG_ERROR(fmt, ...) system_log(LOG_ERROR, "[tid : %d %s %d] : " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
-#define GPTP_LOG_WARNING(fmt, ...) system_log(LOG_WARNING, "[tid : %d %s %d] : " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
-#define GPTP_LOG_INFO(fmt, ...) system_log(LOG_INFO, "[tid : %d %s %d] : " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
-#define GPTP_LOG_DEBUG(fmt, ...) system_log(LOG_DEBUG, "[tid : %d %s %d] : " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
+#define GPTP_LOG_ERROR(fmt, ...) system_log(LOG_ERROR, "[%d:%s:%d] " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
+#define GPTP_LOG_WARNING(fmt, ...) system_log(LOG_WARNING, "[%d:%s:%d] " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
+#define GPTP_LOG_INFO(fmt, ...) system_log(LOG_INFO, "[%d:%s:%d] " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
+#define GPTP_LOG_DEBUG(fmt, ...) system_log(LOG_DEBUG, "[%d:%s:%d] " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__)
 
 #else
 
-#define GPTP_LOG_ERROR(fmt, ...) LOGE("%s: %d " fmt, __func__, __LINE__, ##__VA_ARGS__)
-#define GPTP_LOG_WARNING(fmt, ...) LOGW("%s: %d " fmt, __func__, __LINE__, ##__VA_ARGS__)
-#define GPTP_LOG_INFO(fmt, ...) LOGI("%s: %d " fmt, __func__, __LINE__, ##__VA_ARGS__)
-#define GPTP_LOG_DEBUG(fmt, ...) LOGD("%s: %d " fmt, __func__, __LINE__, ##__VA_ARGS__)
+#define GPTP_LOG_ERROR(fmt, ...) LOGE("[%s:%d] " fmt, __func__, __LINE__, ##__VA_ARGS__)
+#define GPTP_LOG_WARNING(fmt, ...) LOGW("[%s:%d] " fmt, __func__, __LINE__, ##__VA_ARGS__)
+#define GPTP_LOG_INFO(fmt, ...) LOGI("[%s:%d] " fmt, __func__, __LINE__, ##__VA_ARGS__)
+#define GPTP_LOG_DEBUG(fmt, ...) LOGD("[%s:%d] " fmt, __func__, __LINE__, ##__VA_ARGS__)
 
 #endif
 
@@ -175,9 +172,8 @@ enum _LOGGER_SEVERITY {
 
 
 static bool bInitialized = false;
-#ifdef GPTP_AUTO_START
 static bool bServiceConnect = false;
-#endif
+
 /* Pipe file descriptors for cleanup the loop */
 int pipefd[2];
 fd_set readfds;
@@ -193,10 +189,8 @@ static int rptp_fd = 0;
 static clockid_t rgptp_clkid = -1;
 #endif
 
-#ifdef GPTP_AUTO_START
 static pthread_t thread_id;
 static int sock = -1;
-#endif
 
 #ifdef LE_GVM
 static int gptp_fd = -1;
@@ -626,7 +620,6 @@ static bool gptpTimeInit(void)
     return true;
 }
 
-#ifdef GPTP_AUTO_START
 static void *gptpDaemonSrvConnect(void *arg)
 {
     int ret = -1;
@@ -780,8 +773,6 @@ static void gptpDaemonClientDeInit(void)
 
     return;
 }
-
-#endif
 
 /* public API to query gptp time */
 bool gptpGetPtpTimeFromMonoTime(uint64_t *gptp_time_sys, uint64_t time_mono_ns)
@@ -1438,20 +1429,9 @@ bool gptpInit(void)
 
     return true;
 #else
-#ifdef GPTP_AUTO_START
+
     return gptpDaemonClientInit();
-#else
-    LOCK();
 
-    if (!bInitialized) {
-        if (gptpTimeInit()) {
-            bInitialized = true;
-        }
-    }
-
-    UNLOCK();
-    return bInitialized;
-#endif
 #endif
 }
 
@@ -1468,9 +1448,8 @@ bool gptpDeinit(void)
 #else
     gptpMemDeinit(gPtpShmFd, gPtpMmap);
     gptpClkDeInit(gptpPhcFd);
-#ifdef GPTP_AUTO_START
+
     gptpDaemonClientDeInit();
-#endif
     bInitialized = false;
 #endif
     return true;

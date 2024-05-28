@@ -38,9 +38,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <stdio.h>
 #include <stdarg.h>
 #include <time.h>
-#ifdef GPTP_AUTO_START
 #include <syslog.h>
-#endif
 
 #ifdef GENIVI_DLT
 #include "dlt.h"
