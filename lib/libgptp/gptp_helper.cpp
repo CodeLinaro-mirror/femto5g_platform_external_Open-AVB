@@ -729,6 +729,7 @@ static int gptpDaemonClientInit(void)
         return false;
     }
 
+#ifndef AVB_FEATURE_GVM_MODE
     ret = pthread_create(&thread_id, NULL, gptpDaemonSrvConnect, NULL);
 
     if (ret != 0) {
@@ -741,14 +742,16 @@ static int gptpDaemonClientInit(void)
     if (ret != 0) {
         GPTP_LOG_ERROR("Failed to set thread name \n");
     }
+#endif
 
     return true;
 }
 
 static void gptpDaemonClientDeInit(void)
 {
-    int ret = 0;
+#ifndef AVB_FEATURE_GVM_MODE
     char data = '1';
+    int ret = 0;
     bServiceConnect = false;
     write(pipefd[1], &data, 1);
     ret = pthread_join(thread_id, NULL);
@@ -761,6 +764,7 @@ static void gptpDaemonClientDeInit(void)
         close(sock);
         sock = -1;
     }
+#endif
 
     // Release the Pipe
     if (pipefd[0] != -1) {
@@ -770,7 +774,6 @@ static void gptpDaemonClientDeInit(void)
     if (pipefd[1] != -1) {
         close(pipefd[1]);
     }
-
     return;
 }
 
