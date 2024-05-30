@@ -106,7 +106,11 @@ pthread_mutex_t gInitMutex = PTHREAD_MUTEX_INITIALIZER;
 #define GPTP_BOOTTIME_VALIDTY_RANGE 10000000000LL //using 10 sec max time difference to find the boot time ratio
 
 #ifdef SYSTEMD
+#ifdef ANDROID
 #define ADDRESS     "/dev/socket/gptp_socket"
+#else
+#define ADDRESS     "/dev/socket/gptp/gptp_socket"
+#endif // END OF ANDROID
 #else
 #define ADDRESS     "/tmp/gptp_socket"
 #endif

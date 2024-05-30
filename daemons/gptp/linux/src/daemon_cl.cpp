@@ -88,7 +88,11 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #define PHY_DELAY_MB_RX_I20 2133//100M delay
 
 #ifdef SYSTEMD
+#ifdef ANDROID
 #define ADDRESS     "/dev/socket/gptp_socket"
+#else
+#define ADDRESS     "/dev/socket/gptp/gptp_socket"
+#endif // END OF ANDROID
 #else
 #define ADDRESS     "/tmp/gptp_socket"
 #endif
