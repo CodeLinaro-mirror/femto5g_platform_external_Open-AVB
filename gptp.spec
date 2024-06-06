@@ -22,13 +22,29 @@ make gptp libgptp libgptp_test
 mkdir -p %{buildroot}/%{_bindir}
 mkdir -p %{buildroot}/%{_libdir}
 mkdir -p %{buildroot}/%{_includedir}
+mkdir -p %{buildroot}/%{_sysconfdir}
+mkdir -p %{buildroot}/%{_unitdir}
 install -m 755 daemons/gptp/linux/build/obj/qgptp %{buildroot}/%{_bindir}
 install -m 755 examples/libgptp_test/libgptp_test %{buildroot}/%{_bindir}
 install -m 755 lib/libgptp/*.so %{buildroot}/%{_libdir}
 install -m 644 lib/libgptp/gptp_helper.h %{buildroot}/%{_includedir}
+install -m 0644 daemons/gptp/gptp_cfg.ini %{buildroot}/%{_sysconfdir}
+install -DpZm 0644 gptp.service %{buildroot}/%{_unitdir}
+
+%post
+systemctl enable gptp.service
+
+%preun
+%systemd_preun gptp.service
+
+%postun
+%systemd_postun_with_restart gptp.service
 
 %files
 %{_bindir}/qgptp
 %{_bindir}/libgptp_test
 %{_libdir}/libgptp.so
 %{_includedir}/gptp_helper.h
+%{_sysconfdir}/gptp_cfg.ini
+%{_unitdir}/gptp.service
+

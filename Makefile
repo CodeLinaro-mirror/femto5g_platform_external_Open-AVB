@@ -27,6 +27,12 @@ ifeq ($(ENABLE_GPTP),1)
 	mkdir -p $(DESTDIR)$(bindir)
 	install -m 0755 daemons/gptp/linux/build/obj/qgptp $(DESTDIR)$(bindir)
 endif
+ifeq ($(ENABLE_GPTP_SERVICE),1)
+	mkdir -p $(DESTDIR)$(sysconfdir)
+	mkdir -p $(DESTDIR)$(systemd_unitdir)
+	install -m 0644 daemons/gptp/gptp_cfg.ini $(DESTDIR)$(sysconfdir)
+	install -DpZm 0644 gptp.service $(DESTDIR)$(systemd_unitdir)/system/gptp.service
+endif
 
 libgptp:
 	$(call descend,lib/libgptp)
