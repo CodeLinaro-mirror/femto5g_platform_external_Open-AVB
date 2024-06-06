@@ -35,13 +35,8 @@ SourcePath=/usr/bin/qgptp
 After=systemd-udevd.service
 
 [Service]
-User=vnw
-Group=vnw
 Restart=on-failure
 ExecStart=/usr/bin/qgptp ini -F /etc/gptp_cfg.ini
-SupplementaryGroups=net_admin net_raw
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
 
 [Install]
 WantedBy=multi-user.target
