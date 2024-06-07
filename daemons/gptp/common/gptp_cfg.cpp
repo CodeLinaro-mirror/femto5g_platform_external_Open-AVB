@@ -109,6 +109,19 @@ int GptpIniParser::iniCallBack(void *user, const char *section,
                 valOK = true;
                 parser->_config.clockClass = clockClass;
             }
+        } else if ( parseMatch(name, "debugLog") ) {
+            errno = 0;
+            char *pEnd;
+            uint8_t debugLog = (uint8_t) strtoul(value, &pEnd, 10);
+
+            if ( *pEnd == '\0' && errno == 0) {
+                if (debugLog == 1 || debugLog == 0) {
+                    valOK = true;
+                    parser->_config.debugLog = debugLog;
+                } else {
+                    valOK = false;
+                }
+            }
         }
     } else if ( parseMatch(section, "port") ) {
         if ( parseMatch(name, "announceReceiptTimeout") ) {

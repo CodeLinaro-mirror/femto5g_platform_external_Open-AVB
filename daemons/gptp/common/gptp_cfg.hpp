@@ -77,6 +77,7 @@ class GptpIniParser
             uint8_t priority1;
             uint8_t priority2;
             uint8_t clockClass;
+            uint8_t debugLog = 0;
 
             /*port data set*/
             unsigned int announceReceiptTimeout;
@@ -131,6 +132,17 @@ class GptpIniParser
         {
             return _config.priority2;
         }
+        /**
+         * @brief  Reads debugLog config value
+         * @param  void
+         * @return debugLog
+         */
+
+        uint8_t getDebugLog(void)
+        {
+            return _config.debugLog;
+        }
+
         /**
          * @brief  Reads clockClass config value
          * @param  void

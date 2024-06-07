@@ -164,7 +164,7 @@ static inline int64_t pctns(struct ptp_clock_time t)
 void print_usage( char *arg0 )
 {
     fprintf( stderr,
-             "%s <network interface> [-S] [-P] [-M <filename>] "
+             "%s <network intf name/'ini' if intf is mentioned in config ini file> [-S] [-P] [-M <filename>] "
              "[-C ] [-G <group>] [-R <priority 1>] "
              "[-D <gb_tx_delay,gb_rx_delay,mb_tx_delay,mb_rx_delay>] "
              "[-T] [-L] [-E] [-B] [-V] [-N] [-GM] [-INITSYNC <value>] [-OPERSYNC <value>] "
@@ -528,11 +528,6 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    if (strcmp(argv[1], "ini") != 0) {
-        PLAT_strlcpy(ifname_eth, argv[1], IFNAME_SIZE);
-        ifname = new InterfaceName( argv[1], strlen(argv[1]) );
-    }
-
     /* Process optional arguments */
     for ( i = 2; i < argc; ++i ) {
         if ( argv[i][0] == '-' ) {
@@ -688,6 +683,16 @@ int main(int argc, char **argv)
         }
     }
 
+    if (strcmp(argv[1], "ini") != 0) {
+        PLAT_strlcpy(ifname_eth, argv[1], IFNAME_SIZE);
+        ifname = new InterfaceName( argv[1], strlen(argv[1]) );
+    } else if (!use_config_file) {
+        printf( "Interface name required/ ini file is required\n" );
+        print_usage( argv[0] );
+        CLEANUP_RESOURCES();
+        return -1;
+    }
+
     if (!input_delay) {
         ether_phy_delay[LINKSPEED_1G].set_delay
         ( PHY_DELAY_GB_TX_I20, PHY_DELAY_GB_RX_I20 );
@@ -772,6 +777,10 @@ int main(int argc, char **argv)
                 std::string if_name = iniParser.getIfaceName();
                 PLAT_strlcpy(ifname_eth, if_name.c_str(), IFNAME_SIZE);
                 ifname = new InterfaceName( ifname_eth, strlen(ifname_eth) );
+            }
+
+            if (!portInit.testMode && iniParser.getDebugLog() != 0) {
+                portInit.testMode = true;
             }
 
             if (port_state == PTP_MASTER) {
