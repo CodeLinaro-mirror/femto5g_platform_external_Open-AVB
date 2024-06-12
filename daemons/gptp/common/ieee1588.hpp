@@ -98,6 +98,7 @@ typedef enum {
     LINKDOWN,                           //!< Triggered when link goes down.
     STATE_CHANGE_EVENT,                 //!< Signalizes that something has changed. Recalculates best master.
     SYNC_INTERVAL_TIMEOUT_EXPIRES,      //!< Sync interval expired. Its time to send a sync message.
+    RSYNC_INTERVAL_TIMEOUT_EXPIRES,
     PDELAY_INTERVAL_TIMEOUT_EXPIRES,    //!< PDELAY interval expired. Its time to send pdelay_req message
     SYNC_RECEIPT_TIMEOUT_EXPIRES,       //!< Sync receipt timeout. Restart timers and take actions based on port's state.
     QUALIFICATION_TIMEOUT_EXPIRES,      //!< Qualification timeout. Event not currently used
@@ -502,5 +503,7 @@ static inline void TIMESTAMP_ADD_NS( Timestamp &ts, uint64_t ns )
 PTPMessageCommon *buildPTPMessage
 ( char *buf, int size, LinkLayerAddress *remote,
   EtherPort *port );
+
+#define RSYNC_RATE_DEFAULT     (0.95)
 
 #endif

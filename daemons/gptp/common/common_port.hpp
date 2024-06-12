@@ -301,6 +301,13 @@ typedef struct {
     /* CDS 6.2.1.6 */
     int8_t operLogSyncInterval;
 
+    /*802.1AS Recovered Clock Quality Testing*/
+    int8_t reverseSyncEnabled;
+
+    int8_t reverseSyncDomain;
+
+    double reverseSyncRate;
+
     /* CDS 6.2.2.3 */
     FrequencyRatio _peer_rate_offset;
 
@@ -433,6 +440,13 @@ typedef struct {
     gptpStatsType_t status;
     syncInterval_t syncInterval;
 } sct_gptp_data;
+
+typedef struct
+{
+    int8_t reverseSyncEnabled;
+    int8_t reverseSyncDomain;
+    double reverseSyncRate;
+}RsyncStatus_t;
 
 /**
  * @brief Port functionality common to all network media
@@ -1477,6 +1491,27 @@ class CommonPort
          */
         virtual void becomeSlave( bool restart_syntonization ) = 0;
 
+         /**
+         * @brief  enable reverse sync.
+         * @param  void
+         * @return void
+         */
+        virtual void enableRsync( int8_t RSyncDomain, double RSyncRate ) = 0;
+
+        /**
+         * @brief  disable reverse sync.
+         * @param  void
+         * @return void
+         */
+        virtual void disableRsync() = 0;
+
+       /**
+        * @brief  set reverse sync parameter.
+        * @param  RsyncStatus_t reverse sync structure
+        * @return TRUE if success. FALSE otherwise
+        */
+        bool setRsync(RsyncStatus_t *Rsync);
+
         /**
          * @brief  Sets current sync count value.
          * @param  cnt [in] sync count value
@@ -1688,7 +1723,14 @@ class CommonPort
          * @param  waitTime time interval in nanoseconds
          * @return none
          */
-        void startSyncIntervalTimer(long long unsigned int waitTime);
+        void startSyncIntervalTimer(long long unsigned int waitTime, Event e);
+
+        /**
+         * @brief  stop sync interval timer
+         * @param  event to stop sync interval
+         * @return none
+         */
+        void stopSyncIntervalTimer(Event e);
 
         /**
          * @brief  Start announce interval timer

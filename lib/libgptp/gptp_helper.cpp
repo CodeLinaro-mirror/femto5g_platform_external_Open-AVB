@@ -451,6 +451,49 @@ static int gptpScaling(gPtpTimeData * td, char *memory_offset_buffer)
     return true;
 }
 
+/* gptp core function to copy gptp offset data from shared memory */
+static int updateGptpRsync(RsyncStatus_t *rSync, char *memory_offset_buffer)
+{
+    GPTP_LOG_ERROR("%s : ENTER \n", __func__);
+
+    if ((rSync == NULL) || (memory_offset_buffer == NULL)) {
+        GPTP_LOG_ERROR("updateGptpRsync failure %p %p\n", rSync, memory_offset_buffer);
+        return false;
+    }
+
+#ifndef AVB_FEATURE_GVM_MODE
+    gPtpTimeData *ptimedata;
+    ptimedata = (gPtpTimeData *) (memory_offset_buffer + sizeof(pthread_mutex_t));
+    pthread_mutex_lock((pthread_mutex_t *) memory_offset_buffer);
+    ptimedata->reverseSyncEnabled = rSync->reverseSyncEnabled;
+    ptimedata->reverseSyncDomain = rSync->reverseSyncDomain;
+    ptimedata->reverseSyncRate = rSync->reverseSyncRate;
+    pthread_mutex_unlock((pthread_mutex_t *) memory_offset_buffer);
+#else
+    int buf_offset = 0;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
+    uint32_t a, b;
+    gPtpTimeData *ptimedata;
+    int count = 0;
+    buf_offset += (2 * sizeof(std::atomic<uint32_t>));
+    seq0 = (std::atomic<uint32_t> *)memory_offset_buffer;
+    seq1 = (std::atomic<uint32_t> *)(memory_offset_buffer + sizeof(
+                                         std::atomic<uint32_t>));
+    ptimedata   = (gPtpTimeData *) (memory_offset_buffer + buf_offset);
+
+    do {
+        a = seq0->load();
+        b = seq1->load();
+        ptimedata->reverseSyncEnabled = rSync->reverseSyncEnabled;
+        ptimedata->reverseSyncDomain = rSync->reverseSyncDomain;
+        ptimedata->reverseSyncRate = rSync->reverseSyncRate;
+        count++;
+    } while ((a != b || a != seq0->load() || b != seq1->load()) && count < 3);
+
+#endif
+    return true;
+}
 
 #ifdef AVB_FEATURE_GVM_MODE
 
@@ -746,8 +789,8 @@ static int gptpDaemonClientInit(void)
     if (ret != 0) {
         GPTP_LOG_ERROR("Failed to set thread name \n");
     }
-#endif
 
+#endif
     return true;
 }
 
@@ -768,6 +811,7 @@ static void gptpDaemonClientDeInit(void)
         close(sock);
         sock = -1;
     }
+
 #endif
 
     // Release the Pipe
@@ -778,6 +822,7 @@ static void gptpDaemonClientDeInit(void)
     if (pipefd[1] != -1) {
         close(pipefd[1]);
     }
+
     return;
 }
 
@@ -1125,6 +1170,45 @@ int gptpGetPortState(void)
     return gPtpTD.port_state;
 }
 
+
+/* public API to enable/disable reverse sync */
+int setRsyncStatus(RsyncStatus_t *status)
+{
+    GPTP_LOG_ERROR("%s : ENTER \n", __func__);
+
+    if (!bInitialized) {
+        return -1;
+    }
+
+    if (!updateGptpRsync(status, gPtpMmap)) {
+        return -1;
+    }
+
+    GPTP_LOG_ERROR("%s : EXIT \n", __func__);
+    return 0;
+}
+
+int getTimeError(int16_t *timeError)
+{
+    gPtpTimeData gPtpTD;
+
+    if (!bInitialized) {
+        return -1;
+    }
+
+    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+        return -1;
+    }
+
+    if (gPtpTD.port_state == PTP_MASTER) {
+        *timeError = gPtpTD.ml_phoffset;
+    } else {
+        return -1;
+    }
+
+    return 0;
+}
+
 /* public API to query gptp sync status */
 bool gptpGetSyncStatus(void)
 {
@@ -1436,9 +1520,7 @@ bool gptpInit(void)
 
     return true;
 #else
-
     return gptpDaemonClientInit();
-
 #endif
 }
 
@@ -1455,7 +1537,6 @@ bool gptpDeinit(void)
 #else
     gptpMemDeinit(gPtpShmFd, gPtpMmap);
     gptpClkDeInit(gptpPhcFd);
-
     gptpDaemonClientDeInit();
     bInitialized = false;
 #endif

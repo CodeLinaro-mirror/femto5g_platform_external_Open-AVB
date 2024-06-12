@@ -104,6 +104,9 @@ IEEE1588Clock::IEEE1588Clock
     clock_quality.offsetScaledLogVariance = 0x436A;
     time_source = 160;
     domain_number = 0;
+    rsync_domain_number = 0;
+    rsync_rate = RSYNC_RATE_DEFAULT;
+    GPTP_LOG_INFO("rsync_domain_number: %d, rsync_rate %f \n", rsync_domain_number, rsync_rate);
     _syntonize = syntonize;
     _new_syntonization_set_point = false;
     _ppm = 0;
@@ -584,6 +587,8 @@ void IEEE1588Clock::setMasterOffset
     _master_local_freq_offset = master_local_freq_offset;
     _local_system_freq_offset = local_system_freq_offset;
     static bool initialdrift = false;
+    static int prev_rsync_state = 0;
+    RsyncStatus_t rSync = {0};
 
     if (port->getTestMode()) {
         GPTP_LOG_STATUS("Clock offset:%lld   Clock rate ratio:%Lf   Sync Count:%u   PDelay Count:%u",
@@ -653,7 +658,15 @@ void IEEE1588Clock::setMasterOffset
             master_local_freq_offset, local_system_freq_offset_avg.get(),
             local_q_freq_offset_avg.get(), local_boot_freq_offset_avg.get(),
             TIMESTAMP_TO_NS(local_time),
-            sync_count, pdelay_count, port_state, asCapable);
+            sync_count, pdelay_count, port_state, asCapable, &rSync);
+        if (prev_rsync_state != rSync.reverseSyncEnabled) {
+            port->setRsync(&rSync);
+        }
+        prev_rsync_state = rSync.reverseSyncEnabled;
+        if (port->getTestMode()) {
+                GPTP_LOG_STATUS("%s:%d reverseSyncEnabled = %d reverseSyncRate = %lf reverseSyncDomain = %d\n", 
+                    __func__, __LINE__, rSync.reverseSyncEnabled, rSync.reverseSyncRate, rSync.reverseSyncDomain );
+        }
         ipc->update_grandmaster(
             grandmaster_id, domain_number);
         ipc->update_network_interface(

@@ -59,6 +59,7 @@ PTPMessageCommon::PTPMessageCommon( CommonPort *port )
     versionPTP = GPTP_VERSION;
     versionNetwork = PTP_NETWORK_VERSION;
     domainNumber = port->getClock()->getDomain();
+    rsync_domainNumber = port->getClock()->getRSyncDomain();
     // Set flags as necessary
     memset(flags, 0, PTP_FLAGS_LENGTH);
     flags[PTP_PTPTIMESCALE_BYTE] |= (0x1 << PTP_PTPTIMESCALE_BIT);
@@ -89,6 +90,7 @@ PTPMessageCommon *buildPTPMessage
     PortIdentity *sourcePortIdentity;
     Timestamp timestamp(0, 0, 0);
     unsigned counter_value = 0;
+    uint8_t domainNumber;
 #if PTP_DEBUG
     {
         int i;
@@ -630,7 +632,8 @@ void PTPMessageCommon::buildCommonHeader(uint8_t * buf)
     sourcePortIdentity->getPortNumberNO
     ((uint16_t *) (buf + PTP_COMMON_HDR_SOURCE_PORT_ID
                    (PTP_COMMON_HDR_OFFSET)));
-    GPTP_LOG_VERBOSE("Sending Sequence Id: %u", sequenceId);
+    GPTP_LOG_VERBOSE("Sending Sequence Id: %u, domainNumber %d", sequenceId,
+                     domainNumber);
     sequenceId = PLAT_htons(sequenceId);
     memcpy(buf + PTP_COMMON_HDR_SEQUENCE_ID(PTP_COMMON_HDR_OFFSET),
            &sequenceId, sizeof(sequenceId));
@@ -737,13 +740,26 @@ bool PTPMessageSync::sendPort
     unsigned char tspec_msg_t = 0x0;
     Timestamp originTimestamp_BE;
     uint32_t link_speed;
+    uint16_t sequenceId;
     memset(buf_t, 0, 256);
     // Create packet in buf
     // Copy in common header
     messageLength = PTP_COMMON_HDR_LENGTH + PTP_SYNC_LENGTH;
     tspec_msg_t |= messageType & 0xF;
     buildCommonHeader(buf_ptr);
+
     // Get timestamp
+    if ((port->getIsRsync()) && (port->getPortState() == PTP_SLAVE)) {
+        memcpy(buf_ptr + PTP_COMMON_HDR_DOMAIN_NUMBER(PTP_COMMON_HDR_OFFSET),
+               &rsync_domainNumber, sizeof(rsync_domainNumber));
+        memcpy(&(sequenceId),
+               buf_ptr + PTP_COMMON_HDR_SEQUENCE_ID(PTP_COMMON_HDR_OFFSET),
+               sizeof(sequenceId));
+        sequenceId = PLAT_ntohs(sequenceId);
+        GPTP_LOG_VERBOSE("Sending Reverse Sync: Sequence Id %d, domainNumber %d",
+                         sequenceId, rsync_domainNumber);
+    }
+
     originTimestamp = port->getClock()->getTime();
     originTimestamp_BE.seconds_ms = PLAT_htons(originTimestamp.seconds_ms);
     originTimestamp_BE.seconds_ls = PLAT_htonl(originTimestamp.seconds_ls);
@@ -924,6 +940,7 @@ bool PTPMessageFollowUp::sendPort
     uint8_t *buf_ptr = buf_t + port->getPayloadOffset();
     unsigned char tspec_msg_t = 0x0;
     Timestamp preciseOriginTimestamp_BE;
+    uint16_t sequenceId;
     memset(buf_t, 0, 256);
     /* Create packet in buf
        Copy in common header */
@@ -931,6 +948,18 @@ bool PTPMessageFollowUp::sendPort
         PTP_COMMON_HDR_LENGTH + PTP_FOLLOWUP_LENGTH + sizeof(tlv);
     tspec_msg_t |= messageType & 0xF;
     buildCommonHeader(buf_ptr);
+
+    if ((port->getIsRsync()) && (port->getPortState() == PTP_SLAVE)) {
+        memcpy(buf_ptr + PTP_COMMON_HDR_DOMAIN_NUMBER(PTP_COMMON_HDR_OFFSET),
+               &rsync_domainNumber, sizeof(rsync_domainNumber));
+        memcpy(&(sequenceId),
+               buf_ptr + PTP_COMMON_HDR_SEQUENCE_ID(PTP_COMMON_HDR_OFFSET),
+               sizeof(sequenceId));
+        sequenceId = PLAT_ntohs(sequenceId);
+        GPTP_LOG_VERBOSE("Sending Reverse FollowUp: Sequence Id %d, domainNumber %d",
+                         sequenceId, rsync_domainNumber);
+    }
+
     preciseOriginTimestamp_BE.seconds_ms =
         PLAT_htons(preciseOriginTimestamp.seconds_ms);
     preciseOriginTimestamp_BE.seconds_ls =
@@ -1128,6 +1157,10 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
     port->getClock()->getFUPStatus()->setScaledLastGmPhaseChange(
         scaledLastGmPhaseChange );
 
+    if ((port->getIsRsync()) && (port->getPortState() == PTP_MASTER)) {
+        GPTP_LOG_INFO("SLAVE Clock offset: %lld", scalar_offset);
+    }
+
     if ( port->getPortState() == PTP_SLAVE ) {
         /* The sync_count counts the number of sync messages received
            that influence the time on the device. Since adjustments are only
@@ -1175,7 +1208,7 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
         local_boot_offset =
             TIMESTAMP_TO_NS(boot_time) - TIMESTAMP_TO_NS(device_time);
         port->getClock()->setMasterOffset
-        ( port, 0, device_time, 1.0,
+        ( port, (port->getIsRsync()) ? scalar_offset : 0, device_time, 1.0,
           local_system_offset, system_time,
           local_system_freq_offset,
           local_q_offset, q_time,
@@ -1909,7 +1942,7 @@ void PTPMessageSignalling::processMessage( EtherPort *port )
                                      port->getSyncInterval()) *  1000000000.0));
         waitTime = waitTime > EVENT_TIMER_GRANULARITY ? waitTime :
                    EVENT_TIMER_GRANULARITY;
-        port->startSyncIntervalTimer(waitTime);
+        port->startSyncIntervalTimer(waitTime, SYNC_INTERVAL_TIMEOUT_EXPIRES);
     } else if (timeSyncInterval == PTPMessageSignalling::sigMsgInterval_NoSend) {
         // TODO: No send functionality needs to be implemented.
         GPTP_LOG_WARNING("Signal received to stop sending Sync messages: Not implemented");
@@ -1921,7 +1954,7 @@ void PTPMessageSignalling::processMessage( EtherPort *port )
                                      port->getSyncInterval()) *  1000000000.0));
         waitTime = waitTime > EVENT_TIMER_GRANULARITY ? waitTime :
                    EVENT_TIMER_GRANULARITY;
-        port->startSyncIntervalTimer(waitTime);
+        port->startSyncIntervalTimer(waitTime, SYNC_INTERVAL_TIMEOUT_EXPIRES);
     }
 
     if (!port->getAutomotiveProfile()) {
