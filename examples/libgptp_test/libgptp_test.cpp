@@ -54,6 +54,9 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <unistd.h>
 #include <gptp_helper.h>
 
+#define CLOCKFD 3
+#define FD_TO_CLOCKID(fd)   ((~(clockid_t) (fd) << 3) | CLOCKFD)
+
 uint64_t systemTime(int clock)
 {
     uint64_t ret;
