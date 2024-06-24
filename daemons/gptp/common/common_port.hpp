@@ -443,9 +443,9 @@ typedef struct {
 
 typedef struct
 {
-    int8_t reverseSyncEnabled;
-    int8_t reverseSyncDomain;
-    double reverseSyncRate;
+    int8_t reverseSyncEnabled = 0;
+    int8_t reverseSyncDomain = 0;
+    double reverseSyncRate = 0;
 }RsyncStatus_t;
 
 /**

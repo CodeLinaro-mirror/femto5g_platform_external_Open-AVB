@@ -588,7 +588,7 @@ void IEEE1588Clock::setMasterOffset
     _local_system_freq_offset = local_system_freq_offset;
     static bool initialdrift = false;
     static int prev_rsync_state = 0;
-    RsyncStatus_t rSync = {0};
+    RsyncStatus_t rSync;
 
     if (port->getTestMode()) {
         GPTP_LOG_STATUS("Clock offset:%lld   Clock rate ratio:%Lf   Sync Count:%u   PDelay Count:%u",

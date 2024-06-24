@@ -472,7 +472,7 @@ int main(int argc, char *argv[])
     bool gptp_scaling_available = false;
     gptpTimeInfo_t ptp_data;
     int retry = 0;
-    RsyncStatus_t Rsync = {0};
+    RsyncStatus_t Rsync;
     gptp_scaling_available = gptpInit();
 
     if (gptp_scaling_available) {
