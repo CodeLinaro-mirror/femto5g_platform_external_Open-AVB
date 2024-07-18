@@ -54,6 +54,9 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <unistd.h>
 #include <gptp_helper.h>
 
+#define CLOCKFD 3
+#define FD_TO_CLOCKID(fd)   ((~(clockid_t) (fd) << 3) | CLOCKFD)
+
 uint64_t systemTime(int clock)
 {
     uint64_t ret;
@@ -169,6 +172,7 @@ void loop_test(int time_us)
     int64_t delta_qtimer_time;
     int64_t delta_ptp_time;
     int64_t delta_qtimer_ptp;
+    int16_t time_error;
     int rcvid = 0;
     prev_qtimer_time = getQtimerTime();
     gptpGetCurPtpTime(&prev_ptp_time);
@@ -251,6 +255,12 @@ void loop_test(int time_us)
             printf("Failed to get Path Delay Measurement Data\n");
         }
 
+        if( 0 == getTimeError(&time_error)) {
+            printf("loop_test: ********************** Reverse sync - Slave clock offset ********************\n");
+            printf("loop_test: time error %d\n", time_error);
+        } else {
+            printf("Failed to get time error\n");
+        }
         usleep(time_us);
     }
 }
@@ -462,6 +472,7 @@ int main(int argc, char *argv[])
     bool gptp_scaling_available = false;
     gptpTimeInfo_t ptp_data;
     int retry = 0;
+    RsyncStatus_t Rsync;
     gptp_scaling_available = gptpInit();
 
     if (gptp_scaling_available) {
@@ -557,7 +568,7 @@ int main(int argc, char *argv[])
         }
 
 #endif
-    } else if (argc == 3) {
+    } else if (argc == 3 || argc == 5) {
         if (argv[1][0] == 'm') {
             printf("\n\n\n====================gPTP Monotonic pair based test=====================\n\n\n");
             int sleepduration = atoi(argv[2]);
@@ -570,9 +581,22 @@ int main(int argc, char *argv[])
             printf("\n\n\n====================gPTP loop test=====================\n\n\n");
             int sleepduration = atoi(argv[2]);
             loop_test(sleepduration);
+        } else if(argv[1][0] == 'R') {
+            printf("\n\n\n====================gPTP Reverse sync test=====================\n\n\n");
+            Rsync.reverseSyncEnabled = atoi(argv[2]);
+            if (Rsync.reverseSyncEnabled && argc == 5) {
+                Rsync.reverseSyncDomain = atoi(argv[3]);
+                Rsync.reverseSyncRate = atof(argv[4]);
+            }
+            printf("RSYNC: %d, RSYNCDOMAIN %d, RSYNCRATE %f", Rsync.reverseSyncEnabled, Rsync.reverseSyncDomain, Rsync.reverseSyncRate);
+
+            if(setRsyncStatus(&Rsync))
+            {
+                printf("Error while setting reverse sync status");
+                return 0;
+            }
         }
     }
-
 #ifdef RGPTP_CLNT_ENABLED
 
     if (argc == 3) {

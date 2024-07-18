@@ -112,6 +112,9 @@ EtherPort::EtherPort( PortInit_t *portInit ) :
     operLogPdelayReqInterval = portInit->operLogPdelayReqInterval;
     operLogSyncInterval = portInit->operLogSyncInterval;
     isGM = portInit->isGM;
+    reverseSyncEnabled = portInit->reverseSyncEnabled;
+    reverseSyncDomain = portInit->reverseSyncDomain;
+    reverseSyncRate = portInit->reverseSyncRate;
 
     if (automotive_profile) {
         setAsCapable( true );
@@ -130,6 +133,18 @@ EtherPort::EtherPort( PortInit_t *portInit ) :
 
         if (operLogSyncInterval == LOG2_INTERVAL_INVALID) {
             operLogSyncInterval = 0;    // 1 second
+        }
+
+        if (reverseSyncEnabled == LOG2_INTERVAL_INVALID) {
+            reverseSyncEnabled = 0;           // RSYNC
+        }
+
+        if (reverseSyncDomain == LOG2_INTERVAL_INVALID) {
+            reverseSyncDomain = 0;           // RSYNC_DOMAIN
+        }
+
+        if (reverseSyncRate == LOG2_INTERVAL_INVALID) {
+            reverseSyncRate = RSYNC_RATE_DEFAULT;           // RSYNC_RATE
         }
     } else {
         if (portInit->asCapable) {
@@ -152,6 +167,18 @@ EtherPort::EtherPort( PortInit_t *portInit ) :
 
         if (operLogSyncInterval == LOG2_INTERVAL_INVALID) {
             operLogSyncInterval = 0;    // 1 second
+        }
+
+        if (reverseSyncEnabled == LOG2_INTERVAL_INVALID) {
+            reverseSyncEnabled = 0;           // RSYNC
+        }
+
+        if (reverseSyncDomain == LOG2_INTERVAL_INVALID) {
+            reverseSyncDomain = 0;           // RSYNC_DOMAIN
+        }
+
+        if (reverseSyncRate == LOG2_INTERVAL_INVALID) {
+            reverseSyncRate = RSYNC_RATE_DEFAULT;           // RSYNC_RATE
         }
     }
 
@@ -655,6 +682,48 @@ bool EtherPort::_processEvent( Event e )
             }
             break;
 
+        case RSYNC_INTERVAL_TIMEOUT_EXPIRES: {
+                GPTP_LOG_VERBOSE("RSYNC_INTERVAL_TIMEOUT_EXPIRES evt occured");
+                /* Set offset from master to zero, update device vs
+                   system time offset */
+                // Send a sync message and then a followup to broadcast
+                PTPMessageSync *sync = new PTPMessageSync(this);
+                PortIdentity dest_id;
+                bool tx_succeed;
+                getPortIdentity(dest_id);
+                sync->setPortIdentity(&dest_id);
+                getTxLock();
+                tx_succeed = sync->sendPort(this, NULL);
+                GPTP_LOG_DEBUG("Sent RSYNC message");
+                putTxLock();
+
+                if ( tx_succeed ) {
+                    Timestamp sync_timestamp = sync->getTimestamp();
+                    GPTP_LOG_VERBOSE("Successful RSync timestamp");
+                    GPTP_LOG_VERBOSE("Seconds: %u",
+                                     sync_timestamp.seconds_ls);
+                    GPTP_LOG_VERBOSE("Nanoseconds: %u",
+                                     sync_timestamp.nanoseconds);
+                    PTPMessageFollowUp *follow_up = new PTPMessageFollowUp(this);
+                    PortIdentity dest_id;
+                    getPortIdentity(dest_id);
+                    //setLastvalidSeqID(sync->getSequenceId());
+                    follow_up->setClockSourceTime(getClock()->getFUPInfo());
+                    follow_up->setPortIdentity(&dest_id);
+                    follow_up->setSequenceId(sync->getSequenceId());
+                    follow_up->setPreciseOriginTimestamp
+                    (sync_timestamp);
+                    follow_up->sendPort(this, NULL);
+                    delete follow_up;
+                } else {
+                    GPTP_LOG_ERROR
+                    ("*** Unsuccessful reverse sync timestamp");
+                }
+
+                delete sync;
+            }
+            break;
+
         case FAULT_DETECTED:
             GPTP_LOG_ERROR("Received FAULT_DETECTED event");
 
@@ -785,7 +854,7 @@ void EtherPort::becomeMaster( bool annc )
         }
     }
 
-    startSyncIntervalTimer(16000000);
+    startSyncIntervalTimer(16000000, SYNC_INTERVAL_TIMEOUT_EXPIRES);
     GPTP_LOG_STATUS("Switching to Master" );
     clock->updateFUPInfo();
     return;
@@ -813,6 +882,15 @@ void EtherPort::becomeSlave( bool restart_syntonization )
           (pow((double)2, getAnnounceInterval()) * 1000000000.0)));
     }
 
+    if (reverseSyncEnabled) {
+        GPTP_LOG_INFO("RSYNC: %d, RSYNC_DOMAIN %d, RSYNC_RATE %f", reverseSyncEnabled,
+                      reverseSyncDomain, reverseSyncRate);
+        clock->setRsyncDomain(reverseSyncDomain);
+        clock->setRsyncRate(reverseSyncRate);
+        startSyncIntervalTimer(16000000 * reverseSyncRate,
+                               RSYNC_INTERVAL_TIMEOUT_EXPIRES);
+    }
+
     GPTP_LOG_STATUS("Switching to Slave" );
 
     if ( restart_syntonization ) {
@@ -821,6 +899,32 @@ void EtherPort::becomeSlave( bool restart_syntonization )
 
     getClock()->updateFUPInfo();
     return;
+}
+
+void EtherPort::enableRsync( int8_t RSyncDomain, double RSyncRate)
+{
+    reverseSyncEnabled = true;
+    reverseSyncDomain = RSyncDomain;
+    reverseSyncRate = RSyncRate;
+    GPTP_LOG_INFO("%s:%d enable reverse sync, domain %d, rate %f",
+                  __func__, __LINE__, reverseSyncEnabled, reverseSyncDomain, reverseSyncRate);
+
+    if ( clock->getPriority1() == 255 || getPortState() == PTP_SLAVE ) {
+        clock->setRsyncDomain(reverseSyncDomain);
+        clock->setRsyncRate(reverseSyncRate);
+        startSyncIntervalTimer(16000000 * reverseSyncRate,
+                               RSYNC_INTERVAL_TIMEOUT_EXPIRES);
+    }
+}
+
+void EtherPort::disableRsync( void )
+{
+    reverseSyncEnabled = false;
+    GPTP_LOG_INFO("disable reverse sync", reverseSyncEnabled);
+
+    if ( clock->getPriority1() == 255 || getPortState() == PTP_SLAVE ) {
+        stopSyncIntervalTimer(RSYNC_INTERVAL_TIMEOUT_EXPIRES);
+    }
 }
 
 void EtherPort::mapSocketAddr
@@ -894,7 +998,9 @@ int EtherPort::getRxTimestamp
 void EtherPort::startPDelayIntervalTimer
 ( long long unsigned int waitTime )
 {
-    pDelayIntervalTimerLock->lock();
+    if (pDelayIntervalTimerLock->trylock() == oslock_fail) {
+        return;
+    }
     clock->deleteEventTimerLocked(this, PDELAY_INTERVAL_TIMEOUT_EXPIRES);
     clock->addEventTimerLocked(this, PDELAY_INTERVAL_TIMEOUT_EXPIRES, waitTime);
     pDelayIntervalTimerLock->unlock();

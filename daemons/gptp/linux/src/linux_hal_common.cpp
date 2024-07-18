@@ -1077,7 +1077,10 @@ LinuxSharedMemoryIPC::~LinuxSharedMemoryIPC()
 #endif
 }
 
-bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg )
+bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg,
+                                  int8_t reverseSyncEnabled,
+                                  int8_t reverseSyncDomain,
+                                  double reverseSyncRate)
 {
     LinuxIPCArg *arg;
     struct group *grp;
@@ -1154,6 +1157,14 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg )
     }
 
     memset (master_offset_buffer, 0x0, SHM_SIZE) ;
+
+    /* set reverse sync parameters on sharedmem*/
+    gPtpTimeData *ptimedata;
+    ptimedata   = (gPtpTimeData *) (master_offset_buffer + sizeof(pthread_mutex_t));
+    ptimedata->reverseSyncEnabled = reverseSyncEnabled;
+    ptimedata->reverseSyncDomain = reverseSyncDomain;
+    ptimedata->reverseSyncRate = reverseSyncRate;
+
     /*create mutex attr */
     err = pthread_mutexattr_init(&shared);
 
@@ -1209,7 +1220,8 @@ bool LinuxSharedMemoryIPC::update(
     uint32_t sync_count,
     uint32_t pdelay_count,
     PortState port_state,
-    bool asCapable )
+    bool asCapable,
+    RsyncStatus_t *rSync)
 {
     int buf_offset = 0;
     pid_t process_id = getpid();
@@ -1235,6 +1247,9 @@ bool LinuxSharedMemoryIPC::update(
         ptimedata->process_id   = process_id;
         ptimedata->lb_freqoffset = lb_freqoffset;
         ptimedata->lb_phoffset = lb_phoffset;
+        rSync->reverseSyncDomain = ptimedata->reverseSyncDomain;
+        rSync->reverseSyncRate = ptimedata->reverseSyncRate;
+        rSync->reverseSyncEnabled = ptimedata->reverseSyncEnabled;
         /* unlock */
         pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
     }

@@ -69,7 +69,10 @@ class OS_IPC
          * @brief  Initializes the IPC
          * @return Implementation dependent
          */
-        virtual bool init( OS_IPC_ARG *arg = NULL ) = 0;
+        virtual bool init( OS_IPC_ARG *arg = NULL,
+                            int8_t reverseSyncEnabled = 0,
+                            int8_t reverseSyncDomain = 1,
+                            double reverseSyncRate = RSYNC_RATE_DEFAULT) = 0;
 
         /**
          * @brief  Updates IPC values
@@ -99,7 +102,8 @@ class OS_IPC
             uint32_t sync_count,
             uint32_t pdelay_count,
             PortState port_state,
-            bool asCapable ) = 0;
+            bool asCapable,
+            RsyncStatus_t *rSync ) = 0;
 
         /**
          * @brief  Updates grandmaster IPC values

@@ -205,6 +205,33 @@ int GptpIniParser::iniCallBack(void *user, const char *section,
                 valOK = true;
                 parser->_config.operLogSyncInterval = osync;
             }
+        } else if ( parseMatch( name, "reverseSyncEnabled") ) {
+            errno = 0;
+            char *pEnd;
+            int8_t rsync = (int8_t) strtoul(value, &pEnd, 10);
+
+            if ( *pEnd == '\0' && errno == 0 ) {
+                valOK = true;
+                parser->_config.reverseSyncEnabled = rsync;
+            }
+        } else if ( parseMatch( name, "reverseSyncDomain") ) {
+            errno = 0;
+            char *pEnd;
+            int8_t rsync_domain = (int8_t) strtoul(value, &pEnd, 10);
+
+            if ( *pEnd == '\0' && errno == 0 ) {
+                valOK = true;
+                parser->_config.reverseSyncDomain = rsync_domain;
+            }
+        } else if ( parseMatch( name, "reverseSyncRate") ) {
+            errno = 0;
+            char *pEnd;
+            double rsync_rate = (double) strtod(value, &pEnd);
+
+            if ( *pEnd == '\0' && errno == 0 ) {
+                valOK = true;
+                parser->_config.reverseSyncRate = rsync_rate;
+            }
         } else if ( parseMatch( name, "operLogPdelayReqInterval") ) {
             errno = 0;
             char *pEnd;

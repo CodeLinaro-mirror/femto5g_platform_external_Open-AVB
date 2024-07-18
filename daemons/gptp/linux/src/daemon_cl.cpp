@@ -169,6 +169,7 @@ void print_usage( char *arg0 )
              "[-D <gb_tx_delay,gb_rx_delay,mb_tx_delay,mb_rx_delay>] "
              "[-T] [-L] [-E] [-B] [-V] [-N] [-GM] [-INITSYNC <value>] [-OPERSYNC <value>] "
              "[-INITPDELAY <value>] [-OPERPDELAY <value>] [-SYNCLOSSTHRESH <value>] "
+             "[-RSYNC <value>] [-RSYNC_DOMAIN <value>] [-RSYNC_RATE <value>]"
              "[-F <path to gptp_cfg.ini file>] "
              "\n",
              arg0 );
@@ -193,6 +194,9 @@ void print_usage( char *arg0 )
       "\t-INITPDELAY <value> initial pdelay interval (Log base 2. 0 = 1 second)\n"
       "\t-OPERPDELAY <value> operational pdelay interval (Log base 2. 0 = 1 sec)\n"
       "\t-SYNCLOSSTHRESH <value> sync loss threshold default value 6000000 ns\n"
+      "\t-RSYNC <value> reverse sync enable\n"
+      "\t-RSYNC_DOMAIN <value> reverse sync domain\n"
+      "\t-RSYNC_RATE <value> reverse sync rate\n"
       "\t-F <path-to-ini-file>\n"
 #ifdef RGPTP_ENABLED
       "\t-Y Periodic GPIO pulse time in ms\n"
@@ -497,6 +501,9 @@ int main(int argc, char **argv)
     portInit.initialLogPdelayReqInterval = LOG2_INTERVAL_INVALID;
     portInit.operLogPdelayReqInterval = LOG2_INTERVAL_INVALID;
     portInit.operLogSyncInterval = LOG2_INTERVAL_INVALID;
+    portInit.reverseSyncEnabled = LOG2_INTERVAL_INVALID;
+    portInit.reverseSyncDomain = LOG2_INTERVAL_INVALID;
+    portInit.reverseSyncRate = LOG2_INTERVAL_INVALID;
     portInit.condition_factory = NULL;
     portInit.thread_factory = NULL;
     portInit.timer_factory = NULL;
@@ -632,6 +639,12 @@ int main(int argc, char **argv)
                 portInit.initialLogSyncInterval = atoi(argv[++i]);
             } else if (strcmp(argv[i] + 1, "OPERSYNC") == 0) {
                 portInit.operLogSyncInterval = atoi(argv[++i]);
+            } else if (strcmp(argv[i] + 1, "RSYNC") == 0) {
+                portInit.reverseSyncEnabled = atoi(argv[++i]);
+            } else if (strcmp(argv[i] + 1, "RSYNC_DOMAIN") == 0) {
+                portInit.reverseSyncDomain = atoi(argv[++i]);
+            } else if (strcmp(argv[i] + 1, "RSYNC_RATE") == 0) {
+                portInit.reverseSyncRate = atof(argv[++i]);
             } else if (strcmp(argv[i] + 1, "INITPDELAY") == 0) {
                 portInit.initialLogPdelayReqInterval = atoi(argv[++i]);
             } else if (strcmp(argv[i] + 1, "OPERPDELAY") == 0) {
@@ -702,7 +715,7 @@ int main(int argc, char **argv)
 
     portInit.phy_delay = &ether_phy_delay;
 
-    if ( !ipc->init( ipc_arg ) ) {
+    if ( !ipc->init( ipc_arg, portInit.reverseSyncEnabled, portInit.reverseSyncDomain, portInit.reverseSyncRate) ) {
         delete ipc;
         ipc = NULL;
     }
@@ -795,6 +808,9 @@ int main(int argc, char **argv)
             portInit.announceReceiptTimeout = iniParser.getAnnounceReceiptTimeout();
             portInit.operLogSyncInterval = iniParser.getOperLogSyncInterval();
             portInit.operLogPdelayReqInterval = iniParser.getOperLogPdelayReqInterval();
+            portInit.reverseSyncEnabled = iniParser.getIsRsync();
+            portInit.reverseSyncDomain = iniParser.getRSyncDomain();
+            portInit.reverseSyncRate = iniParser.getRSyncRate();
             portInit.automotive_profile = iniParser.getAutomotiveProfile();
             portInit.isGM = iniParser.getIsGM();
             portInit.asCapable = iniParser.getAsCapable();

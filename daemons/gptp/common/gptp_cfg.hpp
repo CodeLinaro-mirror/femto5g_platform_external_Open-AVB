@@ -92,6 +92,9 @@ class GptpIniParser
             int8_t initialLogPdelayReqInterval;
             int8_t operLogSyncInterval;
             int8_t operLogPdelayReqInterval;
+            int8_t reverseSyncEnabled;
+            int8_t reverseSyncDomain;
+            double reverseSyncRate;
             bool automotive_profile;
             bool asCapable;
             bool isGm;
@@ -242,6 +245,20 @@ class GptpIniParser
         int8_t getOperLogPdelayReqInterval(void)
         {
             return _config.operLogPdelayReqInterval;
+        }
+
+        bool getIsRsync(void)
+        {
+            return _config.reverseSyncEnabled;
+        }
+
+        int8_t getRSyncDomain(void)
+        {
+            return _config.reverseSyncDomain;
+        }
+        double getRSyncRate(void)
+        {
+            return _config.reverseSyncRate;
         }
 
         bool getIsGM(void)
