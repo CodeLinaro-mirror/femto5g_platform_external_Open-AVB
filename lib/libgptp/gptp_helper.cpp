@@ -1474,7 +1474,7 @@ bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur,
         b = seq1->load();
 
         if (clock_gettime(gPtpClockid, &ts)) {
-            GPTP_LOG_ERROR("clock_gettime failed");
+            GPTP_LOG_ERROR("clock_gettime failed 0x%x (%s)\n", errno, strerror(errno));
             return false;
         }
 
