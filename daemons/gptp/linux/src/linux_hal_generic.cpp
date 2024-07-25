@@ -417,6 +417,8 @@ bool LinuxTimestamperGeneric::post_init( int ifindex, int sd,
     hwconfig.tx_type = HWTSTAMP_TX_ON;
     err = ioctl( sd, SIOCSHWTSTAMP, &device );
 
+    GPTP_LOG_INFO("post_init:: SIOCSHWTSTAMP ioctl called");
+
     if ( err == -1 ) {
         GPTP_LOG_ERROR
         ("Failed to configure timestamping: %s", strerror(errno));
