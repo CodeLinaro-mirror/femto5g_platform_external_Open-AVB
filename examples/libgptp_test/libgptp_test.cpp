@@ -255,10 +255,11 @@ void loop_test(int time_us)
             printf("Failed to get Path Delay Measurement Data\n");
         }
 
-        if( 0 == getTimeError(&time_error)) {
+        rcvid = getTimeError(&time_error);
+        if ( rcvid == 0) {
             printf("loop_test: ********************** Reverse sync - Slave clock offset ********************\n");
             printf("loop_test: time error %d\n", time_error);
-        } else {
+        } else if (rcvid < 0) {
             printf("Failed to get time error\n");
         }
         usleep(time_us);

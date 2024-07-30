@@ -1133,7 +1133,7 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg,
         }
     } while ( ( ( gptp_fd == -1 )
                 || ( (FD_TO_CLOCKID(gptp_fd)) == -1 ) )
-              && ( count < 100 ) );
+              && ( count < 1000 ) );
 
 #endif
     (void) umask(oldumask);

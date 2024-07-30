@@ -730,7 +730,7 @@ void IEEE1588Clock::setMasterOffset
         }
 
         if ( !port->adjustClockRate( _ppm ) ) {
-            GPTP_LOG_ERROR( "Failed to adjust clock rate" );
+            GPTP_LOG_ERROR( "Failed to adjust clock rate ppm:%f", _ppm);
         }
     }
 

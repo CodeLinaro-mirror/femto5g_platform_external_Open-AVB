@@ -1203,7 +1203,7 @@ int getTimeError(int16_t *timeError)
     if (gPtpTD.port_state == PTP_MASTER) {
         *timeError = gPtpTD.ml_phoffset;
     } else {
-        return -1;
+        return 1;
     }
 
     return 0;
