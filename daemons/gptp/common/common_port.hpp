@@ -315,6 +315,8 @@ typedef struct {
 
     uint8_t announceReceiptTimeout;
 
+    uint8_t syncClocks;
+
     bool isSigNoSend;
 
     /* condition_factory OSConditionFactory instance */
@@ -441,12 +443,11 @@ typedef struct {
     syncInterval_t syncInterval;
 } sct_gptp_data;
 
-typedef struct
-{
+typedef struct {
     int8_t reverseSyncEnabled = 0;
     int8_t reverseSyncDomain = 0;
     double reverseSyncRate = 0;
-}RsyncStatus_t;
+} RsyncStatus_t;
 
 /**
  * @brief Port functionality common to all network media
@@ -481,7 +482,7 @@ class CommonPort
         int8_t initialLogSyncInterval;
         uint8_t announceReceiptTimeout;
         uint8_t syncReceiptTimeout;
-
+        uint8_t syncClocks;
         /* CDS 6.2.1.5 */
         int8_t *operLogPdelayReqInterval;
 
@@ -1512,11 +1513,11 @@ class CommonPort
          */
         virtual void disableRsync() = 0;
 
-       /**
-        * @brief  set reverse sync parameter.
-        * @param  RsyncStatus_t reverse sync structure
-        * @return TRUE if success. FALSE otherwise
-        */
+        /**
+         * @brief  set reverse sync parameter.
+         * @param  RsyncStatus_t reverse sync structure
+         * @return TRUE if success. FALSE otherwise
+         */
         bool setRsync(RsyncStatus_t *Rsync);
 
         /**
@@ -1547,6 +1548,18 @@ class CommonPort
         {
             return sync_count;
         }
+
+        /**
+         * @brief  Gets which clocks has to be synced with ptp.
+         * 0 is no clock
+         * 1 is CLOCK_REALTIME
+         * @return syncClocks
+         */
+        unsigned getSyncClocks()
+        {
+            return syncClocks;
+        }
+
 
         /**
          * @brief  Sets current pdelay count value.

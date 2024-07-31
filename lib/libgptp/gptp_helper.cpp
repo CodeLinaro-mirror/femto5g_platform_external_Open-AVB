@@ -263,7 +263,7 @@ static int gptpClkInit(int *gptp_phc_fd)
 
 static void gptpClkDeInit(int gptp_phc_fd)
 {
-    if (gptp_phc_fd < 0) {
+    if (gptp_phc_fd > 0) {
         close(gptp_phc_fd);
     }
 
@@ -707,6 +707,16 @@ static void *gptpDaemonSrvConnect(void *arg)
                 if (gptpTimeInit()) {
                     GPTP_LOG_INFO("gptpDaemonSrvConnect: success\n");
                     bInitialized = true;
+                } else {
+                    gptpMemDeinit(gPtpShmFd, gPtpMmap);
+                    gptpClkDeInit(gptpPhcFd);
+                    memset(&gPtpTD, 0, sizeof(gPtpTimeData));
+                    UNLOCK();
+                    GPTP_LOG_INFO("gptpDaemonSrvConnect: initialization failed\n");
+                    close(sock);
+                    sock = -1;
+                    usleep(1000000);
+                    continue;
                 }
             }
 

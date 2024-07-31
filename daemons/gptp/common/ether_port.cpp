@@ -1024,6 +1024,7 @@ void EtherPort::startPDelayIntervalTimer
     if (pDelayIntervalTimerLock->trylock() == oslock_fail) {
         return;
     }
+
     clock->deleteEventTimerLocked(this, PDELAY_INTERVAL_TIMEOUT_EXPIRES);
     clock->addEventTimerLocked(this, PDELAY_INTERVAL_TIMEOUT_EXPIRES, waitTime);
     pDelayIntervalTimerLock->unlock();

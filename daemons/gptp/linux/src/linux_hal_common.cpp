@@ -1358,7 +1358,7 @@ bool LinuxSharedMemoryIPC::update(
         int64_t local_bypqtimer_offset = (int64_t)(qtimer_ns - ptimedata->local_time);
         *ptp_qtimer_offset = local_bypqtimer_offset;
         *current_tick = qtimer_tick;
-        *d_status = 0xAA; //Just an indication daemon is up
+        *d_status = 0xabcdef; //Just an indication daemon is up
 
         if (prev_gptp_sync_time != 0) {
             *qtimer_inc_ratio = (2 * prev_qtimer_inc_ratio) / 3 + ((
