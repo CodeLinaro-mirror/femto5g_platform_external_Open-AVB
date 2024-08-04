@@ -22,8 +22,12 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #define RES_MAX_RETRY_COUNT 100
 #define RES_RETRY_SLEEP 2000 //in us (2ms sleep)
 #define SCT_SHM_SIZE 0x2000
-#define DEFAULT_GROUPNAME "vnw"     /*!< Default groupname for the shared memory interface*/
 
+#ifdef ANDROID
+#define DEFAULT_GROUPNAME "vehicle_network"     /*!< Default groupname for the shared memory interface*/
+#else
+#define DEFAULT_GROUPNAME "vnw"     /*!< Default groupname for the shared memory interface*/
+#endif
 
 #ifdef AVB_FEATURE_GVM_MODE
 #define SCT_SHM_NAME  "/dev/sct_gptp_shm"     /*!< Shared memory name*/

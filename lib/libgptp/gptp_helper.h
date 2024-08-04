@@ -130,6 +130,12 @@ typedef struct {
     int8_t init_sync_interval;
 } syncInterval_t;
 
+typedef struct
+{
+    int8_t reverseSyncEnabled = 0;
+    int8_t reverseSyncDomain = 0;
+    double reverseSyncRate = 0;
+}RsyncStatus_t;
 
 struct gptp_update {
     uint64_t curr_gptp_time;
@@ -192,6 +198,11 @@ typedef void(*GPTP_UPDATE_NOTIFY_CALLBACK)(struct gptp_update update);
 
 bool gptpRegisterCallback(GPTP_UPDATE_NOTIFY_CALLBACK fn_ptr);
 
+/* Set Rsync enable or disable*/
+int setRsyncStatus(RsyncStatus_t *status);
+
+/* get Rsync slave clock offset*/
+int getTimeError(int16_t *timeError);
 
 bool gptpInit(void);
 

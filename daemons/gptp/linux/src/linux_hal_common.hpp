@@ -84,7 +84,8 @@ typedef struct __attribute__ ((packed))
     int32_t port_status;
     int32_t tv_sec;
     int32_t tv_nsec;
-} gptpTimeInfo_t;
+}
+gptpTimeInfo_t;
 
 /**
  * @brief Provides the type for the TicketingLock private structure
@@ -673,7 +674,11 @@ class LinuxIPCArg : public OS_IPC_ARG
         friend class LinuxSharedMemoryIPC;
 };
 
+#ifdef ANDROID
+#define DEFAULT_GROUPNAME "vehicle_network"     /*!< Default groupname for the shared memory interface*/
+#else
 #define DEFAULT_GROUPNAME "vnw"     /*!< Default groupname for the shared memory interface*/
+#endif
 
 /**
  * @brief Linux shared memory interface
@@ -705,7 +710,10 @@ class LinuxSharedMemoryIPC: public OS_IPC
          * @param  barg Groupname of the shared memory
          * @return TRUE if no error, FALSE otherwise
          */
-        virtual bool init( OS_IPC_ARG *barg = NULL );
+        virtual bool init( OS_IPC_ARG *barg = NULL,
+                            int8_t reverseSyncEnabled = 0,
+                            int8_t reverseSyncDomain = 1,
+                            double reverseSyncRate = RSYNC_RATE_DEFAULT);
 
         /**
          * @brief Updates IPC values
@@ -735,7 +743,8 @@ class LinuxSharedMemoryIPC: public OS_IPC
             uint32_t sync_count,
             uint32_t pdelay_count,
             PortState port_state,
-            bool asCapable );
+            bool asCapable,
+            RsyncStatus_t *rSync );
 
         /**
          * @brief Updates grandmaster IPC values

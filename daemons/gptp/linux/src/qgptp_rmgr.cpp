@@ -76,9 +76,9 @@ static void get_timesync_diagstats (char *ifname,
 
 static int get_gptp_stats(char *reply_msg, uint64_t  replytime)
 {
-    static PortCounters_t Old_PortCounters = {0};
+    static PortCounters_t Old_PortCounters = {};
     static uint64_t last_abstime = 0;
-    PortCounters_t PortCounters = {0};
+    PortCounters_t PortCounters = {};
     int nBytes = 0;
 
     if (qgptp_port) {

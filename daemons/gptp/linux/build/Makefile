@@ -68,7 +68,9 @@ OBJ_FILES = $(OBJ_DIR)/ptp_message.o\
 		 $(OBJ_DIR)/platform.o \
 		 $(OBJ_DIR)/qgptp_rmgr.o \
 		 $(OBJ_DIR)/ini.o \
-		 $(OBJ_DIR)/gptp_cfg.o
+		 $(OBJ_DIR)/gptp_cfg.o \
+		 $(OBJ_DIR)/linux_hal_generic.o \
+		 $(OBJ_DIR)/linux_hal_generic_adj.o
 
 HEADER_FILES = $(COMMON_DIR)/ether_port.hpp\
 		$(COMMON_DIR)/common_port.hpp\
@@ -92,31 +94,9 @@ HEADER_FILES = $(COMMON_DIR)/ether_port.hpp\
 		$(SRC_DIR)/qgptp_rmgr.h\
 		$(SRC_DIR)/linux_hal_common.hpp\
 		$(SRC_DIR)/linux_hal_persist_file.hpp\
-		$(SRC_DIR)/platform.hpp
+		$(SRC_DIR)/platform.hpp \
+		$(SRC_DIR)/linux_hal_generic.hpp
 
-ifeq ($(ARCH),I210)
-	IGB_LIB_INCPATH=../../../../lib/igb/
-	IGB_LIB_PATH=../../../../lib/igb/
-	CFLAGS_G += -I$(IGB_LIB_INCPATH) -DWITH_IGBLIB
-	LDFLAGS_G += -lz -ligb -lpci -L$(IGB_LIB_PATH)
-	OBJ_FILES += $(OBJ_DIR)/linux_hal_generic.o \
-		$(OBJ_DIR)/linux_hal_generic_adj.o
-	OBJ_FILES += $(OBJ_DIR)/linux_hal_i210.o
-	HEADER_FILES += $(SRC_DIR)/linux_hal_generic.hpp
-else ifeq ($(ARCH),IntelCE)
-	INTELCE_INCPATH=/home/hitesh/work/smd/Dinerout/i686-linux-elf/include/
-	INTELCE_LINUX_INCPATH=/home/hitesh/work/smd/Dinerout/i686-linux-elf/include/linux_user
-	INTELCE_LIBPATH=/home/hitesh/work/smd/Dinerout/i686-linux-elf/lib/
-	CFLAGS_G += -I$(INTELCE_LINUX_INCPATH) -I$(INTELCE_INCPATH) -DARCH_INTELCE
-	LDFLAGS_G += -L$(INTELCE_LIBPATH) -lismd_clock_ioctl -lismd_core_ioctl
-	HEADER_FILES += $(SRC_DIR)/linux_hal_intelce.hpp
-	OBJ_FILES += $(OBJ_DIR)/linux_hal_intelce.o
-	CXX = $(TARGETCXX)
-else
-	OBJ_FILES += $(OBJ_DIR)/linux_hal_generic.o \
-		$(OBJ_DIR)/linux_hal_generic_adj.o
-	HEADER_FILES += $(SRC_DIR)/linux_hal_generic.hpp
-endif
 
 ifeq ($(RGPTP_ENABLED),1)
 	INCPATHS := -I${PKG_CONFIG_SYSROOT_DIR}/usr/include/qmi-framework-vendor
@@ -173,12 +153,6 @@ $(OBJ_DIR)/linux_hal_generic.o: $(SRC_DIR)/linux_hal_generic.cpp $(HEADER_FILES)
 
 $(OBJ_DIR)/linux_hal_generic_adj.o: $(SRC_DIR)/linux_hal_generic_adj.cpp $(HEADER_FILES)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SRC_DIR)/linux_hal_generic_adj.cpp -o $(OBJ_DIR)/linux_hal_generic_adj.o
-
-$(OBJ_DIR)/linux_hal_i210.o: $(SRC_DIR)/linux_hal_i210.cpp $(HEADER_FILES)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SRC_DIR)/linux_hal_i210.cpp -o $(OBJ_DIR)/linux_hal_i210.o
-
-$(OBJ_DIR)/linux_hal_intelce.o: $(SRC_DIR)/linux_hal_intelce.cpp $(HEADER_FILES)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SRC_DIR)/linux_hal_intelce.cpp -o $(OBJ_DIR)/linux_hal_intelce.o
 
 $(OBJ_DIR)/ether_port.o: $(COMMON_DIR)/ether_port.cpp $(HEADER_FILES)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@

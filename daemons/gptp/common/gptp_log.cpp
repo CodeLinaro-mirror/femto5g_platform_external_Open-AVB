@@ -39,16 +39,11 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <stdint.h>
 #include <platform.hpp>
 #include <syslog.h>
-
+#include <sys/syscall.h>
+#include <unistd.h>
 // MS VC++ 2013 has C++11 but not C11 support, use this to get millisecond resolution
 #include <chrono>
 
-#ifdef ANDROID
-#define LOG_TAG "gPTP"
-#include <utils/Log.h>
-#else
-#define ALOGE(format, ...)
-#endif
 
 #ifdef GENIVI_DLT
 DLT_DECLARE_CONTEXT(dlt_con_gptp);
@@ -71,8 +66,15 @@ void gptplogUnregister(void)
 }
 
 // logcat support
-gptplogcat_t gptplogcat = GPTP_LOGCAT_OFF;
-gptplogcat_t systemlogcat = GPTP_LOGCAT_OFF;
+#ifdef ANDROID
+gptplogcat_t gptplogcat = GPTP_LOG_ON;
+#else
+gptplogcat_t gptplogcat = GPTP_LOG_OFF;
+#endif
+
+gptplogcat_t systemlogcat = GPTP_LOG_ON;
+
+#define gettid() syscall(SYS_gettid)
 
 void gptpLog(GPTP_LOG_LEVEL level, const char *tag, const char *path, int line,
              const char *fmt, ...)
@@ -81,76 +83,79 @@ void gptpLog(GPTP_LOG_LEVEL level, const char *tag, const char *path, int line,
     va_list args;
     va_start(args, fmt);
     vsnprintf(msg, sizeof(msg), fmt, args);
-#ifndef GENIVI_DLT
-    std::chrono::system_clock::time_point cNow = std::chrono::system_clock::now();
-    time_t tNow = std::chrono::system_clock::to_time_t(cNow);
-    struct tm tmNow;
-    PLAT_localtime(&tNow, &tmNow);
-    std::chrono::system_clock::duration roundNow = cNow -
-            std::chrono::system_clock::from_time_t(tNow);
-    long int millis = (long int)
-                      std::chrono::duration_cast<std::chrono::milliseconds>(roundNow).count();
+#ifdef ANDROID
 
-    if (path) {
-        if (gptplogcat) {
-            ALOGE("%s: GPTP [%2.2d:%2.2d:%2.2d:%3.3ld] [%s:%u] %s\n",
-                  tag, tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, path, line, msg);
-        } else if (systemlogcat) {
-            syslog(level, "%s: GPTP [%2.2d:%2.2d:%2.2d:%3.3ld] [%s:%u] %s\n", tag,
-                   tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, path, line, msg);
-        } else {
-            fprintf(stderr, "%s: GPTP [%2.2d:%2.2d:%2.2d:%3.3ld] [%s:%u] %s\n",
-                    tag, tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, path, line, msg);
-        }
-    } else {
-        if (gptplogcat) {
-            ALOGE("%s: GPTP [%2.2d:%2.2d:%2.2d:%3.3ld] %s\n",
-                  tag, tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, msg);
-        } else if (systemlogcat) {
-            syslog(level, "%s: GPTP [%2.2d:%2.2d:%2.2d:%3.3ld] [%s:%u] %s\n", tag,
-                   tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, path, line, msg);
-        } else {
-            fprintf(stderr, "%s: GPTP [%2.2d:%2.2d:%2.2d:%3.3ld] %s\n",
-                    tag, tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, msg);
-        }
+    if (gptplogcat) {
+        LOGE(level, "[%s:%d] %s", path, line, msg);
     }
 
 #else
-    DltLogLevelType dlt_level;
 
-    switch (level) {
-        case GPTP_LOG_LVL_CRITICAL:
-            dlt_level = DLT_LOG_FATAL;
-            break;
-
-        case GPTP_LOG_LVL_ERROR:
-            dlt_level = DLT_LOG_ERROR;
-            break;
-
-        case GPTP_LOG_LVL_EXCEPTION:
-        case GPTP_LOG_LVL_WARNING:
-            dlt_level = DLT_LOG_WARN;
-            break;
-
-        case GPTP_LOG_LVL_INFO:
-        case GPTP_LOG_LVL_STATUS:
-            dlt_level = DLT_LOG_INFO;
-            break;
-
-        case GPTP_LOG_LVL_DEBUG:
-            dlt_level = DLT_LOG_DEBUG;
-            break;
-
-        case GPTP_LOG_LVL_VERBOSE:
-            dlt_level = DLT_LOG_VERBOSE;
-            break;
-
-        default:
-            dlt_level = DLT_LOG_INFO;
-            break;
+    if (systemlogcat) {
+        syslog(level, "[%d:%s:%d] %s\n", gettid(), path, line, msg);
     }
 
-    DLT_LOG(dlt_con_gptp, dlt_level, DLT_STRING(msg));
 #endif
+    else {
+        std::chrono::system_clock::time_point cNow = std::chrono::system_clock::now();
+        time_t tNow = std::chrono::system_clock::to_time_t(cNow);
+        struct tm tmNow;
+        PLAT_localtime(&tNow, &tmNow);
+        std::chrono::system_clock::duration roundNow = cNow -
+                std::chrono::system_clock::from_time_t(tNow);
+        long int millis = (long int)
+                          std::chrono::duration_cast<std::chrono::milliseconds>(roundNow).count();
+
+        fprintf(stderr, "%s:GPTP:[%2.2d:%2.2d:%2.2d:%3.3ld] [%d:%s:%d] %s\n",
+                tag, tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, gettid(), path, line,
+                msg);
+    }
+}
+
+void gptpLogMs(GPTP_LOG_LEVEL level, const char *tag, const char *path,
+               int line,
+               const char *fmt, ...)
+{
+    char msg[1024];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, args);
+#ifdef ANDROID
+
+    if (gptplogcat) {
+        LOGE(level, "[%s:%d] %s", path, line, msg);
+    }
+
+#else
+
+    if (systemlogcat) {
+        std::chrono::system_clock::time_point cNow = std::chrono::system_clock::now();
+        time_t tNow = std::chrono::system_clock::to_time_t(cNow);
+        struct tm tmNow;
+        PLAT_localtime(&tNow, &tmNow);
+        std::chrono::system_clock::duration roundNow = cNow -
+                std::chrono::system_clock::from_time_t(tNow);
+        long int millis = (long int)
+                          std::chrono::duration_cast<std::chrono::milliseconds>(roundNow).count();
+
+        syslog(level, "[%2.2d:%2.2d:%2.2d:%3.3ld] [%d:%s:%d] %s\n", tag,
+               tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, gettid(), path, line, msg);
+    }
+
+#endif
+    else {
+        std::chrono::system_clock::time_point cNow = std::chrono::system_clock::now();
+        time_t tNow = std::chrono::system_clock::to_time_t(cNow);
+        struct tm tmNow;
+        PLAT_localtime(&tNow, &tmNow);
+        std::chrono::system_clock::duration roundNow = cNow -
+                std::chrono::system_clock::from_time_t(tNow);
+        long int millis = (long int)
+                          std::chrono::duration_cast<std::chrono::milliseconds>(roundNow).count();
+
+        fprintf(stderr, "%s:GPTP:[%2.2d:%2.2d:%2.2d:%3.3ld] [%d:%s:%d] %s\n",
+                tag, tmNow.tm_hour, tmNow.tm_min, tmNow.tm_sec, millis, gettid(), path, line,
+                msg);
+    }
 }
 

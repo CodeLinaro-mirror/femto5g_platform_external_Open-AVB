@@ -218,6 +218,22 @@ void CommonPort::recommendState
     return;
 }
 
+bool CommonPort::setRsync( RsyncStatus_t *Rsync )
+{
+    if (!Rsync) {
+        return false;
+    }
+
+    if (Rsync->reverseSyncEnabled == 1) {
+        enableRsync(Rsync->reverseSyncDomain, Rsync->reverseSyncRate);
+    } else {
+        disableRsync();
+    }
+
+    return true;
+}
+
+
 bool CommonPort::serializeState( void *buf, off_t *count )
 {
     bool ret = true;
@@ -385,16 +401,29 @@ void CommonPort::stopSyncReceiptTimer( void )
 }
 
 void CommonPort::startSyncIntervalTimer
-( long long unsigned int waitTime )
+( long long unsigned int waitTime, Event e)
 {
     if ( syncIntervalTimerLock->trylock() == oslock_fail ) {
         return;
     }
 
-    clock->deleteEventTimerLocked(this, SYNC_INTERVAL_TIMEOUT_EXPIRES);
+    clock->deleteEventTimerLocked(this, e);
     clock->addEventTimerLocked
-    (this, SYNC_INTERVAL_TIMEOUT_EXPIRES, waitTime);
+    (this, e, waitTime);
     syncIntervalTimerLock->unlock();
+}
+
+void CommonPort::stopSyncIntervalTimer( Event e )
+{
+    clock->getTimerQLock();
+
+    if ( syncIntervalTimerLock->trylock() == oslock_fail ) {
+        return;
+    }
+
+    clock->deleteEventTimerLocked(this, e);
+    syncIntervalTimerLock->unlock();
+    clock->putTimerQLock();
 }
 
 void CommonPort::startAnnounceIntervalTimer
@@ -784,8 +813,19 @@ bool CommonPort::processEvent( Event e )
             // Restart the timer
             startSyncIntervalTimer
             ((uint64_t)( pow((double)2, getSyncInterval()) *
-                         1000000000.0 ));
+                         1000000000.0 ), SYNC_INTERVAL_TIMEOUT_EXPIRES);
             break;
+
+        case RSYNC_INTERVAL_TIMEOUT_EXPIRES: {
+                GPTP_LOG_VERBOSE("RSYNC_INTERVAL_TIMEOUT_EXPIRES occured, getSyncInterval = %d, getRSyncRate = %f",
+                              getSyncInterval(), clock->getRSyncRate());
+                ret = true;
+                ret = _processEvent( e );
+                startSyncIntervalTimer
+                ((uint64_t)( pow((double)2, getSyncInterval()) *
+                             1000000000.0 * clock->getRSyncRate()), RSYNC_INTERVAL_TIMEOUT_EXPIRES);
+                break;
+            }
     }
 
     return ret;

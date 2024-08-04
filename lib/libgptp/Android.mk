@@ -5,7 +5,7 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= \
         gptp_helper.cpp\
 
-LOCAL_SHARED_LIBRARIES := libcutils
+LOCAL_SHARED_LIBRARIES := libcutils liblog
 
 LOCAL_C_INCLUDES += \
         $(LOCAL_PATH) \
@@ -19,14 +19,18 @@ ifeq ($(call is-board-platform,msmnile),true)
 ifeq ($(TARGET_BOARD_SUFFIX),_gvmq)
 LOCAL_CFLAGS += -DAVB_FEATURE_GVM_MODE=1
 
-LOCAL_SHARED_LIBRARIES := libuhab libion
+LOCAL_SHARED_LIBRARIES += libuhab libion
 endif
 endif
 
+ifeq ($(call is-board-platform,msmnile),true)
 ifeq ($(TARGET_BOARD_SUFFIX),_gvm)
 LOCAL_CFLAGS += -DAVB_FEATURE_GVM_MODE=1
-LOCAL_SHARED_LIBRARIES := libuhab libion
+LOCAL_SHARED_LIBRARIES += libuhab libion
 endif
+endif
+
+LOCAL_CFLAGS += -DANDROID -DSYSTEMD
 
 LOCAL_CLANG := true
 

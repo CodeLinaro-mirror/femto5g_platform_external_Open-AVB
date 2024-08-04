@@ -31,6 +31,13 @@
 
 ******************************************************************************/
 
+/* ============================================================================
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+============================================================================ */
+
 #ifndef AVBTS_MESSAGE_HPP
 #define AVBTS_MESSAGE_HPP
 
@@ -223,7 +230,7 @@ protected:
 	int8_t logMeanMessageInterval;	/*!< LogMessageInterval (IEEE 1588-2008 table 24)*/
 	long long correctionField;		/*!< Correction Field (IEEE 1588-2008 table 21) */
 	unsigned char domainNumber;		/*!< PTP domain number */
-
+	unsigned char rsync_domainNumber;	/*!< Reverse Sync PTP domain number */
 	Timestamp _timestamp;	/*!< PTP message timestamp */
 	unsigned _timestamp_counter_value;	/*!< PTP timestamp counter value */
 	bool _gc;	/*!< Garbage collection flag */

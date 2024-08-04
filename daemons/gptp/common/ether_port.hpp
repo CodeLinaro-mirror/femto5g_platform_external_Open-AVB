@@ -30,6 +30,12 @@
   POSSIBILITY OF SUCH DAMAGE.
 
 ******************************************************************************/
+/* ============================================================================
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+============================================================================ */
 
 #ifndef ETHER_PORT_HPP
 #define ETHER_PORT_HPP
@@ -110,6 +116,9 @@ class EtherPort : public CommonPort
 	int8_t operLogPdelayReqInterval;
 	int8_t operLogSyncInterval;
 	int8_t initialLogPdelayReqInterval;
+	int8_t reverseSyncEnabled;
+	int8_t reverseSyncDomain;
+	double reverseSyncRate;
 	bool automotive_profile;
 
 	// Test Status variables
@@ -156,6 +165,8 @@ protected:
  public:
 	void becomeMaster( bool annc );
 	void becomeSlave( bool restart_syntonization );
+	void enableRsync( int8_t RSyncDomain, double RSyncRate );
+	void disableRsync();
 
 	/**
 	 * @brief  Starts pDelay event timer.
@@ -630,6 +641,18 @@ protected:
 	 */
 	bool getLinkUpState(void) {
 		return linkUp;
+	}
+
+	int8_t getIsRsync(void)
+	{
+		return reverseSyncEnabled;
+	}
+	int8_t getRSyncDomain(void)
+	{
+		return reverseSyncDomain;
+	}
+	double getRSyncRate(void){
+		return reverseSyncRate;
 	}
 };
 

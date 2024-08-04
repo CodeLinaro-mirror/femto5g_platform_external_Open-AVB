@@ -77,6 +77,7 @@ class GptpIniParser
             uint8_t priority1;
             uint8_t priority2;
             uint8_t clockClass;
+            uint8_t debugLog = 0;
 
             /*port data set*/
             unsigned int announceReceiptTimeout;
@@ -91,9 +92,13 @@ class GptpIniParser
             int8_t initialLogPdelayReqInterval;
             int8_t operLogSyncInterval;
             int8_t operLogPdelayReqInterval;
+            int8_t reverseSyncEnabled;
+            int8_t reverseSyncDomain;
+            double reverseSyncRate;
             bool automotive_profile;
             bool asCapable;
             bool isGm;
+            bool bypassIfWait = false;
             PortState port_state;
 
             /*ethernet adapter data set*/
@@ -130,6 +135,17 @@ class GptpIniParser
         {
             return _config.priority2;
         }
+        /**
+         * @brief  Reads debugLog config value
+         * @param  void
+         * @return debugLog
+         */
+
+        uint8_t getDebugLog(void)
+        {
+            return _config.debugLog;
+        }
+
         /**
          * @brief  Reads clockClass config value
          * @param  void
@@ -231,6 +247,20 @@ class GptpIniParser
             return _config.operLogPdelayReqInterval;
         }
 
+        bool getIsRsync(void)
+        {
+            return _config.reverseSyncEnabled;
+        }
+
+        int8_t getRSyncDomain(void)
+        {
+            return _config.reverseSyncDomain;
+        }
+        double getRSyncRate(void)
+        {
+            return _config.reverseSyncRate;
+        }
+
         bool getIsGM(void)
         {
             return _config.isGm;
@@ -243,6 +273,16 @@ class GptpIniParser
         bool getAutomotiveProfile(void)
         {
             return _config.automotive_profile;
+        }
+
+        bool getIsIfCheckBypass()
+        {
+            return _config.bypassIfWait;
+        }
+
+        std::string getIfaceName()
+        {
+            return _config.ifname;
         }
 
         PortState getPortState(void)

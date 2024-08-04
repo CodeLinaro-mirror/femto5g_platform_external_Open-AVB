@@ -117,6 +117,8 @@ class IEEE1588Clock
         bool is_boundary_clock;
         bool two_step_clock;
         unsigned char domain_number;
+        unsigned char rsync_domain_number;
+        double rsync_rate;
         uint16_t number_ports;
         uint16_t number_foreign_records;
         bool slave_only;
@@ -325,6 +327,21 @@ class IEEE1588Clock
             return domain_number;
         }
 
+        unsigned char getRSyncDomain(void) {
+            return rsync_domain_number;
+        }
+
+        void setRsyncDomain(int8_t domain_number){
+            rsync_domain_number = domain_number;
+        }
+
+        double getRSyncRate(void) {
+            return rsync_rate;
+        }
+
+        void setRsyncRate(double reverse_sync_rate){
+            rsync_rate = reverse_sync_rate;
+        }
         /**
          * @brief  Gets grandmaster clock ID
          * @return GM clock ID

@@ -70,14 +70,11 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <linux/ptp_clock.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
-
-#ifdef GPTP_AUTO_START
 #include <sys/un.h>
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <poll.h>
 #include <pthread.h>
-#endif
 
 #include "qgptp_rmgr.h"
 
@@ -90,32 +87,32 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #define PHY_DELAY_MB_TX_I20 1044//100M delay
 #define PHY_DELAY_MB_RX_I20 2133//100M delay
 
-#ifdef GPTP_AUTO_START
 #ifdef SYSTEMD
+#ifdef ANDROID
+#define ADDRESS     "/dev/socket/gptp_socket"
+#else
 #define ADDRESS     "/dev/socket/gptp/gptp_socket"
+#endif // END OF ANDROID
 #else
 #define ADDRESS     "/tmp/gptp_socket"
 #endif
 #define MAX_CLIENTS_COUNT 5
 #define MAX_EVENTS 1
-#endif
 
 #ifdef RGPTP_ENABLED
 #define RGPTP_MIN_GPIO_PULSE_TIME_MS 125
 #define RGPTP_MAX_GPIO_PULSE_TIME_MS 5000
 #endif
-char ifname_eth[IFNAME_SIZE];
+char ifname_eth[IFNAME_SIZE] = {0};
 
 void gPTPPersistWriteCB(char *bufPtr, uint32_t bufSize);
 
-#ifdef GPTP_AUTO_START
 static int sock = 0;
 static pthread_t thread_id = 0;
 struct sockaddr_un sock_addr_un;
 static struct sockaddr cli_addr;
 static socklen_t cli_len = sizeof(cli_addr);
 static int gptp_client[MAX_CLIENTS_COUNT] = {-1};
-#endif
 
 // gptp logcat support
 extern gptplogcat_t gptplogcat;
@@ -147,19 +144,19 @@ static inline int64_t pctns(struct ptp_clock_time t)
 }
 
 #define CLEANUP_RESOURCES() {\
-                if( thread_factory != NULL ) delete thread_factory; \
-                if( default_factory != NULL ) delete default_factory; \
-                if( timerq_factory != NULL ) delete timerq_factory; \
-                if( lock_factory != NULL ) delete lock_factory; \
-                if( timer_factory != NULL ) delete timer_factory; \
-                if( condition_factory != NULL ) delete condition_factory; \
-                if( ipc != NULL ) delete ipc; \
-                if( ifname != NULL ) delete ifname; \
-                if( ipc_arg != NULL ) delete ipc_arg; \
-                if( timestamper != NULL ) delete timestamper; \
+                if( thread_factory != NULL ) delete thread_factory; thread_factory = NULL; \
+                if( default_factory != NULL ) delete default_factory; default_factory = NULL; \
+                if( timerq_factory != NULL ) delete timerq_factory; timerq_factory = NULL; \
+                if( lock_factory != NULL ) delete lock_factory; lock_factory = NULL; \
+                if( timer_factory != NULL ) delete timer_factory; timer_factory = NULL; \
+                if( condition_factory != NULL ) delete condition_factory; condition_factory = NULL; \
+                if( ipc != NULL ) delete ipc; ipc = NULL; \
+                if( ifname != NULL ) delete ifname; ifname = NULL; \
+                if( ipc_arg != NULL ) delete ipc_arg; ipc_arg = NULL; \
+                if( timestamper != NULL ) delete timestamper; timestamper = NULL; \
                 if( pGPTPPersist != NULL ) { \
                     pGPTPPersist->closeStorage(); \
-                    delete pGPTPPersist;    \
+                    delete pGPTPPersist; pGPTPPersist = NULL;    \
                     }\
                 }
 
@@ -167,11 +164,12 @@ static inline int64_t pctns(struct ptp_clock_time t)
 void print_usage( char *arg0 )
 {
     fprintf( stderr,
-             "%s <network interface> [-S] [-P] [-M <filename>] "
-             "[-l <logcat>] [-G <group>] [-R <priority 1>] "
+             "%s <network intf name/'ini' if intf is mentioned in config ini file> [-S] [-P] [-M <filename>] "
+             "[-C ] [-G <group>] [-R <priority 1>] "
              "[-D <gb_tx_delay,gb_rx_delay,mb_tx_delay,mb_rx_delay>] "
-             "[-T] [-L] [-E] [-GM] [-INITSYNC <value>] [-OPERSYNC <value>] "
+             "[-T] [-L] [-E] [-B] [-V] [-N] [-GM] [-INITSYNC <value>] [-OPERSYNC <value>] "
              "[-INITPDELAY <value>] [-OPERPDELAY <value>] [-SYNCLOSSTHRESH <value>] "
+             "[-RSYNC <value>] [-RSYNC_DOMAIN <value>] [-RSYNC_RATE <value>]"
              "[-F <path to gptp_cfg.ini file>] "
              "\n",
              arg0 );
@@ -180,12 +178,14 @@ void print_usage( char *arg0 )
       "\t-S start syntonization\n"
       "\t-P pulse per second\n"
       "\t-M <filename> save/restore state\n"
+      "\t-C print logs in console \n"
       "\t-G <group> group id for shared memory\n"
       "\t-R <priority 1> priority 1 value\n"
       "\t-D Phy Delay <gb_tx_delay,gb_rx_delay,mb_tx_delay,mb_rx_delay>\n"
       "\t-T force master (ignored when Automotive Profile set)\n"
       "\t-L force slave (ignored when Automotive Profile set)\n"
       "\t-E enable test mode (as defined in AVnu automotive profile)\n"
+      "\t-B to bypass Interface check & wait\n"
       "\t-V enable AVnu Automotive Profile\n"
       "\t-N Neighbor prop delay threshold\n"
       "\t-GM set grandmaster for Automotive Profile\n"
@@ -194,11 +194,13 @@ void print_usage( char *arg0 )
       "\t-INITPDELAY <value> initial pdelay interval (Log base 2. 0 = 1 second)\n"
       "\t-OPERPDELAY <value> operational pdelay interval (Log base 2. 0 = 1 sec)\n"
       "\t-SYNCLOSSTHRESH <value> sync loss threshold default value 6000000 ns\n"
+      "\t-RSYNC <value> reverse sync enable\n"
+      "\t-RSYNC_DOMAIN <value> reverse sync domain\n"
+      "\t-RSYNC_RATE <value> reverse sync rate\n"
       "\t-F <path-to-ini-file>\n"
 #ifdef RGPTP_ENABLED
       "\t-Y Periodic GPIO pulse time in ms\n"
 #endif
-      "\t-l <output logging to logcat>\n"
     );
 }
 
@@ -231,8 +233,6 @@ int watchdog_setup(OSThreadFactory *thread_factory)
     return 0;
 #endif
 }
-
-#ifdef GPTP_AUTO_START
 
 static void *wait_for_epoll_event(void *arg)
 {
@@ -381,7 +381,6 @@ static void gptpDaemonServInit(void)
 
     return;
 }
-#endif
 
 static IEEE1588Clock *pClock = NULL;
 static EtherPort *pPort = NULL;
@@ -449,6 +448,7 @@ int main(int argc, char **argv)
     LinuxIPCArg *ipc_arg = NULL;
     EtherTimestamper *timestamper = NULL;
     bool use_config_file = false;
+    bool bypass_if_wait = false;
     char config_file_path[512];
     struct timespec timeout;
 #ifdef RGPTP_ENABLED
@@ -501,6 +501,9 @@ int main(int argc, char **argv)
     portInit.initialLogPdelayReqInterval = LOG2_INTERVAL_INVALID;
     portInit.operLogPdelayReqInterval = LOG2_INTERVAL_INVALID;
     portInit.operLogSyncInterval = LOG2_INTERVAL_INVALID;
+    portInit.reverseSyncEnabled = LOG2_INTERVAL_INVALID;
+    portInit.reverseSyncDomain = LOG2_INTERVAL_INVALID;
+    portInit.reverseSyncRate = LOG2_INTERVAL_INVALID;
     portInit.condition_factory = NULL;
     portInit.thread_factory = NULL;
     portInit.timer_factory = NULL;
@@ -532,28 +535,6 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    PLAT_strlcpy(ifname_eth, argv[1], IFNAME_SIZE);
-    timeout.tv_sec = 1;
-    timeout.tv_nsec = 0;
-    GPTP_LOG_INFO( "waiting for eth interface to be up.. \n");
-
-    while (waitForInterface()) {
-        sig = sigtimedwait(&set, NULL, &timeout);
-
-        if (sig == SIGINT || sig == SIGTERM || sig == SIGHUP || sig == SIGUSR2 ) {
-            perror("sigtimedwait()");
-            GPTP_LOG_UNREGISTER();
-            CLEANUP_RESOURCES();
-            return -1;
-        }
-
-        GPTP_LOG_DEBUG( "waitForInterface %d \n", sig);
-    }
-
-    GPTP_LOG_INFO( "eth interface is up.. \n");
-    sig = 0;
-    ifname = new InterfaceName( argv[1], strlen(argv[1]) );
-
     /* Process optional arguments */
     for ( i = 2; i < argc; ++i ) {
         if ( argv[i][0] == '-' ) {
@@ -566,16 +547,9 @@ int main(int argc, char **argv)
             } else if ( strcmp(argv[i] + 1,  "L" ) == 0 ) {
                 override_portstate = true;
                 port_state = PTP_SLAVE;
-            } else if ( strcmp(argv[i] + 1,  "l" ) == 0 ) {
-#ifdef ANDROID
-                gptplogcat = GPTP_LOGCAT_ON;
-                fprintf(stderr, "redirecting logs to logcat ..\n");
-#else
-                GPTP_LOG_ERROR( "unsupported on current platform \n" );
-#endif
-            } else if ( strcmp(argv[i] + 1,  "J" ) == 0 ) {
-                systemlogcat = GPTP_LOGCAT_ON;
-                fprintf(stderr, "redirecting logs to journctl ..\n");
+            } else if ( strcmp(argv[i] + 1,  "C" ) == 0 ) {
+                systemlogcat = GPTP_LOG_OFF;
+                gptplogcat = GPTP_LOG_OFF;
             } else if ( strcmp(argv[i] + 1,  "M" )  == 0 ) {
                 // Open file
                 if ( i + 1 < argc ) {
@@ -659,10 +633,18 @@ int main(int argc, char **argv)
                 portInit.isGM = true;
             } else if (strcmp(argv[i] + 1, "E") == 0) {
                 portInit.testMode = true;
+            } else if (strcmp(argv[i] + 1, "B") == 0) {
+                bypass_if_wait = true;
             } else if (strcmp(argv[i] + 1, "INITSYNC") == 0) {
                 portInit.initialLogSyncInterval = atoi(argv[++i]);
             } else if (strcmp(argv[i] + 1, "OPERSYNC") == 0) {
                 portInit.operLogSyncInterval = atoi(argv[++i]);
+            } else if (strcmp(argv[i] + 1, "RSYNC") == 0) {
+                portInit.reverseSyncEnabled = atoi(argv[++i]);
+            } else if (strcmp(argv[i] + 1, "RSYNC_DOMAIN") == 0) {
+                portInit.reverseSyncDomain = atoi(argv[++i]);
+            } else if (strcmp(argv[i] + 1, "RSYNC_RATE") == 0) {
+                portInit.reverseSyncRate = atof(argv[++i]);
             } else if (strcmp(argv[i] + 1, "INITPDELAY") == 0) {
                 portInit.initialLogPdelayReqInterval = atoi(argv[++i]);
             } else if (strcmp(argv[i] + 1, "OPERPDELAY") == 0) {
@@ -714,6 +696,16 @@ int main(int argc, char **argv)
         }
     }
 
+    if (strcmp(argv[1], "ini") != 0) {
+        PLAT_strlcpy(ifname_eth, argv[1], IFNAME_SIZE);
+        ifname = new InterfaceName( argv[1], strlen(argv[1]) );
+    } else if (!use_config_file) {
+        printf( "Interface name required/ ini file is required\n" );
+        print_usage( argv[0] );
+        CLEANUP_RESOURCES();
+        return -1;
+    }
+
     if (!input_delay) {
         ether_phy_delay[LINKSPEED_1G].set_delay
         ( PHY_DELAY_GB_TX_I20, PHY_DELAY_GB_RX_I20 );
@@ -723,7 +715,7 @@ int main(int argc, char **argv)
 
     portInit.phy_delay = &ether_phy_delay;
 
-    if ( !ipc->init( ipc_arg ) ) {
+    if ( !ipc->init( ipc_arg, portInit.reverseSyncEnabled, portInit.reverseSyncDomain, portInit.reverseSyncRate) ) {
         delete ipc;
         ipc = NULL;
     }
@@ -763,7 +755,6 @@ int main(int argc, char **argv)
     //portInit.clock = pClock;
     portInit.index = 1;
     portInit.timestamper = timestamper;
-    portInit.net_label = ifname;
     portInit.condition_factory = condition_factory;
     portInit.thread_factory = thread_factory;
     portInit.timer_factory = timer_factory;
@@ -793,6 +784,17 @@ int main(int argc, char **argv)
             priority2 =  iniParser.getPriority2();
             clockClass = iniParser.getclockClass();
             port_state = iniParser.getPortState();
+            bypass_if_wait = iniParser.getIsIfCheckBypass();
+
+            if (strcmp(argv[1], "ini") == 0) {
+                std::string if_name = iniParser.getIfaceName();
+                PLAT_strlcpy(ifname_eth, if_name.c_str(), IFNAME_SIZE);
+                ifname = new InterfaceName( ifname_eth, strlen(ifname_eth) );
+            }
+
+            if (!portInit.testMode && iniParser.getDebugLog() != 0) {
+                portInit.testMode = true;
+            }
 
             if (port_state == PTP_MASTER) {
                 override_portstate = true;
@@ -806,6 +808,9 @@ int main(int argc, char **argv)
             portInit.announceReceiptTimeout = iniParser.getAnnounceReceiptTimeout();
             portInit.operLogSyncInterval = iniParser.getOperLogSyncInterval();
             portInit.operLogPdelayReqInterval = iniParser.getOperLogPdelayReqInterval();
+            portInit.reverseSyncEnabled = iniParser.getIsRsync();
+            portInit.reverseSyncDomain = iniParser.getRSyncDomain();
+            portInit.reverseSyncRate = iniParser.getRSyncRate();
             portInit.automotive_profile = iniParser.getAutomotiveProfile();
             portInit.isGM = iniParser.getIsGM();
             portInit.asCapable = iniParser.getAsCapable();
@@ -842,6 +847,39 @@ int main(int argc, char **argv)
                 ether_phy_delay = iniParser.getPhyDelay();
             }
         }
+    }
+
+    portInit.net_label = ifname;
+
+    if ((strcmp(ifname_eth, "eth0") != 0) && (strcmp(ifname_eth, "eth1") != 0) ) {
+        GPTP_LOG_INFO( "Valid Interface name required\n" );
+        GPTP_LOG_UNREGISTER();
+        CLEANUP_RESOURCES();
+        return -1;
+    }
+
+    if (!bypass_if_wait) {
+        timeout.tv_sec = 1;
+        timeout.tv_nsec = 0;
+        GPTP_LOG_INFO( "waiting for eth interface to be up.. \n");
+
+        while (waitForInterface()) {
+            sig = sigtimedwait(&set, NULL, &timeout);
+
+            if (sig == SIGINT || sig == SIGTERM || sig == SIGHUP || sig == SIGUSR2 ) {
+                perror("sigtimedwait()");
+                GPTP_LOG_UNREGISTER();
+                CLEANUP_RESOURCES();
+                return -1;
+            }
+
+            GPTP_LOG_DEBUG( "waitForInterface %d \n", sig);
+        }
+
+        GPTP_LOG_INFO( "eth interface is up.. \n");
+        sig = 0;
+    } else {
+        GPTP_LOG_INFO( "Bypass Ethernet check.. \n");
     }
 
     pClock = new IEEE1588Clock
@@ -961,9 +999,7 @@ int main(int argc, char **argv)
         pGPTPPersist->registerWriteCB(gPTPPersistWriteCB);
     }
 
-#ifdef GPTP_AUTO_START
     gptpDaemonServInit();
-#endif
     GPTP_LOG_INFO("gPTP starting");
     pPort->processEvent(POWERUP);
 #ifdef RGPTP_ENABLED
@@ -1017,9 +1053,7 @@ int main(int argc, char **argv)
         }
     }
 
-#ifdef GPTP_AUTO_START
     gptpDaemonServDeInit();
-#endif
 
     if ( ipc ) {
 #ifdef LE_SHARED_MEM

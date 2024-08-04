@@ -50,6 +50,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <avbts_oslock.hpp>
 #include <avbts_osnet.hpp>
 #include <unordered_map>
+#include <pthread.h>
 
 #include <math.h>
 #define IFNAME_SIZE 16
@@ -300,6 +301,13 @@ typedef struct {
     /* CDS 6.2.1.6 */
     int8_t operLogSyncInterval;
 
+    /*802.1AS Recovered Clock Quality Testing*/
+    int8_t reverseSyncEnabled;
+
+    int8_t reverseSyncDomain;
+
+    double reverseSyncRate;
+
     /* CDS 6.2.2.3 */
     FrequencyRatio _peer_rate_offset;
 
@@ -342,32 +350,32 @@ typedef struct {
  * @brief Structure for Port Counters
  */
 typedef struct {
-    int32_t ieee8021AsPortStatRxSyncCount;
-    int32_t ieee8021AsPortStatRxFollowUpCount;
-    int32_t ieee8021AsPortStatRxPdelayRequest;
-    int32_t ieee8021AsPortStatRxPdelayResponse;
-    int32_t ieee8021AsPortStatRxPdelayResponseFollowUp;
-    int32_t ieee8021AsPortStatRxAnnounce;
-    int32_t ieee8021AsPortStatRxPTPPacketDiscard;
-    int32_t ieee8021AsPortStatRxSyncReceiptTimeouts;
-    int32_t ieee8021AsPortStatAnnounceReceiptTimeouts;
-    int32_t ieee8021AsPortStatPdelayAllowedLostResponsesExceeded;
-    int32_t ieee8021AsPortStatTxSyncCount;
-    int32_t ieee8021AsPortStatTxFollowUpCount;
-    int32_t ieee8021AsPortStatTxPdelayRequest;
-    int32_t ieee8021AsPortStatTxPdelayResponse;
-    int32_t ieee8021AsPortStatTxPdelayResponseFollowUp;
-    int32_t ieee8021AsPortStatTxAnnounce;
-    uint64_t avnu_loss_of_sync_message;
-    uint64_t avnu_sync_discontinutity;
-    uint64_t avnu_pdelay_resp_timeout;
-    uint16_t avb_sync_test_sequenceId;
-    uint32_t avb_sync_test_linkup_count;
-    uint32_t avb_sync_test_linkdown_count;
-    uint32_t avb_sync_test_station_state;
-    char ifname[IFNAME_SIZE];
-    int16_t offsetScaledLogVariance;
-    FrequencyRatio clockRatio;
+    int32_t ieee8021AsPortStatRxSyncCount = 0;
+    int32_t ieee8021AsPortStatRxFollowUpCount = 0;
+    int32_t ieee8021AsPortStatRxPdelayRequest = 0;
+    int32_t ieee8021AsPortStatRxPdelayResponse = 0;
+    int32_t ieee8021AsPortStatRxPdelayResponseFollowUp = 0;
+    int32_t ieee8021AsPortStatRxAnnounce = 0;
+    int32_t ieee8021AsPortStatRxPTPPacketDiscard = 0;
+    int32_t ieee8021AsPortStatRxSyncReceiptTimeouts = 0;
+    int32_t ieee8021AsPortStatAnnounceReceiptTimeouts = 0;
+    int32_t ieee8021AsPortStatPdelayAllowedLostResponsesExceeded = 0;
+    int32_t ieee8021AsPortStatTxSyncCount = 0;
+    int32_t ieee8021AsPortStatTxFollowUpCount = 0;
+    int32_t ieee8021AsPortStatTxPdelayRequest = 0;
+    int32_t ieee8021AsPortStatTxPdelayResponse = 0;
+    int32_t ieee8021AsPortStatTxPdelayResponseFollowUp = 0;
+    int32_t ieee8021AsPortStatTxAnnounce = 0;
+    uint64_t avnu_loss_of_sync_message = 0;
+    uint64_t avnu_sync_discontinutity = 0;
+    uint64_t avnu_pdelay_resp_timeout = 0;
+    uint16_t avb_sync_test_sequenceId = 0;
+    uint32_t avb_sync_test_linkup_count = 0;
+    uint32_t avb_sync_test_linkdown_count = 0;
+    uint32_t avb_sync_test_station_state = 0;
+    char ifname[IFNAME_SIZE] = {0};
+    int16_t offsetScaledLogVariance = 0;
+    FrequencyRatio clockRatio = 0;
 
 } PortCounters_t;
 
@@ -432,6 +440,13 @@ typedef struct {
     gptpStatsType_t status;
     syncInterval_t syncInterval;
 } sct_gptp_data;
+
+typedef struct
+{
+    int8_t reverseSyncEnabled = 0;
+    int8_t reverseSyncDomain = 0;
+    double reverseSyncRate = 0;
+}RsyncStatus_t;
 
 /**
  * @brief Port functionality common to all network media
@@ -1476,6 +1491,27 @@ class CommonPort
          */
         virtual void becomeSlave( bool restart_syntonization ) = 0;
 
+         /**
+         * @brief  enable reverse sync.
+         * @param  void
+         * @return void
+         */
+        virtual void enableRsync( int8_t RSyncDomain, double RSyncRate ) = 0;
+
+        /**
+         * @brief  disable reverse sync.
+         * @param  void
+         * @return void
+         */
+        virtual void disableRsync() = 0;
+
+       /**
+        * @brief  set reverse sync parameter.
+        * @param  RsyncStatus_t reverse sync structure
+        * @return TRUE if success. FALSE otherwise
+        */
+        bool setRsync(RsyncStatus_t *Rsync);
+
         /**
          * @brief  Sets current sync count value.
          * @param  cnt [in] sync count value
@@ -1687,7 +1723,14 @@ class CommonPort
          * @param  waitTime time interval in nanoseconds
          * @return none
          */
-        void startSyncIntervalTimer(long long unsigned int waitTime);
+        void startSyncIntervalTimer(long long unsigned int waitTime, Event e);
+
+        /**
+         * @brief  stop sync interval timer
+         * @param  event to stop sync interval
+         * @return none
+         */
+        void stopSyncIntervalTimer(Event e);
 
         /**
          * @brief  Start announce interval timer

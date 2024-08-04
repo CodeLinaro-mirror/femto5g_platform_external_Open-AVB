@@ -64,6 +64,8 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #define QTIMER_RESAMPLING 5
 
+char ptp_dev_index[PTP_CLOCK_DEVICE_LENGTH] = {0};
+
 net_result LinuxNetworkInterface::nrecv
 ( LinkLayerAddress *addr, uint8_t *payload, size_t &length )
 {
@@ -267,6 +269,7 @@ bool LinuxTimestamperGeneric::HWTimestamper_init
     ( ptp_device + PTP_DEVICE_IDX_OFFS,
       sizeof(ptp_device) - PTP_DEVICE_IDX_OFFS, "%d", phc_index );
     GPTP_LOG_INFO("Using clock device: %s", ptp_device);
+    snprintf(ptp_dev_index, PTP_CLOCK_DEVICE_LENGTH, "%d", phc_index );
 
     do {
         phc_fd = open( ptp_device, O_RDWR );
@@ -279,7 +282,7 @@ bool LinuxTimestamperGeneric::HWTimestamper_init
             GPTP_LOG_INFO("opened clock device: %s", ptp_device);
         }
     } while ( ( ( phc_fd == -1 )
-              || ( (_private->clockid = FD_TO_CLOCKID(phc_fd)) == -1 ) )
+                || ( (_private->clockid = FD_TO_CLOCKID(phc_fd)) == -1 ) )
               && ( count < 100 ) );
 
 #ifdef PTP_HW_CROSSTSTAMP
@@ -413,6 +416,8 @@ bool LinuxTimestamperGeneric::post_init( int ifindex, int sd,
     hwconfig.rx_filter = HWTSTAMP_FILTER_PTP_V2_EVENT;
     hwconfig.tx_type = HWTSTAMP_TX_ON;
     err = ioctl( sd, SIOCSHWTSTAMP, &device );
+
+    GPTP_LOG_INFO("post_init:: SIOCSHWTSTAMP ioctl called");
 
     if ( err == -1 ) {
         GPTP_LOG_ERROR

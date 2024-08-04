@@ -71,6 +71,8 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <linux/sockios.h>
 #include <gptp_cfg.hpp>
 
+extern char ptp_dev_index[PTP_CLOCK_DEVICE_LENGTH];
+
 Timestamp tsToTimestamp(struct timespec *ts)
 {
     Timestamp ret;
@@ -1075,7 +1077,10 @@ LinuxSharedMemoryIPC::~LinuxSharedMemoryIPC()
 #endif
 }
 
-bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg )
+bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg,
+                                  int8_t reverseSyncEnabled,
+                                  int8_t reverseSyncDomain,
+                                  double reverseSyncRate)
 {
     LinuxIPCArg *arg;
     struct group *grp;
@@ -1115,6 +1120,7 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg )
     }
 
 #ifdef LE_SHARED_MEM
+
     do {
         gptp_fd = open("/dev/gptp", O_RDWR );
 
@@ -1126,8 +1132,8 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg )
             GPTP_LOG_INFO("opened gptp kernel device: /dev/gptp");
         }
     } while ( ( ( gptp_fd == -1 )
-            || ( (FD_TO_CLOCKID(gptp_fd)) == -1 ) )
-            && ( count < 100 ) );
+                || ( (FD_TO_CLOCKID(gptp_fd)) == -1 ) )
+              && ( count < 100 ) );
 
 #endif
     (void) umask(oldumask);
@@ -1149,6 +1155,15 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg )
         GPTP_LOG_ERROR( "mmap()" );
         goto exit_unlink;
     }
+
+    memset (master_offset_buffer, 0x0, SHM_SIZE) ;
+
+    /* set reverse sync parameters on sharedmem*/
+    gPtpTimeData *ptimedata;
+    ptimedata   = (gPtpTimeData *) (master_offset_buffer + sizeof(pthread_mutex_t));
+    ptimedata->reverseSyncEnabled = reverseSyncEnabled;
+    ptimedata->reverseSyncDomain = reverseSyncDomain;
+    ptimedata->reverseSyncRate = reverseSyncRate;
 
     /*create mutex attr */
     err = pthread_mutexattr_init(&shared);
@@ -1205,7 +1220,8 @@ bool LinuxSharedMemoryIPC::update(
     uint32_t sync_count,
     uint32_t pdelay_count,
     PortState port_state,
-    bool asCapable )
+    bool asCapable,
+    RsyncStatus_t *rSync)
 {
     int buf_offset = 0;
     pid_t process_id = getpid();
@@ -1231,6 +1247,9 @@ bool LinuxSharedMemoryIPC::update(
         ptimedata->process_id   = process_id;
         ptimedata->lb_freqoffset = lb_freqoffset;
         ptimedata->lb_phoffset = lb_phoffset;
+        rSync->reverseSyncDomain = ptimedata->reverseSyncDomain;
+        rSync->reverseSyncRate = ptimedata->reverseSyncRate;
+        rSync->reverseSyncEnabled = ptimedata->reverseSyncEnabled;
         /* unlock */
         pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
     }
@@ -1273,6 +1292,7 @@ bool LinuxSharedMemoryIPC::updateSyncStatus(bool is_sync, PortState port_state)
         ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
         ptimedata->sync_status = is_sync;
         ptimedata->port_state = port_state;
+        memcpy(ptimedata->ptp_dev_index, ptp_dev_index, PTP_CLOCK_DEVICE_LENGTH);
         /* unlock */
         pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
     }
@@ -1465,7 +1485,7 @@ bool LinuxNetworkInterfaceFactory::createInterface
     if ( ifname == NULL ) {
         GPTP_LOG_ERROR( "ifname == NULL");
         delete net_iface_l;
-        delete ifname;
+        net_iface_l  = NULL;
         return false;
     }
 
@@ -1474,7 +1494,7 @@ bool LinuxNetworkInterfaceFactory::createInterface
     if ( net_iface_l->sd_general == -1 ) {
         GPTP_LOG_ERROR( "failed to open general socket: %s", strerror(errno));
         delete net_iface_l;
-        delete ifname;
+        net_iface_l  = NULL;
         return false;
     }
 
@@ -1485,7 +1505,7 @@ bool LinuxNetworkInterfaceFactory::createInterface
         ( "failed to open event socket: %s ", strerror(errno));
         close(net_iface_l->sd_general);
         delete net_iface_l;
-        delete ifname;
+        net_iface_l  = NULL;
         return false;
     }
 
@@ -1499,7 +1519,7 @@ bool LinuxNetworkInterfaceFactory::createInterface
         close(net_iface_l->sd_general);
         close(net_iface_l->sd_event);
         delete net_iface_l;
-        delete ifname;
+        net_iface_l  = NULL;
         return false;
     }
 
@@ -1513,7 +1533,7 @@ bool LinuxNetworkInterfaceFactory::createInterface
         close(net_iface_l->sd_general);
         close(net_iface_l->sd_event);
         delete net_iface_l;
-        delete ifname;
+        net_iface_l  = NULL;
         return false;
     }
 
@@ -1535,7 +1555,7 @@ bool LinuxNetworkInterfaceFactory::createInterface
         close(net_iface_l->sd_general);
         close(net_iface_l->sd_event);
         delete net_iface_l;
-        delete ifname;
+        net_iface_l  = NULL;
         return false;
     }
 
@@ -1552,7 +1572,7 @@ bool LinuxNetworkInterfaceFactory::createInterface
         close(net_iface_l->sd_general);
         close(net_iface_l->sd_event);
         delete net_iface_l;
-        delete ifname;
+        net_iface_l  = NULL;
         return false;
     }
 
@@ -1564,7 +1584,7 @@ bool LinuxNetworkInterfaceFactory::createInterface
         close(net_iface_l->sd_general);
         close(net_iface_l->sd_event);
         delete net_iface_l;
-        delete ifname;
+        net_iface_l  = NULL;
         return false;
     }
 
@@ -1574,7 +1594,7 @@ bool LinuxNetworkInterfaceFactory::createInterface
         close(net_iface_l->sd_general);
         close(net_iface_l->sd_event);
         delete net_iface_l;
-        delete ifname;
+        net_iface_l  = NULL;
         return false;
     }
 
