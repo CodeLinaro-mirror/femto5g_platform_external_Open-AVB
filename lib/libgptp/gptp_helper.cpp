@@ -1188,7 +1188,7 @@ int setRsyncStatus(RsyncStatus_t *status)
     return 0;
 }
 
-int getTimeError(int16_t *timeError)
+int getTimeError(int64_t *timeError)
 {
     gPtpTimeData gPtpTD;
 
