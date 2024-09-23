@@ -675,7 +675,7 @@ class LinuxIPCArg : public OS_IPC_ARG
 };
 
 #ifdef ANDROID
-#define DEFAULT_GROUPNAME "vehicle_network"     /*!< Default groupname for the shared memory interface*/
+#define DEFAULT_GROUPNAME "vendor_ptp"     /*!< Default groupname for the shared memory interface*/
 #else
 #define DEFAULT_GROUPNAME "vnw"     /*!< Default groupname for the shared memory interface*/
 #endif
