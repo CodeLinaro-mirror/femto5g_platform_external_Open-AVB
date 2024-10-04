@@ -52,7 +52,12 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <string.h>
 #include <math.h>
 
+#define PROXY_MODE_SYNC_INTERVAL    5
+
 extern char ifname_eth[IFNAME_SIZE];
+int32_t g_proxy_mode = 0;
+int32_t gm_sync_count = 0;
+
 PTPMessageCommon::PTPMessageCommon( CommonPort *port )
 {
     // Fill in fields using port/clock dataset as a template
@@ -89,6 +94,8 @@ PTPMessageCommon *buildPTPMessage
     uint16_t sequenceId;
     PortIdentity *sourcePortIdentity;
     Timestamp timestamp(0, 0, 0);
+    static Timestamp preciseOriginTimestamp_prev(0, 0, 0);
+    static int32_t g_proxy_mode_set = 0;
     unsigned counter_value = 0;
     uint8_t domainNumber;
 #if PTP_DEBUG
@@ -248,6 +255,32 @@ PTPMessageCommon *buildPTPMessage
                 followup_msg->preciseOriginTimestamp.nanoseconds =
                     PLAT_ntohl(followup_msg->
                                preciseOriginTimestamp.nanoseconds);
+
+                if ((preciseOriginTimestamp_prev.seconds_ms ==
+                        followup_msg->preciseOriginTimestamp.seconds_ms) &&
+                        (preciseOriginTimestamp_prev.seconds_ls ==
+                         followup_msg->preciseOriginTimestamp.seconds_ls) &&
+                        (preciseOriginTimestamp_prev.nanoseconds ==
+                         followup_msg->preciseOriginTimestamp.nanoseconds)) {
+                    if (!g_proxy_mode_set) {
+                        GPTP_LOG_INFO("Proxy Mode start: Previous and CurrentPreciseOriginTimestamp are same");
+                        g_proxy_mode = 1;
+                        g_proxy_mode_set = 1;
+                        gm_sync_count = 1;
+                        port->getClock()->setProxyMode(g_proxy_mode);
+                    }
+                } else {
+                    preciseOriginTimestamp_prev.seconds_ms =
+                        followup_msg->preciseOriginTimestamp.seconds_ms;
+                    preciseOriginTimestamp_prev.seconds_ls =
+                        followup_msg->preciseOriginTimestamp.seconds_ls;
+                    preciseOriginTimestamp_prev.nanoseconds =
+                        followup_msg->preciseOriginTimestamp.nanoseconds;
+                    preciseOriginTimestamp_prev._version =
+                        followup_msg->preciseOriginTimestamp._version;
+                    g_proxy_mode_set = 0;
+                }
+
                 memcpy( &(followup_msg->tlv),
                         buf + PTP_FOLLOWUP_OFFSET + PTP_FOLLOWUP_LENGTH,
                         sizeof(followup_msg->tlv) );
@@ -1228,6 +1261,14 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
         GPTP_LOG_EXCEPTION("Sync discontinuity");
     }
 
+    if (tlv.getGmTimeBaseIndicator() != lastGmTimeBaseIndicator) {
+        GPTP_LOG_INFO("Proxy Mode start: GMTimebaseIndicator does not match, last GmTimeBaseIndicator: %d current GmTimeBaseIndicator %d",
+                      lastGmTimeBaseIndicator, tlv.getGmTimeBaseIndicator());
+        g_proxy_mode = 1;
+        gm_sync_count = 1;
+        port->getClock()->setProxyMode(g_proxy_mode);
+    }
+
     port->setLastGmTimeBaseIndicator(tlv.getGmTimeBaseIndicator());
 
     //Sync Stats
@@ -1239,6 +1280,20 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
     }
 
 done:
+
+    if (g_proxy_mode) {
+        if (gm_sync_count <= PROXY_MODE_SYNC_INTERVAL) {
+            GPTP_LOG_INFO("Proxy Mode ongoing gm_sync_count:%d g_proxy_mode:%d",
+                           gm_sync_count, g_proxy_mode);
+            gm_sync_count++;
+        } else {
+            g_proxy_mode = 0;
+            GPTP_LOG_INFO("Proxy Mode completed g_proxy_mode:%d", g_proxy_mode);
+            gm_sync_count = 1;
+            port->getClock()->setProxyMode(g_proxy_mode);
+        }
+    }
+
     _gc = true;
     port->setLastSync(NULL);
     delete sync;
