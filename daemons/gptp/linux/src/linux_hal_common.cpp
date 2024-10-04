@@ -106,7 +106,7 @@ static __inline__ uint64_t __attribute__((__unused__)) in64(uintptr_t __addr)
 
 Timestamp tsToTimestamp(struct timespec *ts)
 {
-    Timestamp ret;
+    Timestamp ret = {0, 0, 0};
     int seclen = sizeof(ts->tv_sec) - sizeof(ret.seconds_ls);
 
     if (seclen > 0) {
