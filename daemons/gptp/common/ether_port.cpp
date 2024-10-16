@@ -246,8 +246,7 @@ void EtherPort::processMessage
 	}
 
 	msg->processMessage(this);
-	if (msg->garbage())
-		delete msg;
+	delete msg;
 }
 
 void *EtherPort::openPort( EtherPort *port )
