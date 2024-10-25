@@ -1106,7 +1106,13 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
     //Parameters
     if (port->sct_buffer) {
         pthread_mutex_lock((pthread_mutex_t *) &port->sct_buffer->lock);
-        port->sct_buffer->status.offset = scalar_offset;
+
+        if ((port->getIsRsync() == 0) && (port->getPortState() == PTP_MASTER)) {
+            port->sct_buffer->status.offset = 0;
+        } else {
+            port->sct_buffer->status.offset = scalar_offset;
+        }
+
         port->sct_buffer->status.rate_deviation = local_clock_adjustment;
 
         if (0 < scalar_offset) {
@@ -1189,7 +1195,7 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
           local_q_offset, q_time, local_q_freq_offset,
           local_boot_offset, boot_time, local_boot_freq_offset,
           port->getSyncCount(), port->getPdelayCount(),
-          port->getPortState(), port->getAsCapable() );
+          port->getPortState(), port->getAsCapable(), PROCESS_MESSAGE_PATH);
         port->syncDone();
         port->getClock()->setSyncStatus(true, PTP_SLAVE);
         // Restart the SYNC_RECEIPT timer
@@ -1217,7 +1223,8 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
           local_q_freq_offset,
           local_boot_offset, boot_time,
           local_boot_freq_offset, port->getSyncCount(),
-          port->getPdelayCount(), port->getPortState(), port->getAsCapable() );
+          port->getPdelayCount(), port->getPortState(), port->getAsCapable(),
+          PROCESS_MESSAGE_PATH );
     }
 
     uint16_t lastGmTimeBaseIndicator;

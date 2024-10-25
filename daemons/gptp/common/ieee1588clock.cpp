@@ -713,7 +713,8 @@ void IEEE1588Clock::setMasterOffset
   FrequencyRatio local_q_freq_offset,
   int64_t local_boot_offset, Timestamp boot_time,
   FrequencyRatio local_boot_freq_offset, unsigned sync_count,
-  unsigned pdelay_count, PortState port_state, bool asCapable )
+  unsigned pdelay_count, PortState port_state, bool asCapable,
+  uint32_t process_path )
 {
     uint64_t curr_gptp = 0;
     _master_local_freq_offset = master_local_freq_offset;
@@ -790,7 +791,7 @@ void IEEE1588Clock::setMasterOffset
             master_local_freq_offset, local_system_freq_offset_avg.get(),
             local_q_freq_offset_avg.get(), local_boot_freq_offset_avg.get(),
             TIMESTAMP_TO_NS(local_time),
-            sync_count, pdelay_count, port_state, asCapable, &rSync);
+            sync_count, pdelay_count, port_state, asCapable, &rSync, process_path);
 
         if (prev_rsync_state != rSync.reverseSyncEnabled) {
             port->setRsync(&rSync);

@@ -59,6 +59,15 @@ extern uint64_t get_ntn_time(char *ifname);
 class IEEE1588Clock;
 
 /**
+ * @brief To know which process path this update function is called to modify offset
+ */
+typedef enum {
+    SYNC_INTERVAL_TIMEOUT_PATH = 0,
+    PROCESS_MESSAGE_PATH
+} ProcessPath_t;
+
+
+/**
  * @brief PortIdentity interface
  * Defined at IEEE 802.1AS Clause 8.5.2
  */
