@@ -1305,7 +1305,7 @@ bool LinuxSharedMemoryIPC::update(
     uint32_t pdelay_count,
     PortState port_state,
     bool asCapable,
-    RsyncStatus_t* rSync)
+    RsyncStatus_t* rSync, uint32_t process_path)
 {
     int buf_offset = 0;
     pid_t process_id = getpid();
@@ -1317,7 +1317,6 @@ bool LinuxSharedMemoryIPC::update(
         pthread_mutex_lock((pthread_mutex_t*)shm_buffer);
         buf_offset += sizeof(pthread_mutex_t);
         ptimedata = (gPtpTimeData*)(shm_buffer + buf_offset);
-        ptimedata->ml_phoffset = ml_phoffset;
         ptimedata->ls_phoffset = ls_phoffset;
         ptimedata->lq_phoffset = lq_phoffset;
         ptimedata->ml_freqoffset = ml_freqoffset;
@@ -1334,7 +1333,16 @@ bool LinuxSharedMemoryIPC::update(
         rSync->reverseSyncDomain = ptimedata->reverseSyncDomain;
         rSync->reverseSyncRate = ptimedata->reverseSyncRate;
         rSync->reverseSyncEnabled = ptimedata->reverseSyncEnabled;
-        ptimedata->d_status = 0xabcdef;
+
+        if ((ptimedata->port_state == PTP_SLAVE) ||
+                ((ptimedata->port_state == PTP_MASTER) &&
+                 (ptimedata->reverseSyncEnabled == 1) &&
+                 (process_path == PROCESS_MESSAGE_PATH))) {
+            ptimedata->ml_phoffset = ml_phoffset;
+        } else if (ptimedata->reverseSyncEnabled == 0) {
+            ptimedata->ml_phoffset = 0;
+        }
+
 #ifdef USE_CARVEOUT_GPTP
         /* Read 64 bits tick counter from QTMR0_F0V2_QTMR_V2
          * and write to the end of shared memory
