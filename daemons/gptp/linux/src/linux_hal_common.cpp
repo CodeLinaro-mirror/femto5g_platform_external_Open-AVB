@@ -1091,12 +1091,27 @@ LinuxThread::~LinuxThread()
 
 LinuxSharedMemoryIPC::~LinuxSharedMemoryIPC()
 {
-    munmap(master_offset_buffer, SHM_SIZE);
+    if (master_offset_buffer != (char*) -1) {
+        memset(master_offset_buffer, 0x0, SHM_SIZE);
+        munmap(master_offset_buffer, SHM_SIZE);
+    }
+
 #ifdef ANDROID
-    close(shm_fd);
-    unlink( SHM_NAME );
+
+    if (shm_fd != -1) {
+        close(shm_fd);
+        shm_fd = -1;
+    }
+
+    //unlink( SHM_NAME );
 #else
-    shm_unlink(SHM_NAME);
+
+    if (shm_fd != -1) {
+        close(shm_fd);
+        shm_fd = -1;
+    }
+
+    //shm_unlink(SHM_NAME);
 #endif
 #ifdef LE_SHARED_MEM
 
@@ -1242,10 +1257,20 @@ bool LinuxSharedMemoryIPC::init(
 #ifndef GPTP_VFIO
 exit_unlink :
 #ifdef ANDROID
-    close(shm_fd);
-    unlink(SHM_NAME);
+
+    if (shm_fd != -1) {
+        close(shm_fd);
+        shm_fd = -1;
+    }
+
+    //unlink(SHM_NAME);
 #else
-    shm_unlink(SHM_NAME);
+
+    if (shm_fd != -1) {
+        close(shm_fd);
+        shm_fd = -1;
+    }
+
 #endif
 #ifdef LE_SHARED_MEM
 
@@ -1572,12 +1597,24 @@ void LinuxSharedMemoryIPC::stop()
 {
     if ( master_offset_buffer != NULL ) {
 #ifndef GPTP_VFIO
+        memset(master_offset_buffer, 0x0, SHM_SIZE);
         munmap( master_offset_buffer, SHM_SIZE );
 #ifdef ANDROID
-        close(shm_fd);
-        unlink( SHM_NAME );
+
+        if (shm_fd != -1) {
+            close(shm_fd);
+            shm_fd = -1;
+        }
+
+        // unlink( SHM_NAME );
 #else
-        shm_unlink(SHM_NAME);
+
+        if (shm_fd != -1) {
+            close(shm_fd);
+            shm_fd = -1;
+        }
+
+        //shm_unlink(SHM_NAME);
 #endif
 #ifdef LE_SHARED_MEM
 

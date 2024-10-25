@@ -428,11 +428,12 @@ typedef struct {
     bool IsMaster;
     int64_t offset;
     uint16_t gmTimeBaseIndicator;
+    uint32_t d_status;
 } gptpStatsType_t;
 
 typedef struct {
     int8_t sync_interval;
-    int8_t init_sync_interval;
+    int8_t pdelay_interval;
 } syncInterval_t;
 
 typedef struct {
@@ -1499,11 +1500,11 @@ class CommonPort
         */
         virtual int8_t getRsync(void) = 0;
 
-         /**
-         * @brief  enable reverse sync.
-         * @param  void
-         * @return void
-         */
+        /**
+        * @brief  enable reverse sync.
+        * @param  void
+        * @return void
+        */
         virtual void enableRsync( int8_t RSyncDomain, double RSyncRate ) = 0;
 
         /**

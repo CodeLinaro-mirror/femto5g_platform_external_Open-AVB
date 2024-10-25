@@ -732,7 +732,7 @@ void IEEE1588Clock::setMasterOffset
     if (port->sct_buffer) {
         pthread_mutex_lock((pthread_mutex_t *) &port->sct_buffer->lock);
         port->sct_buffer->syncInterval.sync_interval = port->getSyncInterval();
-        port->sct_buffer->syncInterval.init_sync_interval = port->getInitSyncInterval();
+        port->sct_buffer->syncInterval.pdelay_interval = port->getoperLogPdelayReqInterval();
         pthread_mutex_unlock((pthread_mutex_t *) &port->sct_buffer->lock);
     }
 
