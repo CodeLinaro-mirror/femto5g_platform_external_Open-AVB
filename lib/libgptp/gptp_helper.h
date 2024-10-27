@@ -146,8 +146,8 @@ typedef struct __attribute__ ((packed))
 {
     bool status;
     int32_t port_status;
-    int32_t tv_sec;
-    int32_t tv_nsec;
+    uint32_t tv_sec;
+    uint32_t tv_nsec;
 } gptpTimeInfo_t;
 
 /* Get PTP time in nanoseconds for system time in nanoseconds */
@@ -202,7 +202,7 @@ bool gptpRegisterCallback(GPTP_UPDATE_NOTIFY_CALLBACK fn_ptr);
 int setRsyncStatus(RsyncStatus_t *status);
 
 /* get Rsync slave clock offset*/
-int getTimeError(int16_t *timeError);
+int getTimeError(int64_t *timeError);
 
 bool gptpInit(void);
 

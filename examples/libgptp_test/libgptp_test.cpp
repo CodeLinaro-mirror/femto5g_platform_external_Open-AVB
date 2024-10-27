@@ -172,7 +172,7 @@ void loop_test(int time_us)
     int64_t delta_qtimer_time;
     int64_t delta_ptp_time;
     int64_t delta_qtimer_ptp;
-    int16_t time_error;
+    int64_t time_error;
     int rcvid = 0;
     prev_qtimer_time = getQtimerTime();
     gptpGetCurPtpTime(&prev_ptp_time);
@@ -485,7 +485,7 @@ int main(int argc, char *argv[])
 
     if (gptpGetStatusAndCurPtpTime(&ptp_data)) {
         if (ptp_data.status) {
-            printf("gptp status %d port status %d gptp time %" PRIu64 ".%" PRIu64 "\n",
+            printf("gptp status %d port status %d gptp time %u.%u\n",
                    ptp_data.status, ptp_data.port_status, ptp_data.tv_sec, ptp_data.tv_nsec);
         } else {
             printf("gptp status %d port status %d\n", ptp_data.status,
