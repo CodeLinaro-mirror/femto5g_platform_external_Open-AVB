@@ -1104,7 +1104,7 @@ bool gptpGetPtpTimeFromBootTime_s(uint64_t *gptp_time_bt, uint64_t time_boot_ns,
     }
 
     if (inSync) {
-        *inSync = ptimedata.sync_status;
+        *inSync = ptimedata->sync_status;
     }
 
     return true;
@@ -1228,7 +1228,7 @@ bool gptpGetBootTimeFromPtpTime_s(uint64_t *boot_time_ns, uint64_t ptp_time_ns,
     }
 
     if (inSync) {
-        *inSync = ptimedata.sync_status;
+        *inSync = ptimedata->sync_status;
     }
 
 #endif
@@ -1657,7 +1657,7 @@ bool gptpGetCurgPtpMonotonicPair_s(uint64_t *gptp_time_cur,
     }
 
     if (inSync) {
-        *inSync = ptimedata.sync_status;
+        *inSync = ptimedata->sync_status;
     }
 
 #else

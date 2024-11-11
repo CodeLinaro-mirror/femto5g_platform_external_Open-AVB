@@ -41,22 +41,21 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 ******************************************************************************/
 
 #include <ieee1588.hpp>
-
 #include <avbts_clock.hpp>
 #include <avbts_oslock.hpp>
 #include <avbts_ostimerq.hpp>
-
 #include <stdio.h>
-
 #include <string.h>
-
 #include <stdlib.h>
-
 #include <string.h>
-
 #include <math.h>
-
 #include <unistd.h>
+#include <errno.h>
+
+#ifdef ANDROID
+#include <sys/timex.h>
+#endif
+
 #define TAI_CLOCK 0
 
 std::string ClockIdentity::getIdentityString()
@@ -633,7 +632,6 @@ int tai_adjust(long long offset)
     return 0;
 }
 #endif
-
 
 void synchronize_clocks(CommonPort *port)
 {
