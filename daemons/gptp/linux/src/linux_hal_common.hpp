@@ -744,7 +744,8 @@ class LinuxSharedMemoryIPC: public OS_IPC
             uint32_t pdelay_count,
             PortState port_state,
             bool asCapable,
-            RsyncStatus_t *rSync );
+            RsyncStatus_t *rSync,
+            uint32_t process_path);
 
         /**
          * @brief Updates grandmaster IPC values
