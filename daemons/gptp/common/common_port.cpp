@@ -79,11 +79,11 @@ CommonPort::CommonPort( PortInit_t *portInit ) :
     operLogPdelayReqInterval = &(portInit->operLogPdelayReqInterval);
     log_mean_announce_interval = 0;
     pdelay_count = 0;
-    sct_shm_fd = -1;
-    sct_buffer = NULL;
+    sct_shm_fd = portInit->sct_shm_fd;
+    sct_buffer = portInit->sct_buffer;
     asCapable = false;
     link_speed = INVALID_LINKSPEED;
-    qgptp_rmgr_init(portInit->ifname, this);
+    qgptp_rmgr_setport(this);
     memset(&counters, 0x0, sizeof(counters));
     memset(&syncInfo, 0x0, sizeof(syncMesaurementData_t));
     memset(&pdelayInfo, 0x0, sizeof(pDelayMeasurementData_t));

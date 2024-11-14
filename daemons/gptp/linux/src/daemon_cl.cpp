@@ -520,6 +520,8 @@ int main(int argc, char **argv)
     portInit.stbMSyncLossThreshold =
         CommonPort::STBM_SYNCLOSS_THRESH;
     portInit._peer_rate_offset = 1.0;
+    portInit.sct_buffer = NULL;
+    portInit.sct_shm_fd = -1;
     LinuxNetworkInterfaceFactory *default_factory =
         new LinuxNetworkInterfaceFactory;
     OSNetworkInterfaceFactory::registerFactory
@@ -851,10 +853,13 @@ int main(int argc, char **argv)
 
     portInit.net_label = ifname;
 
-    if ( !ipc->init( ipc_arg, portInit.reverseSyncEnabled, portInit.reverseSyncDomain, portInit.reverseSyncRate) ) {
+    if ( !ipc->init( ipc_arg, portInit.reverseSyncEnabled,
+                     portInit.reverseSyncDomain, portInit.reverseSyncRate) ) {
         delete ipc;
         ipc = NULL;
     }
+
+    qgptp_rmgr_init(&portInit.sct_shm_fd, &portInit.sct_buffer);
 
     if ((strcmp(ifname_eth, "eth0") != 0) && (strcmp(ifname_eth, "eth1") != 0) ) {
         GPTP_LOG_INFO( "Valid Interface name required\n" );
@@ -1078,7 +1083,6 @@ int main(int argc, char **argv)
 #endif
     GPTP_LOG_UNREGISTER();
     CLEANUP_RESOURCES();
-
     return 0;
 }
 

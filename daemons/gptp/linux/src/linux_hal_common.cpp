@@ -1330,6 +1330,7 @@ bool LinuxSharedMemoryIPC::update(
         ptimedata->process_id = process_id;
         ptimedata->lb_freqoffset = lb_freqoffset;
         ptimedata->lb_phoffset = lb_phoffset;
+        ptimedata->d_status = 0xabcdef;
         rSync->reverseSyncDomain = ptimedata->reverseSyncDomain;
         rSync->reverseSyncRate = ptimedata->reverseSyncRate;
         rSync->reverseSyncEnabled = ptimedata->reverseSyncEnabled;
