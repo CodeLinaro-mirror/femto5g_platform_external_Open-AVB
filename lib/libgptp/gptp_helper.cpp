@@ -446,7 +446,7 @@ static int gptpScaling(gPtpTimeData * td, char *memory_offset_buffer)
     gPtpTimeData * checkstatus = (gPtpTimeData *) (memory_offset_buffer + sizeof(
                                      pthread_mutex_t));
 
-    if (checkstatus->d_status != 0xabcdef ) {
+    if (checkstatus->d_status != DAEMON_STATUS_UP ) {
         GPTP_LOG_WARNING("gptp daemon is not up");
         return false;
     }
