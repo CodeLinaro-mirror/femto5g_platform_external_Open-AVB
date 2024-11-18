@@ -1091,12 +1091,27 @@ LinuxThread::~LinuxThread()
 
 LinuxSharedMemoryIPC::~LinuxSharedMemoryIPC()
 {
-    munmap(master_offset_buffer, SHM_SIZE);
+    if (master_offset_buffer != (char*) -1) {
+        memset(master_offset_buffer, 0x0, SHM_SIZE);
+        munmap(master_offset_buffer, SHM_SIZE);
+    }
+
 #ifdef ANDROID
-    close(shm_fd);
-    unlink( SHM_NAME );
+
+    if (shm_fd != -1) {
+        close(shm_fd);
+        shm_fd = -1;
+    }
+
+    //unlink( SHM_NAME );
 #else
-    shm_unlink(SHM_NAME);
+
+    if (shm_fd != -1) {
+        close(shm_fd);
+        shm_fd = -1;
+    }
+
+    //shm_unlink(SHM_NAME);
 #endif
 #ifdef LE_SHARED_MEM
 
@@ -1242,10 +1257,20 @@ bool LinuxSharedMemoryIPC::init(
 #ifndef GPTP_VFIO
 exit_unlink :
 #ifdef ANDROID
-    close(shm_fd);
-    unlink(SHM_NAME);
+
+    if (shm_fd != -1) {
+        close(shm_fd);
+        shm_fd = -1;
+    }
+
+    //unlink(SHM_NAME);
 #else
-    shm_unlink(SHM_NAME);
+
+    if (shm_fd != -1) {
+        close(shm_fd);
+        shm_fd = -1;
+    }
+
 #endif
 #ifdef LE_SHARED_MEM
 
@@ -1358,7 +1383,7 @@ bool LinuxSharedMemoryIPC::update(
         int64_t local_bypqtimer_offset = (int64_t)(qtimer_ns - ptimedata->local_time);
         *ptp_qtimer_offset = local_bypqtimer_offset;
         *current_tick = qtimer_tick;
-        *d_status = 0xAA; //Just an indication daemon is up
+        *d_status = 0xabcdef; //Just an indication daemon is up
 
         if (prev_gptp_sync_time != 0) {
             *qtimer_inc_ratio = (2 * prev_qtimer_inc_ratio) / 3 + ((
@@ -1572,12 +1597,24 @@ void LinuxSharedMemoryIPC::stop()
 {
     if ( master_offset_buffer != NULL ) {
 #ifndef GPTP_VFIO
+        memset(master_offset_buffer, 0x0, SHM_SIZE);
         munmap( master_offset_buffer, SHM_SIZE );
 #ifdef ANDROID
-        close(shm_fd);
-        unlink( SHM_NAME );
+
+        if (shm_fd != -1) {
+            close(shm_fd);
+            shm_fd = -1;
+        }
+
+        // unlink( SHM_NAME );
 #else
-        shm_unlink(SHM_NAME);
+
+        if (shm_fd != -1) {
+            close(shm_fd);
+            shm_fd = -1;
+        }
+
+        //shm_unlink(SHM_NAME);
 #endif
 #ifdef LE_SHARED_MEM
 
