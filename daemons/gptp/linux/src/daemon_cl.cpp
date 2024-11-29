@@ -705,7 +705,7 @@ int main(int argc, char **argv)
         PLAT_strlcpy(ifname_eth, argv[1], IFNAME_SIZE);
         ifname = new InterfaceName( argv[1], strlen(argv[1]) );
     } else if (!use_config_file) {
-        printf( "Interface name required/ ini file is required\n" );
+        GPTP_LOG_ERROR( "Interface name required/ ini file is required\n" );
         print_usage( argv[0] );
         CLEANUP_RESOURCES();
         return -1;
@@ -764,7 +764,10 @@ int main(int argc, char **argv)
         GptpIniParser iniParser(config_file_path);
 
         if (iniParser.parserError() < 0) {
-            GPTP_LOG_ERROR("Cant parse ini file. Aborting file reading.");
+            GPTP_LOG_ERROR("Can't parse ini file. Aborting file reading..\nExiting gptp daemon.");
+            GPTP_LOG_UNREGISTER();
+            CLEANUP_RESOURCES();
+            return -1;
         } else {
             GPTP_LOG_INFO("priority1 = %d", iniParser.getPriority1());
             GPTP_LOG_INFO("announceReceiptTimeout: %d",
