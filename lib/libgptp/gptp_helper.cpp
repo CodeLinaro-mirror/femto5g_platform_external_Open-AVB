@@ -352,6 +352,23 @@ static void gptpSCTMemDeinit()
 }
 
 
+/* gptp core function to deinit gptp scaling */
+static void gptpMemDeinit(int gptp_shm_fd, char *gptp_mmap)
+{
+    if (gptp_mmap != NULL) {
+        munmap(gptp_mmap, SHM_SIZE);
+        gptp_mmap = NULL;
+    }
+
+    if (gptp_shm_fd != -1) {
+        close(gptp_shm_fd);
+        gptp_shm_fd = -1;
+    }
+
+    GPTP_LOG_INFO("gptpMemDeinit %s\n", SHM_NAME);
+    gptpSCTMemDeinit();
+}
+
 
 /* gptp core function to init gptp scaling */
 static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
@@ -413,25 +430,12 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
         return false;
     }
 
-    gptpSCTMemInit();
+    if (!gptpSCTMemInit()) {
+        gptpMemDeinit(*gptp_shm_fd, *gptp_mmap);
+        return false;
+    }
+
     return true;
-}
-
-/* gptp core function to deinit gptp scaling */
-static void gptpMemDeinit(int gptp_shm_fd, char *gptp_mmap)
-{
-    if (gptp_mmap != NULL) {
-        munmap(gptp_mmap, SHM_SIZE);
-        gptp_mmap = NULL;
-    }
-
-    if (gptp_shm_fd != -1) {
-        close(gptp_shm_fd);
-        gptp_shm_fd = -1;
-    }
-
-    GPTP_LOG_INFO("gptpMemDeinit %s\n", SHM_NAME);
-    gptpSCTMemDeinit();
 }
 
 /* gptp core function to copy gptp offset data from shared memory */
