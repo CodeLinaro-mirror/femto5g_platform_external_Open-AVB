@@ -24,7 +24,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #define SCT_SHM_SIZE 0x2000
 
 #ifdef ANDROID
-#define DEFAULT_GROUPNAME "vehicle_network"     /*!< Default groupname for the shared memory interface*/
+#define DEFAULT_GROUPNAME "vendor_ptp"     /*!< Default groupname for the shared memory interface*/
 #else
 #define DEFAULT_GROUPNAME "vnw"     /*!< Default groupname for the shared memory interface*/
 #endif
@@ -42,7 +42,8 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
-extern int qgptp_rmgr_init(const char *name, CommonPort *port);
+extern int qgptp_rmgr_init(int* sct_shm_fd, sct_gptp_data **sct_buffer);
+extern int qgptp_rmgr_setport(CommonPort *port);
 extern int qgptp_rmgr_deinit();
 extern uint64_t qgptp_readtime(char *ifname);
 extern uintptr_t get_emac_base_addr(char *ifname);
