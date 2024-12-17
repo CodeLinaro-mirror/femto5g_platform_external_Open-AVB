@@ -776,7 +776,9 @@ static void *gptpDaemonSrvConnect(void *arg)
                 } else if (FD_ISSET(sock, &readfds)) {
                     ret = read(sock, buf, BUF_SIZE);
 
-                    if (ret == 0) {
+                    if (ret <= 0) {
+                        GPTP_LOG_INFO("Server closed the connection: ret: %d error:%s \n", ret,
+                                      strerror(errno));
                         close(sock);
                         sock = -1;
                     }
@@ -823,6 +825,7 @@ static int gptpDaemonClientInit(void)
     if (gptpTimeInit()) {
         GPTP_LOG_INFO("gptpDaemonSrvConnect: success\n");
         bInitialized = true;
+        bServiceConnect = true;
     } else {
         if (pipefd[0] != -1) {
             close(pipefd[0]);
