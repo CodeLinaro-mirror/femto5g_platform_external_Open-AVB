@@ -1437,6 +1437,19 @@ bool gptpGetCurPtpTime_s(uint64_t *gptp_time_cur, bool* inSync)
         return false;
     }
 
+    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+        return false;
+    }
+
+    if (gPtpTD.d_status != DAEMON_STATUS_UP) {
+        GPTP_LOG_WARNING("Daemon not up!!");
+        return false;
+    }
+
+    if (inSync) {
+        *inSync = gPtpTD.sync_status;
+    }
+
     if (clock_gettime(gPtpClockid, &ts)) {
         GPTP_LOG_ERROR("clock_gettime failed");
         return false;
