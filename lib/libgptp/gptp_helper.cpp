@@ -271,7 +271,7 @@ static void gptpClkDeInit(int gptp_phc_fd)
     gPtpClockid = -1;
 }
 
-
+#ifndef AVB_FEATURE_GVM_MODE
 static bool gptpSCTMemInit()
 {
     if (gPtpSCTShmFd  == -1) {
@@ -350,7 +350,7 @@ static void gptpSCTMemDeinit()
         gPtpSCTShmFd = -1;
     }
 }
-
+#endif
 
 /* gptp core function to deinit gptp scaling */
 static void gptpMemDeinit(int gptp_shm_fd, char *gptp_mmap)
@@ -366,7 +366,9 @@ static void gptpMemDeinit(int gptp_shm_fd, char *gptp_mmap)
     }
 
     GPTP_LOG_INFO("gptpMemDeinit %s\n", SHM_NAME);
+#ifndef AVB_FEATURE_GVM_MODE
     gptpSCTMemDeinit();
+#endif
 }
 
 
@@ -430,10 +432,12 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
         return false;
     }
 
+#ifndef AVB_FEATURE_GVM_MODE
     if (!gptpSCTMemInit()) {
         gptpMemDeinit(*gptp_shm_fd, *gptp_mmap);
         return false;
     }
+#endif
 
     return true;
 }
