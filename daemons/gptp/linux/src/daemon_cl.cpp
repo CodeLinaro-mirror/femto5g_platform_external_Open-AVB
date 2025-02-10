@@ -76,6 +76,10 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <poll.h>
 #include <pthread.h>
 
+#ifdef ANDROID
+#include <cutils/sockets.h>
+#endif
+
 #include "qgptp_rmgr.h"
 
 #ifdef SYSTEMD_WATCHDOG
@@ -328,6 +332,7 @@ static void gptpDaemonServDeInit(void)
     int ret = 0;
     unlink(ADDRESS);
     close(sock);
+    sock = 0;
     ret = pthread_detach(thread_id);
 
     if (ret != 0) {
@@ -342,29 +347,40 @@ static void gptpDaemonServInit(void)
     socklen_t len = 0;
     int ret = 0;
     umask(S_IRGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
-    /* Create gptp daemon socket */
-    sock = socket(AF_UNIX, SOCK_STREAM, 0);
+#ifdef ANDROID
+    sock = android_get_control_socket("gptp_socket");
 
-    if (sock == -1) {
+    if (sock < 0) {
         GPTP_LOG_ERROR("Socket creation failed : %s\n", strerror(errno));
-        exit(1);
     }
 
-    GPTP_LOG_INFO("Socket creation successful\n");
-    fcntl(sock, F_SETFL, (fcntl (sock, F_GETFL, 0) | O_NONBLOCK));
-    memset(&sock_addr_un, 0, sizeof(sockaddr_un));
-    sock_addr_un.sun_family = AF_UNIX;
-    snprintf(sock_addr_un.sun_path, (sizeof(sock_addr_un.sun_path) - 1), ADDRESS);
-    len = sizeof(sock_addr_un);
-    unlink(ADDRESS);
+#endif
 
-    if ((bind(sock, (struct sockaddr*) &sock_addr_un, len)) == -1) {
-        GPTP_LOG_ERROR("bind() failed : %s\n", strerror(errno));
-        close(sock);
-        exit(1);
+    if (sock <= 0) {
+        /* Create gptp daemon socket */
+        sock = socket(AF_UNIX, SOCK_STREAM, 0);
+
+        if (sock == -1) {
+            GPTP_LOG_ERROR("Socket creation failed : %s\n", strerror(errno));
+            exit(1);
+        }
+
+        GPTP_LOG_INFO("Socket creation successful\n");
+        fcntl(sock, F_SETFL, (fcntl (sock, F_GETFL, 0) | O_NONBLOCK));
+        memset(&sock_addr_un, 0, sizeof(sockaddr_un));
+        sock_addr_un.sun_family = AF_UNIX;
+        snprintf(sock_addr_un.sun_path, (sizeof(sock_addr_un.sun_path) - 1), ADDRESS);
+        len = sizeof(sock_addr_un);
+        unlink(ADDRESS);
+
+        if ((bind(sock, (struct sockaddr*) &sock_addr_un, len)) == -1) {
+            GPTP_LOG_ERROR("bind() failed : %s\n", strerror(errno));
+            close(sock);
+            exit(1);
+        }
+
+        GPTP_LOG_INFO("Socket bind successful\n");
     }
-
-    GPTP_LOG_INFO("Socket bind successful\n");
 
     if ((listen (sock, MAX_CLIENTS_COUNT)) == -1) {
         GPTP_LOG_ERROR("listen() failed : %s", strerror(errno));
@@ -860,6 +876,10 @@ int main(int argc, char **argv)
                      portInit.reverseSyncDomain, portInit.reverseSyncRate) ) {
         delete ipc;
         ipc = NULL;
+        GPTP_LOG_ERROR( "ipc init failed\n" );
+        GPTP_LOG_UNREGISTER();
+        CLEANUP_RESOURCES();
+        return -1;
     }
 
     qgptp_rmgr_init(&portInit.sct_shm_fd, &portInit.sct_buffer);
