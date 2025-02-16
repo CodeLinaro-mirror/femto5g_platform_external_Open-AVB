@@ -876,6 +876,10 @@ int main(int argc, char **argv)
                      portInit.reverseSyncDomain, portInit.reverseSyncRate) ) {
         delete ipc;
         ipc = NULL;
+        GPTP_LOG_ERROR( "ipc init failed\n" );
+        GPTP_LOG_UNREGISTER();
+        CLEANUP_RESOURCES();
+        return -1;
     }
 
     qgptp_rmgr_init(&portInit.sct_shm_fd, &portInit.sct_buffer);

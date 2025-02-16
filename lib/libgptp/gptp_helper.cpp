@@ -1534,7 +1534,7 @@ bool gptpGetPDelayMeasurementData(pDelayMeasurementData_t *delayData)
            sizeof(pDelayMeasurementData_t));
     pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
     ret = true;
-    GPTP_LOG_INFO("libgptp library: resp_clockIdentity " CLK_STR "",
+    GPTP_LOG_DEBUG("libgptp library: resp_clockIdentity " CLK_STR "",
                   CLK_TO_STR(delayData->resp_clockIdentity));
 #ifdef LIBGPTP_DEBUG
     GPTP_LOG_INFO("qgptp PDelay Measurement Data: request_origin_timestamp %"PRIu64" request_receipt_timestamp %"PRIu64"\
