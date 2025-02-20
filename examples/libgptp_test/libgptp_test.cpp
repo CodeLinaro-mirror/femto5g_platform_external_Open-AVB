@@ -211,7 +211,7 @@ void get_gptp_time()
     }
 
     curr_gptp_time = (ts.tv_sec) * 1000000000LL + ts.tv_nsec;
-    printf("current gptp time = %ld\n", curr_gptp_time);
+    printf("current gptp time = %" PRIu64 "\n", curr_gptp_time);
     close(gptp_phc_fd);
 #endif
     return;
