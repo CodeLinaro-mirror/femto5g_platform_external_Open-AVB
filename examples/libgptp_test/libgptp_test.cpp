@@ -403,7 +403,7 @@ void get_gptp_time()
     }
 
     curr_gptp_time = (ts.tv_sec) * 1000000000LL + ts.tv_nsec;
-    GPTP_LOG_INFO("current gptp time = %ld\n", curr_gptp_time);
+    GPTP_LOG_INFO("current gptp time = %" PRIu64 "\n", curr_gptp_time);
     close(gptp_phc_fd);
 #endif
     return;
