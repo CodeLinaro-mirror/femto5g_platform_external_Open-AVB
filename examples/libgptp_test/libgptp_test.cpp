@@ -63,6 +63,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #define CLOCKFD 3
 #define FD_TO_CLOCKID(fd)   ((~(clockid_t) (fd) << 3) | CLOCKFD)
+#define MAX_RETRY 10000
 
 #ifndef LOG_ERROR
 #define LOG_ERROR    1
@@ -570,6 +571,14 @@ int main(int argc, char *argv[])
 
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
+
+    while (retry < MAX_RETRY && !(gptp_scaling_available = gptpInit())) {
+        if (retry == 0) {
+            GPTP_LOG_ERROR("GPTP Init Failed, retrying..\n");
+        }
+        usleep(5000);
+        retry++;
+    }
 
     if (gptp_scaling_available) {
         GPTP_LOG_INFO("Gptp Init Success\n");
