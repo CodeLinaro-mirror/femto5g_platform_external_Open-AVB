@@ -194,7 +194,7 @@ bool is_in_log_limit(gptp_log_type_t type);
         } \
 
 #else
-#define GPTP_LOG_LIMIT_EXCEPTION(fmt,...) GPTP_LOG_EXCEPTION(fmt,## __VA_ARGS__)
+#define GPTP_LOG_LIMIT_EXCEPTION(log_type, fmt,...) GPTP_LOG_EXCEPTION(fmt,## __VA_ARGS__)
 #endif
 
 #ifdef LOG_LIMIT
@@ -204,7 +204,7 @@ bool is_in_log_limit(gptp_log_type_t type);
     } \
 
 #else
-#define GPTP_LOG_LIMIT_ERROR(fmt,...) GPTP_LOG_ERROR(fmt,## __VA_ARGS__)
+#define GPTP_LOG_LIMIT_ERROR(log_type, fmt,...) GPTP_LOG_ERROR(fmt,## __VA_ARGS__)
 #endif
 
 #endif
