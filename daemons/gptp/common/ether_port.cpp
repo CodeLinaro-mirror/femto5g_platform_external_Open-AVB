@@ -32,9 +32,8 @@
 ******************************************************************************/
 /******************************************************************************
 
-Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-
-Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+Changes from Qualcomm Technologies, Inc. are provided under the following license:
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 SPDX-License-Identifier: BSD-3-Clause-Clear
 
 ******************************************************************************/
@@ -58,7 +57,9 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <math.h>
 
 #include <stdlib.h>
+#include <unistd.h>
 
+extern bool waitForInterface();
 extern LinuxSharedMemoryIPC *ipc;
 LinkLayerAddress EtherPort::other_multicast(OTHER_MULTICAST);
 LinkLayerAddress EtherPort::pdelay_multicast(PDELAY_MULTICAST);
@@ -455,6 +456,24 @@ bool EtherPort::_processEvent( Event e )
             break;
 
         case LINKUP:
+            if (!OSNetworkInterfaceFactory::buildInterface
+                ( &net_iface, factory_name_t("default"), net_label,
+                 _hw_timestamper)) {
+                return false;
+            }
+            timestamper_init();
+            _init_port();
+
+            port_ready_condition->wait_prelock();
+
+            if ( !linkOpen(openPortWrapper, (void *)this) ) {
+                GPTP_LOG_ERROR("Error creating port thread");
+                ret = false;
+                break;
+            }
+
+            port_ready_condition->wait();
+
             haltPdelay(false);
             startPDelay();
 
@@ -536,8 +555,6 @@ bool EtherPort::_processEvent( Event e )
             }
 
 #endif
-            stopPDelay();
-
             if (automotive_profile) {
                 GPTP_LOG_EXCEPTION("LINK DOWN");
             } else {
@@ -548,7 +565,16 @@ bool EtherPort::_processEvent( Event e )
             if (getTestMode()) {
                 linkDownCount++;
             }
-
+            //delete all timers as in powerdown
+            stopPDelay();
+            setAsCapable(false);
+            clock->deleteEventTimerLocked( this, ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES );
+            clock->deleteEventTimerLocked( this, ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES );
+            clock->deleteEventTimerLocked( this, SYNC_INTERVAL_TIMEOUT_EXPIRES);
+            clock->deleteEventTimerLocked( this, PDELAY_RESP_RECEIPT_TIMEOUT_EXPIRES);
+            clock->deleteEventTimerLocked( this, SYNC_RATE_INTERVAL_TIMEOUT_EXPIRED);
+            clock->deleteEventTimerLocked( this, RSYNC_INTERVAL_TIMEOUT_EXPIRES );
+            stopSyncReceiptTimer();
             ret = true;
             break;
 
@@ -675,6 +701,7 @@ bool EtherPort::_processEvent( Event e )
                     follow_up->setPreciseOriginTimestamp
                     (sync_timestamp);
                     follow_up->sendPort(this, NULL);
+                    GPTP_LOG_DEBUG("Sent SYNC follow_up message");
                     delete follow_up;
                 } else {
                     GPTP_LOG_ERROR
