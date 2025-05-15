@@ -31,10 +31,11 @@
 
 ******************************************************************************/
 /* ============================================================================
-Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
 
-Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+Changes from Qualcomm Technologies, Inc. are provided under the following license:
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 SPDX-License-Identifier: BSD-3-Clause-Clear
+
 ============================================================================ */
 
 #ifndef ETHER_PORT_HPP
@@ -57,6 +58,10 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <list>
 
 #include <common_port.hpp>
+
+#ifdef GPTP_DSQB_ENABLED
+#include "pm_client_lib.h"
+#endif
 
 /**@file*/
 
@@ -87,6 +92,9 @@ typedef enum {
  */
 typedef std::map < PortIdentity, LinkLayerAddress > IdentityMap_t;
 
+#ifdef GPTP_DSQB_ENABLED
+typedef pm_client_t lpm_t;
+#endif
 
 /**
  * @brief Ethernet specific port functions
