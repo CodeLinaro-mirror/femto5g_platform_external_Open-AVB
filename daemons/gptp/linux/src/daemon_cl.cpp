@@ -33,9 +33,8 @@
 
 /******************************************************************************
 
-Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-
-Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+Changes from Qualcomm Technologies, Inc. are provided under the following license:
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 SPDX-License-Identifier: BSD-3-Clause-Clear
 
 ******************************************************************************/
@@ -75,6 +74,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <sys/epoll.h>
 #include <poll.h>
 #include <pthread.h>
+#include <errno.h>
 
 #ifdef ANDROID
 #include <cutils/sockets.h>
@@ -108,15 +108,18 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #define RGPTP_MAX_GPIO_PULSE_TIME_MS 5000
 #endif
 char ifname_eth[IFNAME_SIZE] = {0};
+static IEEE1588Clock *pClock = NULL;
+static EtherPort *pPort = NULL;
 
 void gPTPPersistWriteCB(char *bufPtr, uint32_t bufSize);
 
 static int sock = 0;
 static pthread_t thread_id = 0;
+static int keep_running = 0;
 struct sockaddr_un sock_addr_un;
 static struct sockaddr cli_addr;
 static socklen_t cli_len = sizeof(cli_addr);
-static int gptp_client[MAX_CLIENTS_COUNT] = {-1};
+static int gptp_client[MAX_CLIENTS_COUNT] = {0};
 
 
 // gptp logcat support
@@ -124,6 +127,9 @@ extern gptplogcat_t gptplogcat;
 extern gptplogcat_t systemlogcat;
 LinuxSharedMemoryIPC *ipc;
 
+#ifdef GPTP_DSQB_ENABLED
+lpm_t lpm_handle;
+#endif
 
 #define MAX_NSEC 1000000000
 /* Return *a - *b */
@@ -210,6 +216,70 @@ void print_usage( char *arg0 )
     );
 }
 
+#ifdef GPTP_DSQB_ENABLED
+int gptp_sys_suspend(void *data, enum PM_MODE mode)
+{
+    bool err = false;
+    GPTP_LOG_INFO("Handling LPM(mode: %d) enter notification", mode);
+    GPTP_LOG_INFO("stoping gptp daemon....");
+    pPort->gPTP_lpm = true;
+    err = pPort->processEvent(LINKDOWN);
+
+    if (err == false) {
+        GPTP_LOG_ERROR("failed to ds_suspend, roll back and NACK");
+        return -1;
+    }
+
+    return 0;
+}
+
+int gptp_sys_resume(void *data, enum PM_MODE mode)
+{
+    GPTP_LOG_INFO("Handling LPM(mode: %d) exit notification", mode);
+    GPTP_LOG_INFO("starting gptp daemon....");
+    pPort->gPTP_lpm = false;
+    pPort->processEvent(LINKUP);
+    return 0;
+}
+
+struct pm_ops_s gptp_lpm_ops = {
+    .pm_enter = gptp_sys_suspend,
+    .pm_exit = gptp_sys_resume,
+};
+
+/*! \fn int gptp_sys_register_lpm()
+    \brief This function registers gptp as external client to the server/RM via snservice interface.
+    \return int32_t
+*/
+int gptp_sys_register_lpm()
+{
+    int err = 0;
+    GPTP_LOG_INFO("Registering lpm callbacks");
+    err = pm_register("gptp", &gptp_lpm_ops, NULL, &lpm_handle);
+
+    if (err) {
+        GPTP_LOG_ERROR("LPM registration failed with err: %d", err);
+        return -1;
+    }
+
+    return 0;
+}
+
+int gptp_sys_deregister_lpm()
+{
+    int err = 0;
+    GPTP_LOG_INFO("Deregistering lpm callbacks");
+    err = pm_deregister(lpm_handle);
+
+    if (err) {
+        GPTP_LOG_ERROR("LPM deregistration failed with err: %d", err);
+        return -1;
+    }
+
+    return 0;
+}
+#endif
+
 int watchdog_setup(OSThreadFactory *thread_factory)
 {
 #ifdef SYSTEMD_WATCHDOG
@@ -248,6 +318,7 @@ static void *wait_for_epoll_event(void *arg)
     struct epoll_event *epoll_events;
     socklen_t cli_len = sizeof(cli_addr);
     epoll_fd = epoll_create(1);
+    memset(gptp_client, -1, MAX_CLIENTS_COUNT * sizeof(int));
 
     if (epoll_fd == -1) {
         GPTP_LOG_ERROR("epoll_create() failed : %s\n", strerror(errno));
@@ -272,9 +343,16 @@ static void *wait_for_epoll_event(void *arg)
         return NULL;
     }
 
-    while (1) {
+    while (keep_running) {
         int n, i;
-        n = epoll_wait (epoll_fd, epoll_events, MAX_EVENTS, -1);
+        n = epoll_wait (epoll_fd, epoll_events, MAX_EVENTS, 1000);
+        if (n == -1) {
+            if (errno == EINTR) {
+                continue;
+            }
+            GPTP_LOG_ERROR("epoll_wait() failed : %s\n", strerror(errno));
+            break;
+        }
 
         for (i = 0; i < n; i++) {
             if ((epoll_events[i].events & EPOLLERR)
@@ -322,27 +400,34 @@ static void *wait_for_epoll_event(void *arg)
             }
         }
     }
-
+    close(epoll_fd);
     free(epoll_events);
     return NULL;
 }
 
-static void gptpDaemonServDeInit(void)
+void gptpDaemonServDeInit(void)
 {
     int ret = 0;
     unlink(ADDRESS);
     close(sock);
     sock = 0;
-    ret = pthread_detach(thread_id);
+    // Signal the thread to exit
+    keep_running = 0;
 
-    if (ret != 0) {
-        GPTP_LOG_ERROR("gptpDaemonServDeInit: failed %s\n", strerror(errno));
+    // Wait for the thread to exit
+    pthread_join(thread_id, NULL);
+
+    for (int i = 0 ; i < MAX_CLIENTS_COUNT; i++) {
+        if(gptp_client[i] != -1) {
+            close(gptp_client[i]);
+            gptp_client[i] = -1;
+        }
     }
 
     return;
 }
 
-static void gptpDaemonServInit(void)
+void gptpDaemonServInit(void)
 {
     socklen_t len = 0;
     int ret = 0;
@@ -355,6 +440,7 @@ static void gptpDaemonServInit(void)
     }
 
 #endif
+    keep_running = 1; //reset the flag to keep running thread
 
     if (sock <= 0) {
         /* Create gptp daemon socket */
@@ -399,9 +485,6 @@ static void gptpDaemonServInit(void)
 
     return;
 }
-
-static IEEE1588Clock *pClock = NULL;
-static EtherPort *pPort = NULL;
 
 
 bool waitForInterface()
@@ -466,9 +549,10 @@ int main(int argc, char **argv)
     LinuxIPCArg *ipc_arg = NULL;
     EtherTimestamper *timestamper = NULL;
     bool use_config_file = false;
-    bool bypass_if_wait = false;
     char config_file_path[512];
     struct timespec timeout;
+    int rc = 0;
+
 #ifdef RGPTP_ENABLED
     bool rgptp = false;
 #endif
@@ -538,6 +622,8 @@ int main(int argc, char **argv)
     portInit._peer_rate_offset = 1.0;
     portInit.sct_buffer = NULL;
     portInit.sct_shm_fd = -1;
+    portInit.bypass_if_wait = false;
+    portInit.wait_for_sync = false;
     LinuxNetworkInterfaceFactory *default_factory =
         new LinuxNetworkInterfaceFactory;
     OSNetworkInterfaceFactory::registerFactory
@@ -655,7 +741,9 @@ int main(int argc, char **argv)
             } else if (strcmp(argv[i] + 1, "E") == 0) {
                 portInit.testMode = true;
             } else if (strcmp(argv[i] + 1, "B") == 0) {
-                bypass_if_wait = true;
+                portInit.bypass_if_wait = true;
+            } else if (strcmp(argv[i] + 1, "S") == 0) {
+                portInit.wait_for_sync = true;
             } else if (strcmp(argv[i] + 1, "INITSYNC") == 0) {
                 portInit.initialLogSyncInterval = atoi(argv[++i]);
             } else if (strcmp(argv[i] + 1, "OPERSYNC") == 0) {
@@ -803,7 +891,8 @@ int main(int argc, char **argv)
             priority2 =  iniParser.getPriority2();
             clockClass = iniParser.getclockClass();
             port_state = iniParser.getPortState();
-            bypass_if_wait = iniParser.getIsIfCheckBypass();
+            portInit.bypass_if_wait = iniParser.getIsIfCheckBypass();
+            portInit.wait_for_sync = iniParser.getwaitForSync();
 
             if (strcmp(argv[1], "ini") == 0) {
                 std::string if_name = iniParser.getIfaceName();
@@ -873,7 +962,7 @@ int main(int argc, char **argv)
     portInit.net_label = ifname;
 
     if ( !ipc->init( ipc_arg, portInit.reverseSyncEnabled,
-                     portInit.reverseSyncDomain, portInit.reverseSyncRate) ) {
+                     portInit.reverseSyncDomain, portInit.reverseSyncRate, portInit.wait_for_sync) ) {
         delete ipc;
         ipc = NULL;
         GPTP_LOG_ERROR( "ipc init failed\n" );
@@ -891,7 +980,7 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    if (!bypass_if_wait) {
+    if (!portInit.bypass_if_wait) {
         timeout.tv_sec = 1;
         timeout.tv_nsec = 0;
         GPTP_LOG_INFO( "waiting for eth interface to be up.. \n");
@@ -1033,7 +1122,20 @@ int main(int argc, char **argv)
     }
 
     gptpDaemonServInit();
-    GPTP_LOG_INFO("gPTP starting");
+
+#ifdef GPTP_DSQB_ENABLED
+    /*Register gptp System for lpm*/
+    rc = gptp_sys_register_lpm();
+
+    if (rc) {
+        GPTP_LOG_ERROR("gptp_sys_register_lpm failed");
+        GPTP_LOG_UNREGISTER();
+        CLEANUP_RESOURCES();
+        return -1;
+    }
+#endif
+
+    GPTP_LOG_INFO("gPTP starting...");
     pPort->processEvent(POWERUP);
 #ifdef RGPTP_ENABLED
 
@@ -1096,6 +1198,9 @@ int main(int argc, char **argv)
         delete ipc;
         ipc = NULL;
     }
+#ifdef GPTP_DSQB_ENABLED
+    gptp_sys_deregister_lpm();
+#endif
 
 #ifdef RGPTP_ENABLED
 
