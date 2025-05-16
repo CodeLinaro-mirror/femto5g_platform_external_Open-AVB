@@ -599,7 +599,7 @@ EXTERN_DLL_EXPORT void* openavbTLGetIntfHostCBList(tl_handle_t handle)
 	if (!pTLState) {
 		AVB_LOG_ERROR("Invalid handle.");
 		AVB_TRACE_EXIT(AVB_TRACE_TL);
-		return FALSE;
+		return NULL;
 	}
 
 	AVB_TRACE_EXIT(AVB_TRACE_TL);
@@ -615,7 +615,7 @@ EXTERN_DLL_EXPORT void* openavbTLGetIntfHandle(tl_handle_t handle)
 	if (!pTLState) {
 		AVB_LOG_ERROR("Invalid handle.");
 		AVB_TRACE_EXIT(AVB_TRACE_TL);
-		return FALSE;
+		return NULL;
 	}
 
 	AVB_TRACE_EXIT(AVB_TRACE_TL);
