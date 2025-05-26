@@ -1369,23 +1369,8 @@ void LinuxSharedMemoryIPC::vfio_ptp(int64_t ml_phoffset,
         uint64_t gptp_time_s_pre = 0;
         a_lock1++;
 
-        //InterruptDisable();
-        while (1) {
-            gptp_time_s_pre = in32(ptp_base_addr + PTP_SEC_OFFSET);
-            gptp_time_ns = in32(ptp_base_addr + PTP_NANO_SEC_OFFSET);
-            qtimer_tick = in64((uintptr_t)qtimer_base_addr);
-            gptp_time_s = in32(ptp_base_addr + PTP_SEC_OFFSET);
-
-            if (gptp_time_s == gptp_time_s_pre) {
-                break;
-            }
-        }
-
-        //InterruptEnable();
-        current_gptp_time = GET_VALUE(gptp_time_ns, MAC_STNSR_TSSS_LPOS,
-                                      MAC_STNSR_TSSS_HPOS);
-        current_gptp_time = current_gptp_time + (gptp_time_s * 1000000000ull);
-        ptimedata->local_time = current_gptp_time;
+        qtimer_tick = in64((uintptr_t)qtimer_base_addr);
+        ptimedata->local_time = local_time;
         /*Now Qtimer run with 19.2MHz clock*/
         uint64_t qtimer_ns = qtimer_tick * (1000000000.0 / 19200000.0);
         int64_t local_bypqtimer_offset = (int64_t)(qtimer_ns - ptimedata->local_time);
