@@ -920,7 +920,7 @@ bool gptpGetPtpTimeFromMonoTime_s(uint64_t *gptp_time_sys,
     int64_t delta_local = 0;
     uint64_t time_mono_qtime_ns  = 0;
 
-    if (!bInitialized) {
+    if (!gptp_time_sys || !bInitialized) {
         return false;
     }
 
@@ -970,7 +970,7 @@ bool gptpGetPtpTimeFromQTimeNs_s(uint64_t *gptp_time_qt,
     int64_t delta_local = 0;
     uint64_t time_ns = time_qtimer_ns;
 
-    if (!bInitialized) {
+    if (!gptp_time_qt || !bInitialized) {
         return false;
     }
 
@@ -1256,6 +1256,9 @@ bool gptpGetPtpTimeFromQTimeTickCount_s(uint64_t *gptp_time_sys,
                                         uint64_t qtime_ticks, bool* inSync)
 {
     bool ret = false;
+    if (!gptp_time_sys) {
+        return ret;
+    }
 #ifndef AVB_FEATURE_GVM_MODE
     uint64_t qTimerFreq = 0, qtimer_sec = 0, qtimer_nanos_NSec = 0,
              time_qtimer_ns = 0;
@@ -1292,7 +1295,7 @@ bool gptpGetPtpTimefromSystime_s(uint64_t *gptp_time_sys, uint64_t time_sys_ns,
     uint64_t time_ns = time_sys_ns;
     gPtpTimeData gPtpTD;
 
-    if (!bInitialized) {
+    if (!gptp_time_sys || !bInitialized) {
         return false;
     }
 
@@ -1359,7 +1362,7 @@ int setRsyncStatus(RsyncStatus_t *status)
 {
     GPTP_LOG_ERROR("%s : ENTER \n", __func__);
 
-    if (!bInitialized) {
+    if (!status || !bInitialized) {
         return -1;
     }
 
@@ -1375,7 +1378,7 @@ int getTimeError(int64_t *timeError)
 {
     gPtpTimeData gPtpTD;
 
-    if (!bInitialized) {
+    if (!timeError || !bInitialized) {
         return -1;
     }
 
@@ -1411,6 +1414,10 @@ bool gptpGetSyncStatus(void)
 /* public API to query current gptp time */
 bool gptpGetCurPtpTime_s(uint64_t *gptp_time_cur, bool* inSync)
 {
+    if (!gptp_time_cur) {
+        return false;
+    }
+
 #ifdef LE_GVM
     int ret = 0;
     gptpTimeInfo_t ptp_data;
@@ -1592,6 +1599,9 @@ bool getgPTPStatus(gptpStatsType_t *status)
 /* public API to query gptp status, port status and current gptp time */
 bool gptpGetStatusAndCurPtpTime(gptpTimeInfo_t *ptp_data)
 {
+    if (!ptp_data) {
+        return false;
+    }
 #ifdef LE_GVM
     int ret = 0;
 
@@ -1630,6 +1640,10 @@ bool gptpGetStatusAndCurPtpTime(gptpTimeInfo_t *ptp_data)
 bool gptpGetCurgPtpMonotonicPair_s(uint64_t *gptp_time_cur,
                                    uint64_t *mono_time_cur, bool* inSync)
 {
+    if (!gptp_time_cur || !mono_time_cur) {
+        return false;
+    }
+
     *gptp_time_cur = 0;
     *mono_time_cur = 0;
 #ifdef AVB_FEATURE_GVM_MODE
@@ -1744,6 +1758,9 @@ bool rgptpGetCurPtpTime(uint64_t *rgptp_time)
 {
     struct timespec ts;
     ts.tv_sec = ts.tv_nsec = 0;
+    if (!rgptp_time) {
+        return false;
+    }
     *rgptp_time = 0;
 
     if (clock_gettime(rgptp_clkid, &ts)) {
