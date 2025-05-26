@@ -564,6 +564,13 @@ PTPMessageCommon *buildPTPMessage
     memcpy(&(msg->domainNumber),
            buf + PTP_COMMON_HDR_DOMAIN_NUMBER(PTP_COMMON_HDR_OFFSET),
            sizeof(msg->domainNumber));
+    if ((msg->domainNumber == 1) && (port->getPortState() == PTP_SLAVE)) {
+        GPTP_LOG_LIMIT_ERROR(RX_TIMESTAMP_LOG,
+                "*** Received an reverse sync packet from slave to slave, discarding. domainNumber = %d port start = %d\n",
+                msg->domainNumber, port->getPortState());
+        goto abort;
+    }
+
     memcpy(&(msg->flags), buf + PTP_COMMON_HDR_FLAGS(PTP_COMMON_HDR_OFFSET),
            PTP_FLAGS_LENGTH);
     memcpy(&(msg->correctionField),
