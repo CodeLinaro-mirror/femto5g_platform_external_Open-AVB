@@ -176,6 +176,59 @@ enum _LOGGER_SEVERITY {
 
 #define DAEMON_STATUS_UP 0xabcdef
 
+/**
+ * Log based on ptp message
+ */
+typedef enum {
+    INFO_LOG,
+    WARNING_LOG,
+    ERROR_LOG,
+    RESET_ALL_LOG,
+} libgptp_log_type_t;
+
+/**
+ * Counters to Limit the logs
+ */
+typedef struct {
+    uint32_t libgptp_info;
+    uint32_t libgptp_warning;
+    uint32_t libgptp_error;
+} LibGptp_LogLimit_t;
+
+#define GPTP_MAX_INFO_LOG               (3)
+#define GPTP_MAX_WARNING_LOG            (3)
+#define GPTP_MAX_ERROR_LOG              (3)
+
+#ifdef LOG_LIMIT
+#define GPTP_LOG_LIMIT_INFO(log_type, fmt,...) \
+        if (libgptp_is_in_log_limit(log_type)) { \
+            GPTP_LOG_INFO(fmt,## __VA_ARGS__);  \
+        } \
+
+#else
+#define GPTP_LOG_LIMIT_INFO(fmt,...) GPTP_LOG_INFO(fmt,## __VA_ARGS__)
+#endif
+
+#ifdef LOG_LIMIT
+#define GPTP_LOG_LIMIT_WARNING(log_type, fmt,...) \
+        if (libgptp_is_in_log_limit(log_type)) { \
+            GPTP_LOG_WARNING(fmt,## __VA_ARGS__);  \
+        } \
+
+#else
+#define GPTP_LOG_LIMIT__WARNING(fmt,...) GPTP_LOG__WARNING(fmt,## __VA_ARGS__)
+#endif
+
+#ifdef LOG_LIMIT
+#define GPTP_LOG_LIMIT_ERROR(log_type, fmt,...) \
+    if (libgptp_is_in_log_limit(log_type)) { \
+        GPTP_LOG_ERROR(fmt,## __VA_ARGS__);  \
+    } \
+
+#else
+#define GPTP_LOG_LIMIT_ERROR(fmt,...) GPTP_LOG_ERROR(fmt,## __VA_ARGS__)
+#endif
+
 static bool bInitialized = false;
 static bool bServiceConnect = false;
 
@@ -221,6 +274,12 @@ extern "C" int32_t habmm_socket_close(int32_t handle);
 
 #endif
 
+static uint64_t log_time = 0;
+
+static void libgptp_reset_log_limit(libgptp_log_type_t type);
+static bool libgptp_is_in_log_limit(libgptp_log_type_t type);
+
+LibGptp_LogLimit_t loglimit;
 
 typedef struct {
     pthread_mutex_t lock;
@@ -249,7 +308,7 @@ static int gptpClkInit(int *gptp_phc_fd)
     char ptp_device[] = PTP_DEVICE;
     memcpy( ptp_device + PTP_DEVICE_IDX_OFFS,
             gPtpTD.ptp_dev_index,  sizeof(ptp_device) - PTP_DEVICE_IDX_OFFS);
-    GPTP_LOG_INFO("opening clock device: %s", ptp_device);
+    GPTP_LOG_LIMIT_INFO(INFO_LOG, "opening clock device: %s", ptp_device);
     *gptp_phc_fd = open(ptp_device, O_RDWR );
 #endif
 
@@ -284,7 +343,7 @@ static bool gptpSCTMemInit()
         gPtpSCTShmFd = shm_open(SCT_SHM_NAME, O_RDWR, 0);
 #endif
 #endif
-        GPTP_LOG_INFO("gptpSCTMemInit %s %d\n", SCT_SHM_NAME, gPtpSCTShmFd);
+        GPTP_LOG_DEBUG("gptpSCTMemInit %s %d\n", SCT_SHM_NAME, gPtpSCTShmFd);
 
         if (gPtpSCTShmFd == -1) {
             perror("shm_open()");
@@ -294,7 +353,7 @@ static bool gptpSCTMemInit()
         gPtpSCTMmap =
             (char *)mmap(NULL, SCT_SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
                          gPtpSCTShmFd, 0);
-        GPTP_LOG_INFO("gptpMemInit mmap pointer %p\n", gPtpSCTMmap);
+        GPTP_LOG_DEBUG("gptpMemInit mmap pointer %p\n", gPtpSCTMmap);
 
         if (gPtpSCTMmap == (char *) -1) {
             perror("mmap()");
@@ -346,7 +405,7 @@ static void gptpSCTMemDeinit()
             close(gPtpSCTShmFd);
         }
 
-        GPTP_LOG_INFO("gptpSCTMemDeinit %s\n", SCT_SHM_NAME);
+        GPTP_LOG_DEBUG("gptpSCTMemDeinit %s\n", SCT_SHM_NAME);
         gPtpSCTShmFd = -1;
     }
 }
@@ -365,7 +424,7 @@ static void gptpMemDeinit(int gptp_shm_fd, char *gptp_mmap)
         gptp_shm_fd = -1;
     }
 
-    GPTP_LOG_INFO("gptpMemDeinit %s\n", SHM_NAME);
+    GPTP_LOG_DEBUG("gptpMemDeinit %s\n", SHM_NAME);
 #ifndef AVB_FEATURE_GVM_MODE
     gptpSCTMemDeinit();
 #endif
@@ -388,7 +447,7 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
     *gptp_shm_fd = shm_open(SHM_NAME, O_RDWR, 0);
 #endif
 #endif
-    GPTP_LOG_INFO("gptpMemInit %s %d\n", SHM_NAME, *gptp_shm_fd);
+    GPTP_LOG_DEBUG("gptpMemInit %s %d\n", SHM_NAME, *gptp_shm_fd);
 
     if (*gptp_shm_fd == -1) {
         perror("shm_open()");
@@ -433,12 +492,13 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
     }
 
 #ifndef AVB_FEATURE_GVM_MODE
+
     if (!gptpSCTMemInit()) {
         gptpMemDeinit(*gptp_shm_fd, *gptp_mmap);
         return false;
     }
-#endif
 
+#endif
     return true;
 }
 
@@ -455,7 +515,7 @@ static int gptpScaling(gPtpTimeData * td, char *memory_offset_buffer)
                                      pthread_mutex_t));
 
     if (checkstatus->d_status != DAEMON_STATUS_UP ) {
-        GPTP_LOG_WARNING("gptp daemon is not up");
+        GPTP_LOG_LIMIT_WARNING(WARNING_LOG, "gptp daemon is not up");
         return false;
     }
 
@@ -639,7 +699,7 @@ static bool gptpLocalTime(const gPtpTimeData *td, uint64_t *now_local,
 }
 
 
-/* gptp core function query gptp time */
+/* gptp core function queloglimitry gptp time */
 static bool gptpLocalQTime(const gPtpTimeData *td, uint64_t *now_local,
                            uint64_t *time_qtime_ns)
 {
@@ -979,7 +1039,7 @@ bool gptpGetPtpTimeFromQTimeNs_s(uint64_t *gptp_time_qt,
     }
 
     if (gPtpTD.d_status != DAEMON_STATUS_UP) {
-        GPTP_LOG_WARNING("Daemon not up!!");
+        GPTP_LOG_LIMIT_WARNING(WARNING_LOG, "Daemon not up!!");
         return false;
     }
 
@@ -1029,7 +1089,7 @@ bool gptpGetPtpTimeFromBootTime_s(uint64_t *gptp_time_bt, uint64_t time_boot_ns,
                    gPtpTD.lb_phoffset, gPtpTD.lb_freqoffset, gPtpTD.qtime_to_mono_offset);
 
     if (gPtpTD.d_status != DAEMON_STATUS_UP) {
-        GPTP_LOG_WARNING("Daemon not up!!");
+        GPTP_LOG_LIMIT_WARNING(WARNING_LOG, "Daemon not up!!");
         return false;
     }
 
@@ -1143,7 +1203,7 @@ bool gptpGetBootTimeFromPtpTime_s(uint64_t *boot_time_ns, uint64_t ptp_time_ns,
     }
 
     if (gPtpTD.d_status != DAEMON_STATUS_UP) {
-        GPTP_LOG_WARNING("Daemon not up!!");
+        GPTP_LOG_LIMIT_WARNING(WARNING_LOG, "Daemon not up!!");
         return false;
     }
 
@@ -1256,9 +1316,11 @@ bool gptpGetPtpTimeFromQTimeTickCount_s(uint64_t *gptp_time_sys,
                                         uint64_t qtime_ticks, bool* inSync)
 {
     bool ret = false;
+
     if (!gptp_time_sys) {
         return ret;
     }
+
 #ifndef AVB_FEATURE_GVM_MODE
     uint64_t qTimerFreq = 0, qtimer_sec = 0, qtimer_nanos_NSec = 0,
              time_qtimer_ns = 0;
@@ -1304,7 +1366,7 @@ bool gptpGetPtpTimefromSystime_s(uint64_t *gptp_time_sys, uint64_t time_sys_ns,
     }
 
     if (gPtpTD.d_status != DAEMON_STATUS_UP) {
-        GPTP_LOG_WARNING("Daemon not up!!");
+        GPTP_LOG_LIMIT_WARNING(WARNING_LOG, "Daemon not up!!");
         return false;
     }
 
@@ -1456,7 +1518,7 @@ bool gptpGetCurPtpTime_s(uint64_t *gptp_time_cur, bool* inSync)
     }
 
     if (gPtpTD.d_status != DAEMON_STATUS_UP) {
-        GPTP_LOG_WARNING("Daemon not up!!");
+        GPTP_LOG_LIMIT_WARNING(WARNING_LOG, "Daemon not up!!");
         return false;
     }
 
@@ -1542,7 +1604,7 @@ bool gptpGetPDelayMeasurementData(pDelayMeasurementData_t *delayData)
     pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
     ret = true;
     GPTP_LOG_DEBUG("libgptp library: resp_clockIdentity " CLK_STR "",
-                  CLK_TO_STR(delayData->resp_clockIdentity));
+                   CLK_TO_STR(delayData->resp_clockIdentity));
 #ifdef LIBGPTP_DEBUG
     GPTP_LOG_INFO("qgptp PDelay Measurement Data: request_origin_timestamp %"PRIu64" request_receipt_timestamp %"PRIu64"\
 			response_origin_timestamp %"PRIu64" response_receipt_timestamp %"PRIu64" reference_local_timestamp %"PRIu64"\
@@ -1602,6 +1664,7 @@ bool gptpGetStatusAndCurPtpTime(gptpTimeInfo_t *ptp_data)
     if (!ptp_data) {
         return false;
     }
+
 #ifdef LE_GVM
     int ret = 0;
 
@@ -1758,9 +1821,11 @@ bool rgptpGetCurPtpTime(uint64_t *rgptp_time)
 {
     struct timespec ts;
     ts.tv_sec = ts.tv_nsec = 0;
+
     if (!rgptp_time) {
         return false;
     }
+
     *rgptp_time = 0;
 
     if (clock_gettime(rgptp_clkid, &ts)) {
@@ -1898,6 +1963,95 @@ const gPTPLibInterfaceReq* get_gPTPLib_if(const gPTPLibInterfaceEvent*
 
     return (&gPTPReqIf);
 }
+
+/**
+ * @brief Reset the log limit
+ * @param void
+ * @return void
+ */
+static void libgptp_reset_log_limit(libgptp_log_type_t type)
+{
+    switch (type) {
+        case  INFO_LOG: {
+                loglimit.libgptp_info = 0;
+            }
+            break;
+
+        case WARNING_LOG : {
+                loglimit.libgptp_warning = 0;
+            }
+            break;
+
+        case ERROR_LOG : {
+                loglimit.libgptp_error = 0;
+            }
+            break;
+
+        case RESET_ALL_LOG:
+        default : {
+                memset(&loglimit, '\0', sizeof(loglimit));
+            }
+    }
+}
+
+/**
+ * @brief check is log in the log_limit
+ * @param gptp_log_type_t
+ * @return true: log in limit, false: if not in limit
+ */
+
+static bool libgptp_is_in_log_limit(libgptp_log_type_t type)
+{
+
+    struct timespec t;
+    uint64_t curr_time = 0;
+    t.tv_sec = t.tv_nsec = 0;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    curr_time = (t.tv_sec) * 1000000000LL + t.tv_nsec;
+
+	if(curr_time+1000000000 > log_time) {
+		log_time = curr_time;
+		libgptp_reset_log_limit(RESET_ALL_LOG);
+	}
+
+    switch (type) {
+        case INFO_LOG : {
+                if (loglimit.libgptp_info >= 0 && loglimit.libgptp_info < GPTP_MAX_INFO_LOG) {
+                    loglimit.libgptp_info++;
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            break;
+
+        case WARNING_LOG : {
+                if (loglimit.libgptp_warning >= 0
+                        && loglimit.libgptp_warning < GPTP_MAX_WARNING_LOG) {
+                    loglimit.libgptp_warning++;
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            break;
+
+        case ERROR_LOG : {
+                if (loglimit.libgptp_error >= 0
+                        && loglimit.libgptp_error < GPTP_MAX_ERROR_LOG) {
+                    loglimit.libgptp_error++;
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            break;
+
+        default :
+            return -1;
+    }
+}
+
 #ifdef __cplusplus
 }
 #endif
