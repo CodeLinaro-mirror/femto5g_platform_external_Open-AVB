@@ -33,9 +33,8 @@
 
 /******************************************************************************
 
-Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-
-Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+Changes from Qualcomm Technologies, Inc. are provided under the following license:
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 SPDX-License-Identifier: BSD-3-Clause-Clear
 
 ******************************************************************************/
@@ -126,6 +125,8 @@ LinuxNetworkInterface::~LinuxNetworkInterface()
 {
     close( sd_event );
     close( sd_general );
+    sd_event = -1;
+    sd_general = -1;
 }
 
 net_result LinuxNetworkInterface::send
@@ -1121,6 +1122,9 @@ LinuxSharedMemoryIPC::~LinuxSharedMemoryIPC()
     }
 
 #endif
+#ifdef GPTP_VFIO
+       vfio_ptp_device_deinit();
+#endif
 }
 
 
@@ -1366,23 +1370,8 @@ void LinuxSharedMemoryIPC::vfio_ptp(int64_t ml_phoffset,
         uint64_t gptp_time_s_pre = 0;
         a_lock1++;
 
-        //InterruptDisable();
-        while (1) {
-            gptp_time_s_pre = in32(ptp_base_addr + PTP_SEC_OFFSET);
-            gptp_time_ns = in32(ptp_base_addr + PTP_NANO_SEC_OFFSET);
-            qtimer_tick = in64((uintptr_t)qtimer_base_addr);
-            gptp_time_s = in32(ptp_base_addr + PTP_SEC_OFFSET);
-
-            if (gptp_time_s == gptp_time_s_pre) {
-                break;
-            }
-        }
-
-        //InterruptEnable();
-        current_gptp_time = GET_VALUE(gptp_time_ns, MAC_STNSR_TSSS_LPOS,
-                                      MAC_STNSR_TSSS_HPOS);
-        current_gptp_time = current_gptp_time + (gptp_time_s * 1000000000ull);
-        ptimedata->local_time = current_gptp_time;
+        qtimer_tick = in64((uintptr_t)qtimer_base_addr);
+        ptimedata->local_time = local_time;
         /*Now Qtimer run with 19.2MHz clock*/
         uint64_t qtimer_ns = qtimer_tick * (1000000000.0 / 19200000.0);
         int64_t local_bypqtimer_offset = (int64_t)(qtimer_ns - ptimedata->local_time);
@@ -1832,8 +1821,13 @@ bool LinuxNetworkInterfaceFactory::createInterface
     struct packet_mreq mr_8021as;
     LinkLayerAddress addr;
     int ifindex;
-    LinuxNetworkInterface *net_iface_l = new LinuxNetworkInterface();
+    LinuxNetworkInterface *net_iface_l;
+    if (*net_iface != NULL) {
+        net_iface_l = dynamic_cast<LinuxNetworkInterface *>(*net_iface);
+        delete net_iface_l;
+    }
 
+    net_iface_l = new LinuxNetworkInterface();
     if ( !net_iface_l->net_lock.init()) {
         GPTP_LOG_ERROR( "Failed to initialize network lock");
         delete net_iface_l;
