@@ -1115,13 +1115,13 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
     }
 
     //stats
-    port->syncInfo.correction_field = correctionField;
     port->syncInfo.pDelay = delay;
     master_local_freq_offset  =  tlv.getRateOffset();
     master_local_freq_offset /= 1ULL << 41;
     master_local_freq_offset += 1.0;
     master_local_freq_offset /= port->getPeerRateOffset();
     correctionField /= 1 << 16;
+    port->syncInfo.correction_field = correctionField;
     correction = (int64_t)((delay * master_local_freq_offset) + correctionField );
 
     if ( correction > 0 ) {
