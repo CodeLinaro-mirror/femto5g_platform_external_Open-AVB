@@ -265,7 +265,7 @@ mrpd_send_ctl_msg(struct sockaddr_in *client_addr, char *notify_data,
 int process_ctl_msg(char *buf, int buflen, struct sockaddr_in *client)
 {
 
-	char respbuf[8];
+	char respbuf[16];
 	/*
 	 * Inbound/output commands from/to a client:
 	 *

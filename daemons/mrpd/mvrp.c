@@ -1169,7 +1169,7 @@ int mvrp_recv_cmd(char *buf, int buflen, struct sockaddr_in *client)
 {
 	int rc;
 	int mrp_event;
-	char respbuf[12];
+	char respbuf[15];
 	uint16_t vid_param;
 	int err_index;
 

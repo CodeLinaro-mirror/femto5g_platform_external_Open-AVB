@@ -153,7 +153,7 @@ U8 *pcapRawsockGetTxFrame(void *pvRawsock, bool blocking, unsigned int *len)
 		return rawsock->txBuffer;
 	}
 
-	return false;
+	return 0;
 }
 
 bool pcapRawsockTxFrameReady(void *pvRawsock, U8 *pBuffer, unsigned int len)

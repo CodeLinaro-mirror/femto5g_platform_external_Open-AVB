@@ -1613,7 +1613,7 @@ int mmrp_recv_cmd(char *buf, int buflen, struct sockaddr_in *client)
 {
 	int rc;
 	int err_index;
-	char respbuf[12];
+	char respbuf[15];
 	int mrp_event;
 	uint8_t svcreq_param;
 	uint8_t macvec_param[6];
