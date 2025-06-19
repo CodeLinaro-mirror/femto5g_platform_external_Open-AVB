@@ -274,7 +274,7 @@ extern "C" int32_t habmm_socket_close(int32_t handle);
 
 #endif
 
-static uint64_t log_time = 0;
+static uint64_t helper_log_time = 0;
 
 static void libgptp_reset_log_limit(libgptp_log_type_t type);
 static bool libgptp_is_in_log_limit(libgptp_log_type_t type);
@@ -2001,8 +2001,8 @@ static bool libgptp_is_in_log_limit(libgptp_log_type_t type)
     clock_gettime(CLOCK_MONOTONIC, &t);
     curr_time = (t.tv_sec) * 1000000000LL + t.tv_nsec;
 
-	if(curr_time+1000000000 > log_time) {
-		log_time = curr_time;
+	if(curr_time+1000000000 > helper_log_time) {
+		helper_log_time = curr_time;
 		libgptp_reset_log_limit(RESET_ALL_LOG);
 	}
 
