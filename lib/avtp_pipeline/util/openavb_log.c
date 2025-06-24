@@ -323,7 +323,7 @@ extern void DLL_EXPORT avbLogFn(
 				if (elem) {
 					log_queue_item_t *pLogItem = (log_queue_item_t *)openavbQueueData(elem);
 					pLogItem->bRT = FALSE;
-					strlcpy((char *)pLogItem->msg, full_msg, LOG_QUEUE_MSG_SIZE);
+					strlcpy((char *)pLogItem->msg, full_msg, sizeof(pLogItem->msg));
 					openavbQueueHeadPush(logQueue);
 				}
 			}
