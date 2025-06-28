@@ -149,9 +149,8 @@ PTPMessageCommon *buildPTPMessage
             timer->sleep(req);
 
             if (ts_good != GPTP_EC_EAGAIN)
-                GPTP_LOG_ERROR(
-                    "Error (RX) timestamping RX event packet (Retrying), error=%d",
-                    ts_good );
+                GPTP_LOG_LIMIT_ERROR(RX_TIMESTAMP_LOG,
+                        "Error (RX) timestamping RX event packet (Retrying), error=%d\n", ts_good );
 
             ts_good =
                 port->getRxTimestamp(sourcePortIdentity, messageId,
@@ -163,9 +162,10 @@ PTPMessageCommon *buildPTPMessage
         if (ts_good != GPTP_EC_SUCCESS) {
             char err_msg[HWTIMESTAMPER_EXTENDED_MESSAGE_SIZE];
             port->getExtendedError(err_msg);
-            GPTP_LOG_ERROR
-            ("*** Received an event packet but cannot retrieve timestamp, discarding. messageType=%u,error=%d\n%s",
-             messageType, ts_good, msg);
+            GPTP_LOG_LIMIT_ERROR
+                    (RX_TIMESTAMP_LOG,
+                    "*** Received an event packet but cannot retrieve timestamp, discarding. messageType=%u,error=%d\n%s",
+                    messageType, ts_good, msg);
             //_exit(-1);
             goto abort;
         } else {
@@ -564,6 +564,13 @@ PTPMessageCommon *buildPTPMessage
     memcpy(&(msg->domainNumber),
            buf + PTP_COMMON_HDR_DOMAIN_NUMBER(PTP_COMMON_HDR_OFFSET),
            sizeof(msg->domainNumber));
+    if ((msg->domainNumber == 1) && (port->getPortState() == PTP_SLAVE)) {
+        GPTP_LOG_LIMIT_ERROR(RX_TIMESTAMP_LOG,
+                "*** Received an reverse sync packet from slave to slave, discarding. domainNumber = %d port start = %d\n",
+                msg->domainNumber, port->getPortState());
+        goto abort;
+    }
+
     memcpy(&(msg->flags), buf + PTP_COMMON_HDR_FLAGS(PTP_COMMON_HDR_OFFSET),
            PTP_FLAGS_LENGTH);
     memcpy(&(msg->correctionField),
@@ -604,9 +611,9 @@ bool PTPMessageCommon::getTxTimestamp( EtherPort *port, uint32_t link_speed )
         timer->sleep(req);
 
         if (ts_good != GPTP_EC_EAGAIN && iter < 1)
-            GPTP_LOG_ERROR(
-                "Error (TX) timestamping PDelay request "
-                "(Retrying-%d), error=%d", iter, ts_good);
+        GPTP_LOG_LIMIT_ERROR(TX_TIMESTAMP_LOG,
+            "Error (TX) timestamping for message type %u "
+            "(Retrying-%d), error=%d",messageType, iter, ts_good);
 
         ts_good = port->getTxTimestamp
                   ( this, tx_timestamp, unused, iter == 0 );
@@ -622,9 +629,9 @@ bool PTPMessageCommon::getTxTimestamp( EtherPort *port, uint32_t link_speed )
     } else {
         char msg[HWTIMESTAMPER_EXTENDED_MESSAGE_SIZE];
         port->getExtendedError(msg);
-        GPTP_LOG_ERROR(
-            "Error (TX) timestamping PDelay request, error=%d\t%s",
-            ts_good, msg);
+        GPTP_LOG_LIMIT_ERROR(TX_TIMESTAMP_LOG,
+            "Error (TX) timestamping PDelay request, error=%d\t%s", ts_good, msg);
+
         _timestamp = INVALID_TIMESTAMP;
     }
 
@@ -1077,7 +1084,7 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
     PTPMessageSync *sync = port->getLastSync();
 
     if (sync == NULL) {
-        GPTP_LOG_ERROR("Received Follow Up but there is no sync message");
+        GPTP_LOG_LIMIT_ERROR(FOLLOW_UP_LOG, "Received Follow Up but there is no sync message");
         return;
     }
 
@@ -1091,8 +1098,8 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
             port->setWrongSeqIDCounter(0);
         }
 
-        GPTP_LOG_ERROR
-        ("Received Follow Up %d times but cannot find corresponding Sync", cnt);
+        GPTP_LOG_LIMIT_ERROR(FOLLOW_UP_LOG,
+            "Received Follow Up %d times but cannot find corresponding Sync", cnt);
         goto done;
     }
 
@@ -1108,13 +1115,13 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
     }
 
     //stats
-    port->syncInfo.correction_field = correctionField;
     port->syncInfo.pDelay = delay;
     master_local_freq_offset  =  tlv.getRateOffset();
     master_local_freq_offset /= 1ULL << 41;
     master_local_freq_offset += 1.0;
     master_local_freq_offset /= port->getPeerRateOffset();
     correctionField /= 1 << 16;
+    port->syncInfo.correction_field = correctionField;
     correction = (int64_t)((delay * master_local_freq_offset) + correctionField );
 
     if ( correction > 0 ) {
@@ -1291,7 +1298,7 @@ done:
     if (g_proxy_mode) {
         if (gm_sync_count <= PROXY_MODE_SYNC_INTERVAL) {
             GPTP_LOG_INFO("Proxy Mode ongoing gm_sync_count:%d g_proxy_mode:%d",
-                           gm_sync_count, g_proxy_mode);
+                          gm_sync_count, g_proxy_mode);
             gm_sync_count++;
         } else {
             g_proxy_mode = 0;
@@ -1969,6 +1976,13 @@ void PTPMessageSignalling::processMessage( EtherPort *port )
                     tlv.getLinkDelayInterval());
     GPTP_LOG_STATUS("Signalling Sync Interval: %d", tlv.getTimeSyncInterval());
     GPTP_LOG_STATUS("Signalling Announce Interval: %d", tlv.getAnnounceInterval());
+#ifdef LOG_LIMIT
+
+    if (port->getAutomotiveProfile() && port->getPortState() == PTP_MASTER) {
+        reset_log_limit(RESET_ALL_LOG);
+    }
+
+#endif
     int8_t linkDelayInterval = tlv.getLinkDelayInterval();
     int8_t timeSyncInterval = tlv.getTimeSyncInterval();
     int8_t announceInterval = tlv.getAnnounceInterval();

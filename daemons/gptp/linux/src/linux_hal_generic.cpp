@@ -31,10 +31,11 @@
 
 ******************************************************************************/
 /* ============================================================================
-Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
 
-Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+Changes from Qualcomm Technologies, Inc. are provided under the following license:
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 SPDX-License-Identifier: BSD-3-Clause-Clear
+
 ============================================================================ */
 
 #include <linux_hal_generic.hpp>
@@ -311,8 +312,31 @@ bool LinuxTimestamperGeneric::HWTimestamper_init
     }
 
     if ( dynamic_cast<LinuxNetworkInterface *>(iface) != NULL ) {
-        iface_list.push_front
-        ( (dynamic_cast<LinuxNetworkInterface *>(iface)) );
+        // Check if iface is present in the list, if not add to iface_list
+        auto it = std::find(iface_list.begin(), iface_list.end(), iface);
+        if (it == iface_list.end()) {
+            iface_list.push_front
+                        ( (dynamic_cast<LinuxNetworkInterface *>(iface)) );
+        }
+    }
+
+    return true;
+}
+
+bool LinuxTimestamperGeneric::HWTimestamper_deinit
+( InterfaceLabel *iface_label, OSNetworkInterface *iface )
+{
+    if(phc_fd != -1) {
+        if (close(phc_fd) == -1) {
+            GPTP_LOG_DEBUG("%s:%d Error in closing errno = %d(%s)", __func__,__LINE__, errno, strerror(errno));
+        } else {
+            GPTP_LOG_DEBUG("%s:%d close successful", __func__,__LINE__);
+        }
+        phc_fd = -1;
+    }
+
+    if (_private != NULL) {
+        delete _private;
     }
 
     return true;

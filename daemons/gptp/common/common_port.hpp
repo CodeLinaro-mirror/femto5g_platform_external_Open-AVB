@@ -33,9 +33,8 @@
 
 /******************************************************************************
 
-Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-
-Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+Changes from Qualcomm Technologies, Inc. are provided under the following license:
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 SPDX-License-Identifier: BSD-3-Clause-Clear
 
 ******************************************************************************/
@@ -463,6 +462,12 @@ typedef struct {
 
     /* safe car shared memory */
     sct_gptp_data *sct_buffer;
+
+    /* To wait for gptp sync to complete */
+    bool wait_for_sync;
+
+    /* enable to not wait for interface link up */
+    bool bypass_if_wait;
 } PortInit_t;
 
 
@@ -488,9 +493,6 @@ class CommonPort
         int64_t one_way_delay;
         int64_t neighbor_prop_delay_thresh;
         int64_t stbMSyncLossThreshold;
-        InterfaceLabel *net_label;
-
-        OSNetworkInterface *net_iface;
 
         PortState port_state;
         bool testMode;
@@ -536,6 +538,7 @@ class CommonPort
         OSLock *syncIntervalTimerLock;
         OSLock *announceIntervalTimerLock;
 
+        bool bypass_if_wait;
 
     protected:
         static const int64_t INVALID_LINKDELAY = 3600000000000;
@@ -550,6 +553,8 @@ class CommonPort
         const bool isGM;
 
         phy_delay_map_t const * const phy_delay;
+        OSNetworkInterface *net_iface;
+        InterfaceLabel *net_label;
 
     public:
 
@@ -587,6 +592,7 @@ class CommonPort
          * @brief Initializes the hwtimestamper
          */
         void timestamper_init( void );
+        void timestamper_deinit( void );
 
         /**
          * @brief Resets the hwtimestamper
