@@ -33,9 +33,8 @@
 
 /******************************************************************************
 
-Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-
-Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+Changes from Qualcomm Technologies, Inc. are provided under the following license:
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 SPDX-License-Identifier: BSD-3-Clause-Clear
 
 ******************************************************************************/
@@ -126,6 +125,8 @@ LinuxNetworkInterface::~LinuxNetworkInterface()
 {
     close( sd_event );
     close( sd_general );
+    sd_event = -1;
+    sd_general = -1;
 }
 
 net_result LinuxNetworkInterface::send
@@ -1820,8 +1821,13 @@ bool LinuxNetworkInterfaceFactory::createInterface
     struct packet_mreq mr_8021as;
     LinkLayerAddress addr;
     int ifindex;
-    LinuxNetworkInterface *net_iface_l = new LinuxNetworkInterface();
+    LinuxNetworkInterface *net_iface_l;
+    if (*net_iface != NULL) {
+        net_iface_l = dynamic_cast<LinuxNetworkInterface *>(*net_iface);
+        delete net_iface_l;
+    }
 
+    net_iface_l = new LinuxNetworkInterface();
     if ( !net_iface_l->net_lock.init()) {
         GPTP_LOG_ERROR( "Failed to initialize network lock");
         delete net_iface_l;
