@@ -73,6 +73,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #define PDELAY_RESP_RECEIPT_TIMEOUT_MULTIPLIER 3    /*!< PDelay timeout multiplier*/
 #define SYNC_RECEIPT_TIMEOUT_MULTIPLIER 3           /*!< Sync receipt timeout multiplier*/
 #define ANNOUNCE_RECEIPT_TIMEOUT_MULTIPLIER 3       /*!< Announce receipt timeout multiplier*/
+#define DEFAULT_ALLOWED_LOST_RESPONSES 9            /*!< Default value of allowedLostResponses - IEEE P802.1AS-Rev/D8.0. Section 11.5.3 */
 
 #define LOG2_INTERVAL_INVALID -127  /* Simple out of range Log base 2 value used for Sync and PDelay msg internvals */
 
@@ -125,15 +126,19 @@ class EtherPort : public CommonPort
         int8_t operLogPdelayReqInterval;
         int8_t operLogSyncInterval;
         int8_t initialLogPdelayReqInterval;
+        uint8_t allowedLostResponses;
+        uint8_t lostResponses;
         int8_t reverseSyncEnabled;
         int8_t reverseSyncDomain;
         double reverseSyncRate;
         bool automotive_profile;
 
+        bool disableSigMsg;
         // Test Status variables
         uint32_t linkUpCount;
         uint32_t linkDownCount;
         StationState_t stationState;
+        EtherPortLinkState_t etherPortLinkState;
 
         /* Automotive Profile : Persistant variables */
         // neighborPropDelay : defined as one_way_delay ??
@@ -227,6 +232,15 @@ class EtherPort : public CommonPort
         bool getAutomotiveProfile()
         {
             return ( automotive_profile );
+        }
+
+        /**
+         * @brief  Checks if signaling messages are enabled or disabled
+         * @return True if signaling messages are enabled, false otherwise
+         */
+        bool isSigMsgDisabled()
+        {
+            return (disableSigMsg);
         }
 
         /**
@@ -351,6 +365,22 @@ class EtherPort : public CommonPort
         void setInitPDelayInterval(void)
         {
             log_min_mean_pdelay_req_interval = initialLogPdelayReqInterval;
+        }
+
+        /**
+         * @brief  Gets the allowedLostResponses value
+         * @return none */
+        uint8_t getAllowedLostResponses(void)
+        {
+            return allowedLostResponses;
+        }
+
+        /**
+         * @brief  Resets the lostResponses back to 0
+         * @return none */
+        void resetLostResponses(void)
+        {
+            lostResponses = 0;
         }
 
         /**
@@ -690,6 +720,25 @@ class EtherPort : public CommonPort
             return reverseSyncRate;
         }
 
+        /**
+         * @brief  Gets the EtherPort LinkState information
+         * @return EtherPortLinkState_t
+         */
+        EtherPortLinkState_t getEtherPortLinkState(void)
+        {
+            return etherPortLinkState;
+        }
+
+        /**
+         * @brief Sets the EtherPort LinkState
+         * @param state value to be set
+         * @return void
+         */
+        void setEtherLinkState(EtherPortLinkState_t state)
+        {
+            etherPortLinkState = state;
+            setEtherPortLinkState(state);
+        }
 };
 
 #endif/*ETHER_PORT_HPP*/
