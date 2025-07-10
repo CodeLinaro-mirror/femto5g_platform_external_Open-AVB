@@ -1608,6 +1608,39 @@ bool LinuxSharedMemoryIPC::setProxyMode(int32_t proxy_value)
     return true;
 }
 
+bool LinuxSharedMemoryIPC::updateEtherLinkState(EtherPortLinkState_t LinkState)
+{
+    int buf_offset = 0;
+    char *shm_buffer = master_offset_buffer;
+    gPtpTimeData *ptimedata;
+
+    if (shm_buffer != NULL) {
+        /* lock */
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        ptimedata->etherPortLinkState = LinkState;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+
+#ifdef GPTP_VFIO
+    shm_buffer = master_offset_buffer_vfio;
+
+    if (shm_buffer != NULL) {
+        /* lock */
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        ptimedata->etherPortLinkState = LinkState;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+
+#endif
+    return true;
+}
+
 bool LinuxSharedMemoryIPC::getSyncStatus(void)
 {
     bool sync_stat = 0;
