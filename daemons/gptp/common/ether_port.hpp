@@ -108,6 +108,7 @@ class EtherPort : public CommonPort
         /* Port Status */
         // set to 0 when asCapable is false, increment for each pdelay recvd
         bool linkUp;
+        bool linkstatus = true;
 
         /* Port Configuration */
         int8_t log_mean_unicast_sync_interval;
