@@ -230,7 +230,7 @@ static void send_config_to_eavb_hal(pvt_data_t *pPvtData)
 
     if ((pPvtData->isStreamConfigSynced == false) && (config_socket_client > 0)) {
         StreamConfigInfo configInfo;
-        strlcpy(configInfo.socketPath, pPvtData->socketPath, SOCKET_PATH_MAX_LENGTH);
+        strlcpy(configInfo.socketPath, pPvtData->socketPath, sizeof(configInfo.socketPath));
         configInfo.audioChannelCount = pPvtData->audioChannels;
 
         do {
