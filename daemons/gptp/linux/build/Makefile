@@ -27,6 +27,9 @@
 #  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 #  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 #  POSSIBILITY OF SUCH DAMAGE.
+#  Changes from Qualcomm Technologies, Inc. are provided under the following license:
+#  Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+#  SPDX-License-Identifier: BSD-3-Clause-Clear
 
 ALTERNATE_LINUX_INCPATH=$(HOME)/header/include/
 
@@ -128,7 +131,14 @@ ifeq ($(GPTP_VFIO),1)
     LDFLAGS_G += -lvfioptp
 endif
 
+ifeq ($(GPTP_DSQB_ENABLED),1)
+    LDFLAGS_G += -lpm-client
+endif
+
 LDFLAGS_G += -lpthread -lrt
+
+CFLAGS_G += -DLOG_LIMIT
+CPPFLAGS_G += -DLOG_LIMIT
 
 CFLAGS = $(CFLAGS_G)
 CPPFLAGS = $(CPPFLAGS_G)
