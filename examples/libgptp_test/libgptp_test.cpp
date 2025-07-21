@@ -100,6 +100,7 @@ enum _LOGGER_SEVERITY {
 #define GPTP_LOG_INFO(fmt, ...) system_log(LOG_INFO, "[%d:%s:%d] " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__); printf(fmt,##__VA_ARGS__)
 #define GPTP_LOG_DEBUG(fmt, ...) system_log(LOG_DEBUG, "[%d:%s:%d] " fmt ,gettid(),  __FUNCTION__, __LINE__,##__VA_ARGS__); printf(fmt,##__VA_ARGS__)
 
+
 void system_log(int loglevel, const char *s, ...)
 {
     va_list arg = {};
@@ -121,6 +122,7 @@ void system_log(int loglevel, const char *s, ...)
 
 #endif
 
+static bool gptp_scaling_available = false;
 
 uint64_t systemTime(int clock)
 {
@@ -553,7 +555,7 @@ static void do_some_tests_rgptp_u(int time_us)
 void signal_handler(int signum) {
     printf("Received signal %d\n", signum);
     gptpRegisterCallback(NULL);
-    if (!gptpDeinit()) {
+    if (gptp_scaling_available && !gptpDeinit()) {
         GPTP_LOG_ERROR("GPTP deinit failed\n");
     }
     exit(0);
@@ -563,7 +565,6 @@ int main(int argc, char *argv[])
 {
     uint64_t test_vec_time;
     uint64_t test_gptp_time;
-    bool gptp_scaling_available = false;
     gptpTimeInfo_t ptp_data;
     int retry = 0;
     RsyncStatus_t Rsync;
