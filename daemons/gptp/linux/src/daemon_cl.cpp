@@ -981,7 +981,7 @@ int main(int argc, char **argv)
 
     qgptp_rmgr_init(&portInit.sct_shm_fd, &portInit.sct_buffer);
 
-    if ((strcmp(ifname_eth, "eth0") != 0) && (strcmp(ifname_eth, "eth1") != 0) ) {
+    if ((strcmp(ifname_eth, "eth0") != 0) && (strcmp(ifname_eth, "eth1") != 0) && (strcmp(ifname_eth, "eth2") != 0)) {
         GPTP_LOG_INFO( "Valid Interface name required\n" );
         GPTP_LOG_UNREGISTER();
         CLEANUP_RESOURCES();
