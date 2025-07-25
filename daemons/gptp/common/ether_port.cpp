@@ -119,6 +119,8 @@ EtherPort::EtherPort( PortInit_t *portInit ) :
     reverseSyncEnabled = portInit->reverseSyncEnabled;
     reverseSyncDomain = portInit->reverseSyncDomain;
     reverseSyncRate = portInit->reverseSyncRate;
+    // Initialize to ZERO (0) last GM time base indicator on bootup.
+    setLastGmTimeBaseIndicator(0);
     reset_log_limit(RESET_ALL_LOG);
 
     // Consider port is up even in bypass_if_wait is set
