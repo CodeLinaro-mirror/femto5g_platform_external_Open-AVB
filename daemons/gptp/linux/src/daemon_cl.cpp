@@ -1175,6 +1175,8 @@ int main(int argc, char **argv)
         pGPTPPersist->closeStorage();
     }
 
+    gptpDaemonServDeInit();
+
     if (pPort) {
         qgptp_rmgr_deinit();
         pPort->processEvent(POWERDOWN);
@@ -1188,8 +1190,6 @@ int main(int argc, char **argv)
             GPTP_LOG_ERROR("Failed to stop pulse per second I/O");
         }
     }
-
-    gptpDaemonServDeInit();
 
     if ( ipc ) {
 #ifdef LE_SHARED_MEM
