@@ -303,7 +303,7 @@ void *EtherPort::openPort( EtherPort *port )
 {
     port_ready_condition->signal();
 
-    while (1) {
+    while (linkstatus) {
         uint8_t buf[128];
         LinkLayerAddress remote;
         net_result rrecv;
@@ -463,7 +463,7 @@ bool EtherPort::_processEvent( Event e )
             }
             timestamper_init();
             _init_port();
-
+            linkstatus = true;
             port_ready_condition->wait_prelock();
 
             if ( !linkOpen(openPortWrapper, (void *)this) ) {
@@ -549,6 +549,7 @@ bool EtherPort::_processEvent( Event e )
             break;
 
         case LINKDOWN:
+            linkstatus = false;
 #ifdef LE_SHARED_MEM
             if ( ipc ) {
                 ipc->updateSyncStatus(false, PTP_DISABLED);
