@@ -2009,10 +2009,11 @@ static bool libgptp_is_in_log_limit(libgptp_log_type_t type)
     clock_gettime(CLOCK_MONOTONIC, &t);
     curr_time = (t.tv_sec) * 1000000000LL + t.tv_nsec;
 
-	if(curr_time+1000000000 > helper_log_time) {
-		helper_log_time = curr_time;
-		libgptp_reset_log_limit(RESET_ALL_LOG);
-	}
+    /* Reset log limit for every 5 seconds */
+    if(curr_time >= helper_log_time + 5000000000LL) {
+        helper_log_time = curr_time;
+        libgptp_reset_log_limit(RESET_ALL_LOG);
+    }
 
     switch (type) {
         case INFO_LOG : {

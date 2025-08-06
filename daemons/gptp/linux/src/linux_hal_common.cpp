@@ -217,7 +217,6 @@ void LinuxNetworkInterface::clear_reenable_rx_queue()
         GPTP_LOG_ERROR
         ( "Unable to add PTP multicast addresses to port id: %u",
           ifindex );
-        return;
     }
 
     if ( !net_lock.unlock() ) {
@@ -396,6 +395,11 @@ void LinuxNetworkInterface::watchNetLink( CommonPort *iPort )
         return;
     }
 
+    int ret = pthread_setname_np(pthread_self(), "watchNetLink");
+    if (ret != 0) {
+        GPTP_LOG_ERROR("pthread_setname_np failed");
+    }
+
     netLinkSocket = socket (AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 
     if (netLinkSocket < 0) {
@@ -511,6 +515,11 @@ void *LinuxTimerQueueHandler( void *arg )
     timeout.tv_sec = 0;
     timeout.tv_nsec = 100000000; /* 100 ms */
     sigemptyset( &waitfor );
+
+    int ret = pthread_setname_np(pthread_self(), "LinuxTimer");
+    if (ret != 0) {
+        GPTP_LOG_ERROR("pthread_setname_np failed");
+    }
 
     while ( !timerq->stop ) {
         siginfo_t info;

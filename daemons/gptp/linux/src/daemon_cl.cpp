@@ -324,6 +324,10 @@ static void *wait_for_epoll_event(void *arg)
         GPTP_LOG_ERROR("epoll_create() failed : %s\n", strerror(errno));
         return NULL;
     }
+    int ret = pthread_setname_np(pthread_self(), "wait_for_epoll");
+    if (ret != 0) {
+        GPTP_LOG_ERROR("pthread_setname_np failed");
+    }
 
     GPTP_LOG_INFO("gptpDaemonServInit: wait_for_epoll_event successful\n");
     ev.data.fd = sock;

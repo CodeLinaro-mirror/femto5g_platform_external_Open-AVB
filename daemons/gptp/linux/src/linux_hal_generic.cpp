@@ -335,8 +335,18 @@ bool LinuxTimestamperGeneric::HWTimestamper_deinit
         phc_fd = -1;
     }
 
+    for (auto& iface : iface_list) {
+        if (iface) {
+            delete iface;
+            iface = nullptr;
+        }
+    }
+    iface_list.clear();
+
     if (_private != NULL) {
+        pthread_mutex_destroy(&_private->cross_stamp_lock);
         delete _private;
+        _private = nullptr;
     }
 
     return true;
