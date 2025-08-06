@@ -302,6 +302,10 @@ void EtherPort::processMessage
 void *EtherPort::openPort( EtherPort *port )
 {
     port_ready_condition->signal();
+    int ret = pthread_setname_np(pthread_self(), "openPort");
+    if (ret != 0) {
+        GPTP_LOG_ERROR("pthread_setname_np failed");
+    }
 
     while (1) {
         uint8_t buf[128];
