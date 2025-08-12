@@ -347,7 +347,7 @@ static int gptpClkInit(int *gptp_phc_fd)
 
     if ( *gptp_phc_fd == -1 ||
             (gPtpClockid = FD_TO_CLOCKID(*gptp_phc_fd)) == -1 ) {
-        GPTP_LOG_ERROR("Failed to open PTP clock device\n");
+        GPTP_LOG_LIMIT_ERROR(ERROR_LOG, "Failed to open PTP clock device\n");
         return false;
     }
 

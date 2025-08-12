@@ -546,6 +546,10 @@ bool EtherPort::_processEvent( Event e )
         case LINKDOWN:
             linkstatus = false;
             setStationState(STATION_STATE_RESERVED);
+            if ( ipc ) {
+                ipc->ipc_down();
+                GPTP_LOG_ERROR("ipc DOWN");
+            }
 #ifdef LE_SHARED_MEM
             if ( ipc ) {
                 ipc->updateSyncStatus(false, PTP_DISABLED);

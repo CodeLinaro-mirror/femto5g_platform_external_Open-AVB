@@ -689,7 +689,7 @@ int main(int argc, char *argv[])
         l_cnt = atoi(argv[2]);
     }
 
-    if (argc == 2 || argc == 3) {
+    if (argc == 2 || argc == 3 || argc == 5) {
         if (argv[1][0] == 'q') {
             GPTP_LOG_INFO("\n\n\n====================QTIMER based test=====================\n\n\n");
             do_some_tests_qtimer(l_cnt);
@@ -711,6 +711,22 @@ int main(int argc, char *argv[])
         } else if (argv[1][0] == 'b') {
             GPTP_LOG_INFO("\n\n\n====================gPTP time boot time test=====================\n\n\n");
             do_some_tests_gptp_boot(l_cnt);
+        } else if (argv[1][0] == 'R') {
+            GPTP_LOG_INFO("\n\n\n====================gPTP Reverse sync test=====================\n\n\n");
+            Rsync.reverseSyncEnabled = atoi(argv[2]);
+
+            if (Rsync.reverseSyncEnabled && argc == 5) {
+                Rsync.reverseSyncDomain = atoi(argv[3]);
+                Rsync.reverseSyncRate = atof(argv[4]);
+            }
+
+            GPTP_LOG_INFO("RSYNC: %d, RSYNCDOMAIN %d, RSYNCRATE %f",
+                          Rsync.reverseSyncEnabled, Rsync.reverseSyncDomain, Rsync.reverseSyncRate);
+
+            if (setRsyncStatus(&Rsync)) {
+                GPTP_LOG_ERROR("Error while setting reverse sync status");
+                return 0;
+            }
         }
 
 #ifdef RGPTP_CLNT_ENABLED
@@ -732,22 +748,6 @@ int main(int argc, char *argv[])
             GPTP_LOG_INFO("\n\n\n====================gPTP loop test=====================\n\n\n");
             int sleepduration = atoi(argv[3]);
             loop_test(sleepduration);
-        } else if (argv[1][0] == 'R') {
-            GPTP_LOG_INFO("\n\n\n====================gPTP Reverse sync test=====================\n\n\n");
-            Rsync.reverseSyncEnabled = atoi(argv[3]);
-
-            if (Rsync.reverseSyncEnabled && argc == 6) {
-                Rsync.reverseSyncDomain = atoi(argv[4]);
-                Rsync.reverseSyncRate = atof(argv[5]);
-            }
-
-            GPTP_LOG_INFO("RSYNC: %d, RSYNCDOMAIN %d, RSYNCRATE %f",
-                          Rsync.reverseSyncEnabled, Rsync.reverseSyncDomain, Rsync.reverseSyncRate);
-
-            if (setRsyncStatus(&Rsync)) {
-                GPTP_LOG_ERROR("Error while setting reverse sync status");
-                return 0;
-            }
         }
     }
 
