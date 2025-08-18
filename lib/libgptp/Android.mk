@@ -32,8 +32,10 @@ endif
 
 ifeq ($(TARGET_BOARD_SUFFIX),_gvm)
 ifneq ($(TARGET_BOARD_DERIVATIVE_SUFFIX),_cdccomm)
+ifneq (gen5_gvm_gy, $(TARGET_BOARD_PLATFORM)$(TARGET_BOARD_SUFFIX))
 LOCAL_CFLAGS += -DAVB_FEATURE_GVM_MODE=1
 LOCAL_SHARED_LIBRARIES += libuhab libion
+endif
 endif
 endif
 

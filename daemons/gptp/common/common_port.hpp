@@ -293,7 +293,7 @@ typedef struct {
     char ifname[IFNAME_SIZE] = {0};
     int16_t offsetScaledLogVariance = 0;
     FrequencyRatio clockRatio = 0;
-
+    EtherPortLinkState_t ethPortLinkState = (EtherPortLinkState_t) 0;
 } PortCounters_t;
 
 
@@ -426,9 +426,15 @@ typedef struct {
 
     uint8_t announceReceiptTimeout;
 
+    uint8_t allowedLostResponses;
+
+    uint8_t lostResponses;
+
     uint8_t syncClocks;
 
     bool isSigNoSend;
+
+	bool disableSigMsg;
 
     /* condition_factory OSConditionFactory instance */
     OSConditionFactory * condition_factory;
@@ -498,6 +504,7 @@ class CommonPort
         bool testMode;
 
         int8_t log_mean_sync_interval;
+        int8_t deferred_log_mean_sync_interval;
         int8_t log_mean_announce_interval;
         int8_t initialLogSyncInterval;
         uint8_t announceReceiptTimeout;
@@ -536,6 +543,7 @@ class CommonPort
 
         OSLock *syncReceiptTimerLock;
         OSLock *syncIntervalTimerLock;
+        OSLock *deferredSyncIntervalTimerLock;
         OSLock *announceIntervalTimerLock;
 
         bool bypass_if_wait;
@@ -890,6 +898,16 @@ class CommonPort
         }
 
         /**
+         * @brief Sets the Ether Port Link State
+         * @param [in] state - Port state to set
+         * @return void
+         */
+        void setEtherPortLinkState(EtherPortLinkState_t state)
+        {
+            counters.ethPortLinkState = state;
+        }
+
+        /**
          * @brief  getcumulativeRateRatio: returns cumulative rate ratio
          *
          * @return int cumulativeRateRatio
@@ -897,7 +915,7 @@ class CommonPort
 
         int getcumulativeRateRatio()
         {
-            return (int)((1.0 - _peer_rate_offset) * 241);
+            return (int)((_peer_rate_offset - 1.0) * pow(2, 41));
         }
 
 
@@ -1705,6 +1723,25 @@ class CommonPort
         }
 
         /**
+         * @brief  Gets the deferred sync interval value
+         * @return Deferred Sync Interval
+         */
+        signed char getDeferredSyncInterval(void)
+        {
+            return deferred_log_mean_sync_interval;
+        }
+
+        /**
+         * @brief  Sets the deferred sync interval value
+         * @param  val log mean sync time interval
+         * @return none
+         */
+        void setDeferredSyncInterval(signed char val)
+        {
+            deferred_log_mean_sync_interval = val;
+        }
+
+        /**
          * @brief  Sets the sync interval back to initial value
          * @return none
          */
@@ -1775,6 +1812,20 @@ class CommonPort
          * @return none
          */
         void stopSyncIntervalTimer(Event e);
+
+        /**
+         * @brief  Start sync interval timer
+         * @param  waitTime time interval in nanoseconds
+         * @return none
+         */
+        void startDeferredSyncIntervalTimer(long long unsigned int waitTime, Event e);
+
+        /**
+         * @brief  Stop sync interval timer
+         * @param  e Event Type
+         * @return none
+         */
+        void stopDeferredSyncIntervalTimer(Event e);
 
         /**
          * @brief  Start announce interval timer
