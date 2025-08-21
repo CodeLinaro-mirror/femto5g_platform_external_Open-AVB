@@ -86,6 +86,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <syslog.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <dirent.h>
 
 #ifdef ANDROID
 #include <log/log.h>
@@ -300,10 +301,42 @@ void system_log(int loglevel, const char *s, ...)
     }
 }
 
+#ifdef AVB_FEATURE_GVM_MODE
+#define PTP_DEVICE_PATH_LEN 256
+#define PTP_DEFAULT_DEVICE "/dev/ptp0"
+static void getVirtDevice(char* device_path)
+{
+    const char *path = "/sys/devices/virtual/ptp/";
+    struct dirent *entry;
+    DIR *dp = opendir(path);
+
+    if (dp == NULL || device_path == NULL) {
+        GPTP_LOG_ERROR("Failed to open /sys/devices/virtual/ptp/ so use default device\n");
+        snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s", PTP_DEFAULT_DEVICE);
+        return;
+    }
+
+    while ((entry = readdir(dp))) {
+        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s%s", "/dev/", entry->d_name);
+            GPTP_LOG_LIMIT_INFO(INFO_LOG, "opening clock device: %s", device_path);
+            closedir(dp);
+            return;
+        }
+    }
+
+    GPTP_LOG_ERROR("No device found in %s, using default device\n", path);
+    snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s", PTP_DEFAULT_DEVICE);
+    closedir(dp);
+}
+#endif
+
 static int gptpClkInit(int *gptp_phc_fd)
 {
 #ifdef AVB_FEATURE_GVM_MODE
-    *gptp_phc_fd = open("/dev/ptp0", O_RDWR );
+    char ptp_device[PTP_DEVICE_PATH_LEN] = {0};
+    getVirtDevice(ptp_device);
+    *gptp_phc_fd = open(ptp_device, O_RDWR );
 #else
     char ptp_device[] = PTP_DEVICE;
     memcpy( ptp_device + PTP_DEVICE_IDX_OFFS,
@@ -412,11 +445,11 @@ static void gptpSCTMemDeinit()
 #endif
 
 /* gptp core function to deinit gptp scaling */
-static void gptpMemDeinit(int gptp_shm_fd, char *gptp_mmap)
+static void gptpMemDeinit(int gptp_shm_fd, char **gptp_mmap)
 {
-    if (gptp_mmap != NULL) {
-        munmap(gptp_mmap, SHM_SIZE);
-        gptp_mmap = NULL;
+    if (*gptp_mmap != NULL) {
+        munmap(*gptp_mmap, SHM_SIZE);
+        *gptp_mmap = NULL;
     }
 
     if (gptp_shm_fd != -1) {
@@ -494,7 +527,7 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 #ifndef AVB_FEATURE_GVM_MODE
 
     if (!gptpSCTMemInit()) {
-        gptpMemDeinit(*gptp_shm_fd, *gptp_mmap);
+        gptpMemDeinit(*gptp_shm_fd, gptp_mmap);
         return false;
     }
 
@@ -503,25 +536,28 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 }
 
 /* gptp core function to copy gptp offset data from shared memory */
-static int gptpScaling(gPtpTimeData * td, char *memory_offset_buffer)
+static int gptpScaling(gPtpTimeData * td, char **memory_offset_buffer)
 {
-    if ((td == NULL) || (memory_offset_buffer == NULL)) {
-        GPTP_LOG_ERROR("gptpScaling failure %p %p\n", td, memory_offset_buffer);
+    LOCK();
+
+    if ((td == NULL) || (*memory_offset_buffer == NULL)) {
+        GPTP_LOG_ERROR("gptpScaling failure %p %p\n", td, *memory_offset_buffer);
+        UNLOCK();
         return false;
     }
 
 #ifndef AVB_FEATURE_GVM_MODE
-    gPtpTimeData * checkstatus = (gPtpTimeData *) (memory_offset_buffer + sizeof(
+    gPtpTimeData * checkstatus = (gPtpTimeData *) (*memory_offset_buffer + sizeof(
                                      pthread_mutex_t));
 
-    if (checkstatus->d_status != DAEMON_STATUS_UP ) {
+    if ((checkstatus == NULL) || (checkstatus->d_status != DAEMON_STATUS_UP)) {
         GPTP_LOG_LIMIT_WARNING(WARNING_LOG, "gptp daemon is not up");
+        UNLOCK();
         return false;
     }
-
-    pthread_mutex_lock((pthread_mutex_t *) memory_offset_buffer);
-    memcpy(td, memory_offset_buffer + sizeof(pthread_mutex_t), sizeof(*td));
-    pthread_mutex_unlock((pthread_mutex_t *) memory_offset_buffer);
+    pthread_mutex_lock((pthread_mutex_t *) *memory_offset_buffer);
+    memcpy(td, *memory_offset_buffer + sizeof(pthread_mutex_t), sizeof(*td));
+    pthread_mutex_unlock((pthread_mutex_t *) *memory_offset_buffer);
 #else
     int buf_offset = 0;
     std::atomic<uint32_t> *seq0;
@@ -532,10 +568,10 @@ static int gptpScaling(gPtpTimeData * td, char *memory_offset_buffer)
     char *dest = (char*)td;
     char *src = NULL;
     buf_offset += (2 * sizeof(std::atomic<uint32_t>));
-    seq0 = (std::atomic<uint32_t> *)memory_offset_buffer;
-    seq1 = (std::atomic<uint32_t> *)(memory_offset_buffer + sizeof(
+    seq0 = (std::atomic<uint32_t> *)*memory_offset_buffer;
+    seq1 = (std::atomic<uint32_t> *)(*memory_offset_buffer + sizeof(
                                          std::atomic<uint32_t>));
-    ptimedata   = (gPtpTimeData *) (memory_offset_buffer + buf_offset);
+    ptimedata   = (gPtpTimeData *) (*memory_offset_buffer + buf_offset);
     src = (char *)ptimedata;
 
     do {
@@ -551,29 +587,35 @@ static int gptpScaling(gPtpTimeData * td, char *memory_offset_buffer)
     } while ((a != b || a != seq0->load() || b != seq1->load()) && count < 3);
 
     if (count >= 3) {
+        UNLOCK();
         return false;
     }
 
 #endif
+    UNLOCK();
     return true;
 }
 
 /* gptp core function to copy gptp offset data from shared memory */
-static int updateGptpRsync(RsyncStatus_t *rSync, char *memory_offset_buffer)
+static int updateGptpRsync(RsyncStatus_t *rSync, char **memory_offset_buffer)
 {
-    if ((rSync == NULL) || (memory_offset_buffer == NULL)) {
-        GPTP_LOG_ERROR("updateGptpRsync failure %p %p\n", rSync, memory_offset_buffer);
+    if ((rSync == NULL) || (*memory_offset_buffer == NULL)) {
+        GPTP_LOG_ERROR("updateGptpRsync failure %p %p\n", rSync, *memory_offset_buffer);
         return false;
     }
 
 #ifndef AVB_FEATURE_GVM_MODE
     gPtpTimeData *ptimedata;
-    ptimedata = (gPtpTimeData *) (memory_offset_buffer + sizeof(pthread_mutex_t));
-    pthread_mutex_lock((pthread_mutex_t *) memory_offset_buffer);
+    ptimedata = (gPtpTimeData *) (*memory_offset_buffer + sizeof(pthread_mutex_t));
+    if (ptimedata == NULL) {
+        GPTP_LOG_ERROR("updateGptpRsync: null ptimedata pointer\n");
+        return false;
+    }
+    pthread_mutex_lock((pthread_mutex_t *) *memory_offset_buffer);
     ptimedata->reverseSyncEnabled = rSync->reverseSyncEnabled;
     ptimedata->reverseSyncDomain = rSync->reverseSyncDomain;
     ptimedata->reverseSyncRate = rSync->reverseSyncRate;
-    pthread_mutex_unlock((pthread_mutex_t *) memory_offset_buffer);
+    pthread_mutex_unlock((pthread_mutex_t *) *memory_offset_buffer);
 #else
     int buf_offset = 0;
     std::atomic<uint32_t> *seq0;
@@ -582,10 +624,10 @@ static int updateGptpRsync(RsyncStatus_t *rSync, char *memory_offset_buffer)
     gPtpTimeData *ptimedata;
     int count = 0;
     buf_offset += (2 * sizeof(std::atomic<uint32_t>));
-    seq0 = (std::atomic<uint32_t> *)memory_offset_buffer;
-    seq1 = (std::atomic<uint32_t> *)(memory_offset_buffer + sizeof(
+    seq0 = (std::atomic<uint32_t> *) *memory_offset_buffer;
+    seq1 = (std::atomic<uint32_t> *)(*memory_offset_buffer + sizeof(
                                          std::atomic<uint32_t>));
-    ptimedata   = (gPtpTimeData *) (memory_offset_buffer + buf_offset);
+    ptimedata   = (gPtpTimeData *) (*memory_offset_buffer + buf_offset);
 
     do {
         a = seq0->load();
@@ -759,13 +801,13 @@ static bool gptpTimeInit(void)
         return false;
     }
 
-    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
-        gptpMemDeinit(gPtpShmFd, gPtpMmap);
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
+        gptpMemDeinit(gPtpShmFd, &gPtpMmap);
         return false;
     }
 
     if (!gptpClkInit(&gptpPhcFd)) {
-        gptpMemDeinit(gPtpShmFd, gPtpMmap);
+        gptpMemDeinit(gPtpShmFd, &gPtpMmap);
         return false;
     }
 
@@ -799,14 +841,13 @@ static void *gptpDaemonSrvConnect(void *arg)
 
         /* EISCONN -- Transport endpoint is already connected */
         if ((ret == 0) || ((ret == -1) && (errno == EISCONN))) {
-            LOCK();
-
             if (!bInitialized) {
                 if (gptpTimeInit()) {
                     GPTP_LOG_INFO("gptpDaemonSrvConnect: success\n");
                     bInitialized = true;
                 } else {
-                    gptpMemDeinit(gPtpShmFd, gPtpMmap);
+                    LOCK();
+                    gptpMemDeinit(gPtpShmFd, &gPtpMmap);
                     gptpClkDeInit(gptpPhcFd);
                     memset(&gPtpTD, 0, sizeof(gPtpTimeData));
                     UNLOCK();
@@ -818,7 +859,6 @@ static void *gptpDaemonSrvConnect(void *arg)
                 }
             }
 
-            UNLOCK();
             FD_ZERO(&readfds);
             FD_SET(sock, &readfds);
             FD_SET(pipefd[0], &readfds);
@@ -856,10 +896,11 @@ static void *gptpDaemonSrvConnect(void *arg)
             GPTP_LOG_ERROR("gptpDaemonSrvConnect: cleanup errno %d %d\n", errno,
                            bInitialized);
             LOCK();
-            gptpMemDeinit(gPtpShmFd, gPtpMmap);
+            gptpMemDeinit(gPtpShmFd, &gPtpMmap);
             gptpClkDeInit(gptpPhcFd);
             memset(&gPtpTD, 0, sizeof(gPtpTimeData));
             bInitialized = false;
+            errno = 0;
             UNLOCK();
         }
 
@@ -984,7 +1025,7 @@ bool gptpGetPtpTimeFromMonoTime_s(uint64_t *gptp_time_sys,
         return false;
     }
 
-    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
         return false;
     }
 
@@ -1034,7 +1075,7 @@ bool gptpGetPtpTimeFromQTimeNs_s(uint64_t *gptp_time_qt,
         return false;
     }
 
-    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
         return false;
     }
 
@@ -1081,7 +1122,7 @@ bool gptpGetPtpTimeFromBootTime_s(uint64_t *gptp_time_bt, uint64_t time_boot_ns,
     int64_t delta_local = 0;
     uint64_t time_ns = time_boot_ns;
 
-    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
         return false;
     }
 
@@ -1198,7 +1239,7 @@ bool gptpGetBootTimeFromPtpTime_s(uint64_t *boot_time_ns, uint64_t ptp_time_ns,
     *boot_time_ns = 0;
 #ifndef AVB_FEATURE_GVM_MODE
 
-    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
         return false;
     }
 
@@ -1361,7 +1402,7 @@ bool gptpGetPtpTimefromSystime_s(uint64_t *gptp_time_sys, uint64_t time_sys_ns,
         return false;
     }
 
-    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
         return false;
     }
 
@@ -1411,7 +1452,7 @@ int gptpGetPortState(void)
         return false;
     }
 
-    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
         return false;
     }
 
@@ -1428,7 +1469,7 @@ int setRsyncStatus(RsyncStatus_t *status)
         return -1;
     }
 
-    if (!updateGptpRsync(status, gPtpMmap)) {
+    if (!updateGptpRsync(status, &gPtpMmap)) {
         return -1;
     }
 
@@ -1444,7 +1485,7 @@ int getTimeError(int64_t *timeError)
         return -1;
     }
 
-    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
         return -1;
     }
 
@@ -1466,7 +1507,7 @@ bool gptpGetSyncStatus(void)
         return false;
     }
 
-    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
         return false;
     }
 
@@ -1513,7 +1554,7 @@ bool gptpGetCurPtpTime_s(uint64_t *gptp_time_cur, bool* inSync)
         return false;
     }
 
-    if (!gptpScaling(&gPtpTD, gPtpMmap)) {
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
         return false;
     }
 
@@ -1807,10 +1848,12 @@ bool gptpDeinit(void)
     }
 
 #else
-    gptpMemDeinit(gPtpShmFd, gPtpMmap);
+    LOCK();
+    gptpMemDeinit(gPtpShmFd, &gPtpMmap);
     gptpClkDeInit(gptpPhcFd);
-    gptpDaemonClientDeInit();
     bInitialized = false;
+    UNLOCK();
+    gptpDaemonClientDeInit();
 #endif
     return true;
 }
@@ -2009,10 +2052,11 @@ static bool libgptp_is_in_log_limit(libgptp_log_type_t type)
     clock_gettime(CLOCK_MONOTONIC, &t);
     curr_time = (t.tv_sec) * 1000000000LL + t.tv_nsec;
 
-	if(curr_time+1000000000 > helper_log_time) {
-		helper_log_time = curr_time;
-		libgptp_reset_log_limit(RESET_ALL_LOG);
-	}
+    /* Reset log limit for every 5 seconds */
+    if(curr_time >= helper_log_time + 5000000000LL) {
+        helper_log_time = curr_time;
+        libgptp_reset_log_limit(RESET_ALL_LOG);
+    }
 
     switch (type) {
         case INFO_LOG : {
