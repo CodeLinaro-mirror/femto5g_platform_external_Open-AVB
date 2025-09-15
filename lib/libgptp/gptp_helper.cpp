@@ -308,9 +308,13 @@ static void getVirtDevice(char* device_path)
 {
     const char *path = "/sys/devices/virtual/ptp/";
     struct dirent *entry;
-    DIR *dp = opendir(path);
 
-    if (dp == NULL || device_path == NULL) {
+    if (device_path == NULL) {
+        GPTP_LOG_ERROR("device path is NULL\n");
+        return;
+    }
+    DIR *dp = opendir(path);
+    if (dp == NULL) {
         GPTP_LOG_ERROR("Failed to open /sys/devices/virtual/ptp/ so use default device\n");
         snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s", PTP_DEFAULT_DEVICE);
         return;
@@ -347,7 +351,7 @@ static int gptpClkInit(int *gptp_phc_fd)
 
     if ( *gptp_phc_fd == -1 ||
             (gPtpClockid = FD_TO_CLOCKID(*gptp_phc_fd)) == -1 ) {
-        GPTP_LOG_ERROR("Failed to open PTP clock device\n");
+        GPTP_LOG_LIMIT_ERROR(ERROR_LOG, "Failed to open PTP clock device\n");
         return false;
     }
 

@@ -1817,6 +1817,12 @@ bool LinuxSharedMemoryIPC::update_network_interface(
     return true;
 }
 
+void LinuxSharedMemoryIPC::ipc_down() {
+    if ( master_offset_buffer != NULL ) {
+        memset(master_offset_buffer, 0x0, SHM_SIZE);
+    }
+}
+
 void LinuxSharedMemoryIPC::stop()
 {
     if ( master_offset_buffer != NULL ) {

@@ -641,7 +641,7 @@ int main(int argc, char **argv)
     LinuxLockFactory *lock_factory = new LinuxLockFactory();
     LinuxTimerFactory *timer_factory = new LinuxTimerFactory();
     LinuxConditionFactory *condition_factory = new LinuxConditionFactory();
-    LinuxSharedMemoryIPC *ipc = new LinuxSharedMemoryIPC();
+    ipc = new LinuxSharedMemoryIPC();
 
     /* Create Low level network interface object */
     if ( argc < 2 ) {
