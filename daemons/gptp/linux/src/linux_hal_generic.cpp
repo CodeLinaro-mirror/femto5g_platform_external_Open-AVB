@@ -97,7 +97,12 @@ net_result LinuxNetworkInterface::nrecv
     }
 
     FD_ZERO( &readfds );
-    FD_SET( sd_event, &readfds );
+    if (sd_event >= 0 && sd_event < FD_SETSIZE && fcntl(sd_event, F_GETFD) != -1) {
+        FD_SET(sd_event, &readfds);
+    } else {
+        GPTP_LOG_ERROR("Invalid sd_event fd");
+        goto done;
+    }
     err = select( sd_event + 1, &readfds, NULL, NULL, &timeout );
 
     if ( err == 0 ) {
@@ -335,13 +340,20 @@ bool LinuxTimestamperGeneric::HWTimestamper_deinit
         phc_fd = -1;
     }
 
-    for (auto& iface : iface_list) {
-        if (iface) {
-            delete iface;
-            iface = nullptr;
+    if (!iface_list.empty()) {
+        auto last = std::prev(iface_list.end());
+        LinuxNetworkInterface* last_iface = *last;
+
+        for (auto it = iface_list.begin(); it != last; ++it) {
+            if (*it) {
+                delete *it;
+                *it = nullptr;
+            }
         }
+
+        iface_list.clear();
+        iface_list.push_back(last_iface);
     }
-    iface_list.clear();
 
     if (_private != NULL) {
         pthread_mutex_destroy(&_private->cross_stamp_lock);
