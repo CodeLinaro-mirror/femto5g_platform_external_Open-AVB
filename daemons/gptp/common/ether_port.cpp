@@ -389,6 +389,7 @@ void EtherPort::sendGeneralPort
 bool EtherPort::_processEvent( Event e )
 {
     bool ret = false;
+    OSThreadExitCode exit_code = osthread_ok;
 
     switch (e) {
         case POWERUP:
@@ -558,8 +559,19 @@ bool EtherPort::_processEvent( Event e )
             break;
 
         case LINKDOWN:
-            OSThreadExitCode exit_code;
             linkstatus = false;
+            //delete all timers as in powerdown
+            stopPDelay();
+            clock->deleteEventTimerLocked( this, ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES );
+            clock->deleteEventTimerLocked( this, ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES );
+            clock->deleteEventTimerLocked( this, SYNC_INTERVAL_TIMEOUT_EXPIRES);
+            clock->deleteEventTimerLocked( this, DEFERRED_SYNC_INTERVAL_RATE_CHANGE);
+            clock->deleteEventTimerLocked( this, PDELAY_RESP_RECEIPT_TIMEOUT_EXPIRES);
+            clock->deleteEventTimerLocked( this, SYNC_RATE_INTERVAL_TIMEOUT_EXPIRED);
+            clock->deleteEventTimerLocked( this, RSYNC_INTERVAL_TIMEOUT_EXPIRES );
+            stopSyncReceiptTimer();
+            setEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
+            clock->updateEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
 
             if (port_pipe_fds[1] != -1) {
                 char data = '1';
@@ -608,18 +620,7 @@ bool EtherPort::_processEvent( Event e )
                 linkDownCount++;
             }
             increment_LinkdownCount();
-            //delete all timers as in powerdown
-            stopPDelay();
-            clock->deleteEventTimerLocked( this, ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES );
-            clock->deleteEventTimerLocked( this, ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES );
-            clock->deleteEventTimerLocked( this, SYNC_INTERVAL_TIMEOUT_EXPIRES);
-            clock->deleteEventTimerLocked( this, DEFERRED_SYNC_INTERVAL_RATE_CHANGE);
-            clock->deleteEventTimerLocked( this, PDELAY_RESP_RECEIPT_TIMEOUT_EXPIRES);
-            clock->deleteEventTimerLocked( this, SYNC_RATE_INTERVAL_TIMEOUT_EXPIRED);
-            clock->deleteEventTimerLocked( this, RSYNC_INTERVAL_TIMEOUT_EXPIRES );
-            stopSyncReceiptTimer();
-            setEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
-            clock->updateEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
+            timestamper_deinit();
             ret = true;
             break;
 
@@ -670,11 +671,15 @@ bool EtherPort::_processEvent( Event e )
                     pdelay_req->setTimestamp(pending);
                 }
 
+                getPDelayRxLock();
                 if (last_pdelay_req != NULL) {
                     delete last_pdelay_req;
+                    last_pdelay_req = NULL;
                 }
 
                 setLastPDelayReq(pdelay_req);
+                putPDelayRxLock();
+
                 getTxLock();
                 pdelay_req->sendPort(this, NULL);
                 GPTP_LOG_DEBUG("*** Sent PDelay Request message");

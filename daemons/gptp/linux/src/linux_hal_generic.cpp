@@ -343,7 +343,7 @@ bool LinuxTimestamperGeneric::HWTimestamper_init
 }
 
 bool LinuxTimestamperGeneric::HWTimestamper_deinit
-( InterfaceLabel *iface_label, OSNetworkInterface *iface )
+( InterfaceLabel *iface_label, OSNetworkInterface **iface )
 {
     if(phc_fd != -1) {
         if (close(phc_fd) == -1) {
@@ -354,19 +354,14 @@ bool LinuxTimestamperGeneric::HWTimestamper_deinit
         phc_fd = -1;
     }
 
-    if (!iface_list.empty()) {
-        auto last = std::prev(iface_list.end());
-        LinuxNetworkInterface* last_iface = *last;
-
-        for (auto it = iface_list.begin(); it != last; ++it) {
-            if (*it) {
-                delete *it;
-                *it = nullptr;
-            }
+    if (iface && *iface) {
+        auto it = std::find(iface_list.begin(), iface_list.end(), *iface);
+        if (it != iface_list.end()) {
+            delete *it;
+            *it = nullptr;
+            iface_list.erase(it);
         }
-
-        iface_list.clear();
-        iface_list.push_back(last_iface);
+        *iface = nullptr;
     }
 
     if (_private != NULL) {
