@@ -326,6 +326,10 @@ static void *wait_for_epoll_event(void *arg)
         GPTP_LOG_ERROR("epoll_create() failed : %s\n", strerror(errno));
         return NULL;
     }
+    int ret = pthread_setname_np(pthread_self(), "wait_for_epoll");
+    if (ret != 0) {
+        GPTP_LOG_ERROR("pthread_setname_np failed");
+    }
 
     GPTP_LOG_INFO("gptpDaemonServInit: wait_for_epoll_event successful\n");
     ev.data.fd = sock;
@@ -637,7 +641,7 @@ int main(int argc, char **argv)
     LinuxLockFactory *lock_factory = new LinuxLockFactory();
     LinuxTimerFactory *timer_factory = new LinuxTimerFactory();
     LinuxConditionFactory *condition_factory = new LinuxConditionFactory();
-    LinuxSharedMemoryIPC *ipc = new LinuxSharedMemoryIPC();
+    ipc = new LinuxSharedMemoryIPC();
 
     /* Create Low level network interface object */
     if ( argc < 2 ) {
@@ -981,7 +985,7 @@ int main(int argc, char **argv)
 
     qgptp_rmgr_init(&portInit.sct_shm_fd, &portInit.sct_buffer);
 
-    if ((strcmp(ifname_eth, "eth0") != 0) && (strcmp(ifname_eth, "eth1") != 0) ) {
+    if ((strcmp(ifname_eth, "eth0") != 0) && (strcmp(ifname_eth, "eth1") != 0) && (strcmp(ifname_eth, "eth2") != 0)) {
         GPTP_LOG_INFO( "Valid Interface name required\n" );
         GPTP_LOG_UNREGISTER();
         CLEANUP_RESOURCES();

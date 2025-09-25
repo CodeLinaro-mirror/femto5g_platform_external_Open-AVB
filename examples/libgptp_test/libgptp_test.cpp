@@ -54,6 +54,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <unistd.h>
 #include <gptp_helper.h>
 #include <stdarg.h>
+#include <dirent.h>
 
 #ifdef ANDROID
 #include <log/log.h>
@@ -379,13 +380,50 @@ void do_some_tests_gptp_mono(int p_loop_cnt)
         }
     }
 }
+
+#ifdef AVB_FEATURE_GVM_MODE
+#define PTP_DEVICE_PATH_LEN 256
+#define PTP_DEFAULT_DEVICE "/dev/ptp0"
+static void getVirtDevice(char* device_path)
+{
+    const char *path = "/sys/devices/virtual/ptp/";
+    struct dirent *entry;
+
+    if (device_path == NULL) {
+        GPTP_LOG_ERROR("device path is NULL\n");
+        return;
+    }
+    DIR *dp = opendir(path);
+    if (dp == NULL) {
+        GPTP_LOG_ERROR("Failed to open /sys/devices/virtual/ptp/ so use default device\n");
+        snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s", PTP_DEFAULT_DEVICE);
+        return;
+    }
+
+    while ((entry = readdir(dp))) {
+        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s%s", "/dev/", entry->d_name);
+            GPTP_LOG_INFO("opening clock device: %s", device_path);
+            closedir(dp);
+            return;
+        }
+    }
+
+    GPTP_LOG_ERROR("No device found in %s, using default device\n", path);
+    snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s", PTP_DEFAULT_DEVICE);
+    closedir(dp);
+}
+#endif
+
 void get_gptp_time()
 {
     struct timespec ts;
     static clockid_t gPtpClockid = -1;
     uint64_t curr_gptp_time;
 #ifdef AVB_FEATURE_GVM_MODE
-    int gptp_phc_fd = open("/dev/ptp0", O_RDWR );
+    char ptp_device[PTP_DEVICE_PATH_LEN] = {0};
+    getVirtDevice(ptp_device);
+    int gptp_phc_fd = open(ptp_device, O_RDWR );
 
     if ( gptp_phc_fd == -1 ||
             (gPtpClockid = FD_TO_CLOCKID(gptp_phc_fd)) == -1 ) {
@@ -655,7 +693,7 @@ int main(int argc, char *argv[])
         l_cnt = atoi(argv[2]);
     }
 
-    if (argc == 2 || argc == 3) {
+    if (argc == 2 || argc == 3 || argc == 5) {
         if (argv[1][0] == 'q') {
             GPTP_LOG_INFO("\n\n\n====================QTIMER based test=====================\n\n\n");
             do_some_tests_qtimer(l_cnt);
@@ -677,6 +715,22 @@ int main(int argc, char *argv[])
         } else if (argv[1][0] == 'b') {
             GPTP_LOG_INFO("\n\n\n====================gPTP time boot time test=====================\n\n\n");
             do_some_tests_gptp_boot(l_cnt);
+        } else if (argv[1][0] == 'R') {
+            GPTP_LOG_INFO("\n\n\n====================gPTP Reverse sync test=====================\n\n\n");
+            Rsync.reverseSyncEnabled = atoi(argv[2]);
+
+            if (Rsync.reverseSyncEnabled && argc == 5) {
+                Rsync.reverseSyncDomain = atoi(argv[3]);
+                Rsync.reverseSyncRate = atof(argv[4]);
+            }
+
+            GPTP_LOG_INFO("RSYNC: %d, RSYNCDOMAIN %d, RSYNCRATE %f",
+                          Rsync.reverseSyncEnabled, Rsync.reverseSyncDomain, Rsync.reverseSyncRate);
+
+            if (setRsyncStatus(&Rsync)) {
+                GPTP_LOG_ERROR("Error while setting reverse sync status");
+                return 0;
+            }
         }
 
 #ifdef RGPTP_CLNT_ENABLED
@@ -698,22 +752,6 @@ int main(int argc, char *argv[])
             GPTP_LOG_INFO("\n\n\n====================gPTP loop test=====================\n\n\n");
             int sleepduration = atoi(argv[3]);
             loop_test(sleepduration);
-        } else if (argv[1][0] == 'R') {
-            GPTP_LOG_INFO("\n\n\n====================gPTP Reverse sync test=====================\n\n\n");
-            Rsync.reverseSyncEnabled = atoi(argv[3]);
-
-            if (Rsync.reverseSyncEnabled && argc == 6) {
-                Rsync.reverseSyncDomain = atoi(argv[4]);
-                Rsync.reverseSyncRate = atof(argv[5]);
-            }
-
-            GPTP_LOG_INFO("RSYNC: %d, RSYNCDOMAIN %d, RSYNCRATE %f",
-                          Rsync.reverseSyncEnabled, Rsync.reverseSyncDomain, Rsync.reverseSyncRate);
-
-            if (setRsyncStatus(&Rsync)) {
-                GPTP_LOG_ERROR("Error while setting reverse sync status");
-                return 0;
-            }
         }
     }
 

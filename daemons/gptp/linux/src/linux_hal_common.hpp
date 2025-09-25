@@ -852,7 +852,7 @@ class LinuxSharedMemoryIPC: public OS_IPC
          */
 
         virtual bool updateQtimeToMonoOffset(int64_t offset);
-
+        void ipc_down(void);
         /**
          * @brief unmaps and unlink shared memory
          * @return void

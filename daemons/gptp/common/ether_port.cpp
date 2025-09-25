@@ -308,6 +308,10 @@ void EtherPort::processMessage
 void *EtherPort::openPort( EtherPort *port )
 {
     port_ready_condition->signal();
+    int ret = pthread_setname_np(pthread_self(), "openPort");
+    if (ret != 0) {
+        GPTP_LOG_ERROR("pthread_setname_np failed");
+    }
 
     while (linkstatus) {
         uint8_t buf[128];
@@ -542,6 +546,10 @@ bool EtherPort::_processEvent( Event e )
         case LINKDOWN:
             linkstatus = false;
             setStationState(STATION_STATE_RESERVED);
+            if ( ipc ) {
+                ipc->ipc_down();
+                GPTP_LOG_ERROR("ipc DOWN");
+            }
 #ifdef LE_SHARED_MEM
             if ( ipc ) {
                 ipc->updateSyncStatus(false, PTP_DISABLED);

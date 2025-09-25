@@ -86,6 +86,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <syslog.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <dirent.h>
 
 #ifdef ANDROID
 #include <log/log.h>
@@ -300,10 +301,46 @@ void system_log(int loglevel, const char *s, ...)
     }
 }
 
+#ifdef AVB_FEATURE_GVM_MODE
+#define PTP_DEVICE_PATH_LEN 256
+#define PTP_DEFAULT_DEVICE "/dev/ptp0"
+static void getVirtDevice(char* device_path)
+{
+    const char *path = "/sys/devices/virtual/ptp/";
+    struct dirent *entry;
+
+    if (device_path == NULL) {
+        GPTP_LOG_ERROR("device path is NULL\n");
+        return;
+    }
+    DIR *dp = opendir(path);
+    if (dp == NULL) {
+        GPTP_LOG_ERROR("Failed to open /sys/devices/virtual/ptp/ so use default device\n");
+        snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s", PTP_DEFAULT_DEVICE);
+        return;
+    }
+
+    while ((entry = readdir(dp))) {
+        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s%s", "/dev/", entry->d_name);
+            GPTP_LOG_LIMIT_INFO(INFO_LOG, "opening clock device: %s", device_path);
+            closedir(dp);
+            return;
+        }
+    }
+
+    GPTP_LOG_ERROR("No device found in %s, using default device\n", path);
+    snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s", PTP_DEFAULT_DEVICE);
+    closedir(dp);
+}
+#endif
+
 static int gptpClkInit(int *gptp_phc_fd)
 {
 #ifdef AVB_FEATURE_GVM_MODE
-    *gptp_phc_fd = open("/dev/ptp0", O_RDWR );
+    char ptp_device[PTP_DEVICE_PATH_LEN] = {0};
+    getVirtDevice(ptp_device);
+    *gptp_phc_fd = open(ptp_device, O_RDWR );
 #else
     char ptp_device[] = PTP_DEVICE;
     memcpy( ptp_device + PTP_DEVICE_IDX_OFFS,
@@ -314,7 +351,7 @@ static int gptpClkInit(int *gptp_phc_fd)
 
     if ( *gptp_phc_fd == -1 ||
             (gPtpClockid = FD_TO_CLOCKID(*gptp_phc_fd)) == -1 ) {
-        GPTP_LOG_ERROR("Failed to open PTP clock device\n");
+        GPTP_LOG_LIMIT_ERROR(ERROR_LOG, "Failed to open PTP clock device\n");
         return false;
     }
 
@@ -2019,10 +2056,11 @@ static bool libgptp_is_in_log_limit(libgptp_log_type_t type)
     clock_gettime(CLOCK_MONOTONIC, &t);
     curr_time = (t.tv_sec) * 1000000000LL + t.tv_nsec;
 
-	if(curr_time+1000000000 > helper_log_time) {
-		helper_log_time = curr_time;
-		libgptp_reset_log_limit(RESET_ALL_LOG);
-	}
+    /* Reset log limit for every 5 seconds */
+    if(curr_time >= helper_log_time + 5000000000LL) {
+        helper_log_time = curr_time;
+        libgptp_reset_log_limit(RESET_ALL_LOG);
+    }
 
     switch (type) {
         case INFO_LOG : {
