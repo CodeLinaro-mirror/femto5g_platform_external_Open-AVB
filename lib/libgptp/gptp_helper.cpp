@@ -1822,6 +1822,19 @@ bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur,
     return gptpGetCurgPtpMonotonicPair_s(gptp_time_cur, mono_time_cur, NULL);
 }
 
+/* Get proxy mode */
+bool isGptpInProxyMode(void)
+{
+    if (!bInitialized) {
+        return false;
+    }
+
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
+        return false;
+    }
+
+    return gPtpTD.in_proxy_mode;
+}
 
 /* public API to init gptp time scaling */
 bool gptpInit(void)
