@@ -113,6 +113,7 @@ EtherPort::EtherPort( PortInit_t *portInit ) :
     initialLogPdelayReqInterval = portInit->initialLogPdelayReqInterval;
     operLogPdelayReqInterval = portInit->operLogPdelayReqInterval;
     operLogSyncInterval = portInit->operLogSyncInterval;
+    syncArrivalTimeDiffTolerance = portInit->syncArrivalTimeDiffTolerance;
     isGM = portInit->isGM;
     disableSigMsg = portInit->disableSigMsg;
     lostResponses = 0;
@@ -125,6 +126,14 @@ EtherPort::EtherPort( PortInit_t *portInit ) :
     // Consider port is up even in bypass_if_wait is set
     setEtherLinkState(ETHER_PORT_STATE_LINK_UP);
     clock->updateEtherLinkState(ETHER_PORT_STATE_LINK_UP);
+
+    if (std::isnan(syncArrivalTimeDiffTolerance)) {
+        GPTP_LOG_INFO("Default syncArrivalTimeDiffTolerance: %lF", DEFAULT_SYNC_ARRIVAL_TIME_DIFF_TOLERANCE);
+        setSyncArrivalTimeDiffTolerance(DEFAULT_SYNC_ARRIVAL_TIME_DIFF_TOLERANCE); // 20% of oper sync interval
+    } else {
+        GPTP_LOG_INFO("Using syncArrivalTimeDiffTolerance: %lF", syncArrivalTimeDiffTolerance);
+        setSyncArrivalTimeDiffTolerance(syncArrivalTimeDiffTolerance);
+    }
 
     if (automotive_profile) {
         setAsCapable( true );
