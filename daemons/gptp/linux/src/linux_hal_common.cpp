@@ -717,7 +717,7 @@ void* OSThreadCallback( void* input )
     return 0;
 }
 
-bool LinuxTimestamper::post_init( int ifindex, int sd, TicketingLock *lock )
+bool LinuxTimestamper::post_init( int ifindex, int sd, TicketingLock *lock, bool tsc_enable)
 {
     return true;
 }
@@ -1870,7 +1870,7 @@ void LinuxSharedMemoryIPC::stop()
 
 bool LinuxNetworkInterfaceFactory::createInterface
 ( OSNetworkInterface **net_iface, InterfaceLabel *label,
-  CommonTimestamper *timestamper )
+  CommonTimestamper *timestamper ,bool tsc_enable)
 {
     struct ifreq device;
     int err;
@@ -2000,7 +2000,7 @@ bool LinuxNetworkInterfaceFactory::createInterface
     }
 
     if ( !net_iface_l->timestamper->post_init
-            ( ifindex, net_iface_l->sd_event, &net_iface_l->net_lock )) {
+            ( ifindex, net_iface_l->sd_event, &net_iface_l->net_lock, tsc_enable)) {
         GPTP_LOG_ERROR( "post_init failed\n" );
         close(net_iface_l->sd_general);
         close(net_iface_l->sd_event);
