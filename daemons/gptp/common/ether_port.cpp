@@ -58,8 +58,10 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <math.h>
 
 #include <stdlib.h>
+#include <unistd.h>
 
 extern LinuxSharedMemoryIPC *ipc;
+int port_pipe_fds[2];
 LinkLayerAddress EtherPort::other_multicast(OTHER_MULTICAST);
 LinkLayerAddress EtherPort::pdelay_multicast(PDELAY_MULTICAST);
 LinkLayerAddress EtherPort::test_status_multicast
@@ -301,7 +303,7 @@ void *EtherPort::openPort( EtherPort *port )
 {
     port_ready_condition->signal();
 
-    while (1) {
+    while (linkstatus) {
         uint8_t buf[128];
         LinkLayerAddress remote;
         net_result rrecv;
@@ -389,6 +391,13 @@ bool EtherPort::_processEvent( Event e )
                 }
             } else {
                 startPDelay();
+            }
+            port_pipe_fds[0] = -1;
+            port_pipe_fds[1] = -1;
+            if (pipe(port_pipe_fds) == -1) {
+                GPTP_LOG_ERROR("pipe create error\n");
+                ret = false;
+                break;
             }
 
             port_ready_condition->wait_prelock();
@@ -817,6 +826,34 @@ bool EtherPort::_processEvent( Event e )
 
         case POWERDOWN:
             //to ensure no processing happens for already expired events
+            OSThreadExitCode exit_code;
+            linkstatus = false;
+            if (port_pipe_fds[1] != -1) {
+                char data = '1';
+                ssize_t bytes_written = write(port_pipe_fds[1], &data, 1);
+                if (bytes_written != 1) {
+                    GPTP_LOG_ERROR("Failed to write to pipe: %s", strerror(errno));
+                } else {
+                    GPTP_LOG_INFO("Successfully wrote to pipe to interrupt select()");
+                }
+            }
+
+            if (!linkjoin(exit_code)) {
+                GPTP_LOG_ERROR("Failed to openport thread to join %d", exit_code);
+                ret = false;
+                break;
+            }
+            GPTP_LOG_INFO("openport thread to join %d", exit_code);
+            // Release the Pipe
+            if (port_pipe_fds[0] != -1) {
+                close(port_pipe_fds[0]);
+                port_pipe_fds[0] = -1;
+            }
+            if (port_pipe_fds[1] != -1) {
+                close(port_pipe_fds[1]);
+                port_pipe_fds[1] = -1;
+            }
+
             stopPDelay();
             setAsCapable(false);
             clock->deleteEventTimerLocked( this, ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES );

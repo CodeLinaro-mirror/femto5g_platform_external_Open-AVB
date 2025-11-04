@@ -1422,6 +1422,11 @@ class CommonPort
             return listening_thread->start( func, arg );
         }
 
+        bool linkjoin( OSThreadExitCode arg )
+        {
+            return listening_thread->join( arg );
+        }
+
         /**
          * @brief  Gets the portState information
          * @return PortState
