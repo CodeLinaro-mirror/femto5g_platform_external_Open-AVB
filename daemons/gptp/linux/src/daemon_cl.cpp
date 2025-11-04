@@ -1073,9 +1073,11 @@ int main(int argc, char **argv)
         pGPTPPersist->closeStorage();
     }
 
+    gptpDaemonServDeInit();
+
     if (pPort) {
-        qgptp_rmgr_deinit();
         pPort->processEvent(POWERDOWN);
+        qgptp_rmgr_deinit();
         delete pPort;
         pPort = NULL;
     }
@@ -1087,7 +1089,6 @@ int main(int argc, char **argv)
         }
     }
 
-    gptpDaemonServDeInit();
 
     if ( ipc ) {
 #ifdef LE_SHARED_MEM
