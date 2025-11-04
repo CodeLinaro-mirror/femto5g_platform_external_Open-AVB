@@ -132,6 +132,8 @@ ifeq ($(GPTP_VFIO),1)
 endif
 
 ifeq ($(GPTP_DSQB_ENABLED),1)
+    CFLAGS_G += -DGPTP_DSQB_ENABLED
+    CPPFLAGS_G += -DGPTP_DSQB_ENABLED
     LDFLAGS_G += -lpm-client
 endif
 
