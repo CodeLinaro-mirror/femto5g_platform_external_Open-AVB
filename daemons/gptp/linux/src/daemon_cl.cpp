@@ -909,6 +909,11 @@ int main(int argc, char **argv)
 	if (pGPTPPersist) {
 		pGPTPPersist->closeStorage();
 	}
+	if (pPort) {
+		pPort->processEvent(POWERDOWN);
+		delete pPort;
+		pPort = NULL;
+	}
 
 	// Stop PPS if previously started
 	if( pps ) {
