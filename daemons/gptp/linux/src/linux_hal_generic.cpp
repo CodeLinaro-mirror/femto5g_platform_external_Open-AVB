@@ -58,6 +58,8 @@
 
 #define QTIMER_RESAMPLING 5
 
+extern int port_pipe_fds[2];
+
 net_result LinuxNetworkInterface::nrecv
 ( LinkLayerAddress *addr, uint8_t *payload, size_t &length )
 {
@@ -87,9 +89,16 @@ net_result LinuxNetworkInterface::nrecv
 	}
 
 	FD_ZERO( &readfds );
-	FD_SET( sd_event, &readfds );
+	if (sd_event >= 0 && sd_event < FD_SETSIZE && fcntl(sd_event, F_GETFD) != -1) {
+		FD_SET(sd_event, &readfds);
+	} else {
+		GPTP_LOG_ERROR("Invalid sd_event fd");
+		ret = net_fatal;
+		goto done;
+	}
+	FD_SET(port_pipe_fds[0], &readfds);
 
-	err = select( sd_event+1, &readfds, NULL, NULL, &timeout );
+	err = select( (port_pipe_fds[0] > sd_event ? port_pipe_fds[0] : sd_event) + 1, &readfds, NULL, NULL, &timeout );
 	if( err == 0 ) {
 		ret = net_trfail;
 		goto done;
@@ -103,10 +112,20 @@ net_result LinuxNetworkInterface::nrecv
 			GPTP_LOG_ERROR("select() failed");
 			ret = net_fatal;
 			goto done;
-    }
-	} else if( !FD_ISSET( sd_event, &readfds )) {
-		ret = net_trfail;
-		goto done;
+		}
+	} else {
+		if ( FD_ISSET(port_pipe_fds[0], &readfds) ) {
+			char pipebuf;
+			read(port_pipe_fds[0], &pipebuf, 1);
+			if (pipebuf == '1') {
+				GPTP_LOG_INFO("cleanup openport thread\n");
+				ret = net_fatal;
+				goto done;
+			}
+		} else if ( !FD_ISSET( sd_event, &readfds )) {
+			ret = net_trfail;
+			goto done;
+		}
 	}
 
 	memset( &msg, 0, sizeof( msg ));
