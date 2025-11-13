@@ -950,7 +950,8 @@ static int gptpDaemonClientInit(void)
     }
 
 #ifndef AVB_FEATURE_GVM_MODE
-    pthread_attr_t attr;
+
+    /*pthread_attr_t attr;
     struct sched_param param;
 
     // Initialize thread attributes
@@ -966,7 +967,9 @@ static int gptpDaemonClientInit(void)
     // Explicitly specify that the thread should use the attributes
     pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
 
-    ret = pthread_create(&thread_id, &attr, gptpDaemonSrvConnect, NULL);
+    ret = pthread_create(&thread_id, &attr, gptpDaemonSrvConnect, NULL);*/
+
+    ret = pthread_create(&thread_id, NULL, gptpDaemonSrvConnect, NULL);
 
     if (ret != 0) {
         GPTP_LOG_ERROR("gptpDaemonClientInit: failed -->%s\n", strerror(errno));
