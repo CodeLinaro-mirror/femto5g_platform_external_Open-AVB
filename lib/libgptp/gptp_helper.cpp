@@ -308,9 +308,13 @@ static void getVirtDevice(char* device_path)
 {
     const char *path = "/sys/devices/virtual/ptp/";
     struct dirent *entry;
-    DIR *dp = opendir(path);
 
-    if (dp == NULL || device_path == NULL) {
+    if (device_path == NULL) {
+        GPTP_LOG_ERROR("device path is NULL\n");
+        return;
+    }
+    DIR *dp = opendir(path);
+    if (dp == NULL) {
         GPTP_LOG_ERROR("Failed to open /sys/devices/virtual/ptp/ so use default device\n");
         snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s", PTP_DEFAULT_DEVICE);
         return;
@@ -347,7 +351,7 @@ static int gptpClkInit(int *gptp_phc_fd)
 
     if ( *gptp_phc_fd == -1 ||
             (gPtpClockid = FD_TO_CLOCKID(*gptp_phc_fd)) == -1 ) {
-        GPTP_LOG_ERROR("Failed to open PTP clock device\n");
+        GPTP_LOG_LIMIT_ERROR(ERROR_LOG, "Failed to open PTP clock device\n");
         return false;
     }
 
@@ -946,7 +950,23 @@ static int gptpDaemonClientInit(void)
     }
 
 #ifndef AVB_FEATURE_GVM_MODE
-    ret = pthread_create(&thread_id, NULL, gptpDaemonSrvConnect, NULL);
+    pthread_attr_t attr;
+    struct sched_param param;
+
+    // Initialize thread attributes
+    pthread_attr_init(&attr);
+
+    // Set scheduling policy to SCHED_OTHER
+    pthread_attr_setschedpolicy(&attr, SCHED_OTHER);
+
+    // Set scheduling parameters (priority is ignored for SCHED_OTHER)
+    param.sched_priority = 0;
+    pthread_attr_setschedparam(&attr, &param);
+
+    // Explicitly specify that the thread should use the attributes
+    pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
+
+    ret = pthread_create(&thread_id, &attr, gptpDaemonSrvConnect, NULL);
 
     if (ret != 0) {
         GPTP_LOG_ERROR("gptpDaemonClientInit: failed -->%s\n", strerror(errno));
@@ -962,7 +982,7 @@ static int gptpDaemonClientInit(void)
         return false;
     }
 
-    ret = pthread_setname_np(thread_id, "GPTP-HELPER");
+    ret = pthread_setname_np(thread_id, "gptpDaemonSrv");
 
     if (ret != 0) {
         GPTP_LOG_ERROR("Failed to set thread name \n");
@@ -1818,6 +1838,19 @@ bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur,
     return gptpGetCurgPtpMonotonicPair_s(gptp_time_cur, mono_time_cur, NULL);
 }
 
+/* Get proxy mode */
+bool isGptpInProxyMode(void)
+{
+    if (!bInitialized) {
+        return false;
+    }
+
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
+        return false;
+    }
+
+    return gPtpTD.in_proxy_mode;
+}
 
 /* public API to init gptp time scaling */
 bool gptpInit(void)

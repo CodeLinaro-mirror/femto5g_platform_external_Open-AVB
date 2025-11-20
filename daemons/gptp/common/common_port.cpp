@@ -81,6 +81,7 @@ CommonPort::CommonPort( PortInit_t *portInit ) :
     sync_sequence_id = 0;
     initialLogSyncInterval = portInit->initialLogSyncInterval;
     operLogPdelayReqInterval = &(portInit->operLogPdelayReqInterval);
+    syncArrivalTimeDiffTolerance = portInit->syncArrivalTimeDiffTolerance;
     log_mean_announce_interval = 0;
     pdelay_count = 0;
     sct_shm_fd = portInit->sct_shm_fd;
@@ -178,7 +179,7 @@ void CommonPort::timestamper_deinit(  )
 {
     if ( _hw_timestamper != NULL ) {
         if ( !_hw_timestamper->HWTimestamper_deinit
-                ( net_label, net_iface )) {
+                ( net_label, &net_iface )) {
             GPTP_LOG_ERROR
             ( "Failed to deinitialize hardware timestamper" );
             return;
@@ -734,24 +735,23 @@ bool CommonPort::processEvent( Event e )
             ret = _processEvent( e );
             break;
         case LINKDOWN:
-                    gptpDaemonServDeInit();
-                    timestamper_deinit();
-                    ret = _processEvent( e );
-                    break;
+            gptpDaemonServDeInit();
+            ret = _processEvent( e );
+            break;
         case LINKUP:
-                    GPTP_LOG_DEBUG("Received LINKUP event");
-                    if (!bypass_if_wait) {
-                        while (waitForInterface()) {
+            GPTP_LOG_DEBUG("Received LINKUP event");
+            if (!bypass_if_wait) {
+                while (waitForInterface()) {
 
-                            GPTP_LOG_DEBUG( "waitForInterface \n");
-                       }
-                       GPTP_LOG_INFO( "eth interface is up.. \n");
-                    } else {
-                        GPTP_LOG_INFO( "Bypass Ethernet check.. \n");
-                    }
-                    ret = _processEvent( e );
-                    gptpDaemonServInit();
-                    break;
+                    GPTP_LOG_DEBUG( "waitForInterface \n");
+                }
+                GPTP_LOG_INFO( "eth interface is up.. \n");
+            } else {
+                GPTP_LOG_INFO( "Bypass Ethernet check.. \n");
+            }
+            ret = _processEvent( e );
+            gptpDaemonServInit();
+            break;
 
         case STATE_CHANGE_EVENT:
             ret = _processEvent( e );

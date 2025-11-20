@@ -885,6 +885,7 @@ TicketingLock::~TicketingLock()
 {
     if ( _private != NULL ) {
         delete _private;
+        _private = NULL;
     }
 }
 
@@ -1075,8 +1076,15 @@ bool LinuxThread::start(OSThreadFunction function, void *arg)
 
 bool LinuxThread::join(OSThreadExitCode & exit_code)
 {
-    int err;
-    err = pthread_join(_private->thread_id, NULL);
+    int err = 0;
+
+    if (_private && _private->thread_id != 0) {
+        err = pthread_join(_private->thread_id, NULL);
+        if (err != 0) {
+            GPTP_LOG_ERROR("pthread_join failed: %d (%s)", err, strerror(err));
+            return false;
+        }
+    }
 
     if (err != 0) {
         return false;
@@ -1096,6 +1104,7 @@ LinuxThread::~LinuxThread()
 {
     if ( _private != NULL ) {
         delete _private;
+        _private = NULL;
     }
 }
 
@@ -1815,6 +1824,12 @@ bool LinuxSharedMemoryIPC::update_network_interface(
 
 #endif
     return true;
+}
+
+void LinuxSharedMemoryIPC::ipc_down() {
+    if ( master_offset_buffer != NULL ) {
+        memset(master_offset_buffer, 0x0, SHM_SIZE);
+    }
 }
 
 void LinuxSharedMemoryIPC::stop()

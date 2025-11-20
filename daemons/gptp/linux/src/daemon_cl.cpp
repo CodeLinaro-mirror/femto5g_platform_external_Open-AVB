@@ -612,6 +612,7 @@ int main(int argc, char **argv)
     portInit.initialLogPdelayReqInterval = LOG2_INTERVAL_INVALID;
     portInit.operLogPdelayReqInterval = LOG2_INTERVAL_INVALID;
     portInit.operLogSyncInterval = LOG2_INTERVAL_INVALID;
+    portInit.syncArrivalTimeDiffTolerance = NAN;
     portInit.reverseSyncEnabled = LOG2_INTERVAL_INVALID;
     portInit.reverseSyncDomain = LOG2_INTERVAL_INVALID;
     portInit.reverseSyncRate = LOG2_INTERVAL_INVALID;
@@ -641,7 +642,7 @@ int main(int argc, char **argv)
     LinuxLockFactory *lock_factory = new LinuxLockFactory();
     LinuxTimerFactory *timer_factory = new LinuxTimerFactory();
     LinuxConditionFactory *condition_factory = new LinuxConditionFactory();
-    LinuxSharedMemoryIPC *ipc = new LinuxSharedMemoryIPC();
+    ipc = new LinuxSharedMemoryIPC();
 
     /* Create Low level network interface object */
     if ( argc < 2 ) {
@@ -769,6 +770,9 @@ int main(int argc, char **argv)
                 portInit.initialLogPdelayReqInterval = atoi(argv[++i]);
             } else if (strcmp(argv[i] + 1, "OPERPDELAY") == 0) {
                 portInit.operLogPdelayReqInterval = atoi(argv[++i]);
+            } else if (strcmp(argv[i] + 1, "SYNC_TOLERANCE") == 0) {
+                portInit.syncArrivalTimeDiffTolerance = atof(argv[++i]);
+                GPTP_LOG_ERROR("portInit.syncArrivalTimeDiffTolerance: %lF\n",portInit.syncArrivalTimeDiffTolerance);
             } else if (strcmp(argv[i] + 1, "F") == 0) {
                 if ( i + 1 < argc ) {
                     use_config_file = true;
@@ -927,6 +931,7 @@ int main(int argc, char **argv)
             portInit.announceReceiptTimeout = iniParser.getAnnounceReceiptTimeout();
             portInit.operLogSyncInterval = iniParser.getOperLogSyncInterval();
             portInit.operLogPdelayReqInterval = iniParser.getOperLogPdelayReqInterval();
+            portInit.syncArrivalTimeDiffTolerance = iniParser.getSyncArrivalTimeDiffTolerance();
             portInit.reverseSyncEnabled = iniParser.getIsRsync();
             portInit.disableSigMsg = iniParser.getIsSigMsgDisabled();
             portInit.reverseSyncDomain = iniParser.getRSyncDomain();
