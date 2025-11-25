@@ -49,6 +49,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <avbts_oscondition.hpp>
 #include <ether_tstamper.hpp>
 #include <linux_hal_common.hpp>
+#include <linux/ptp_clock.h>
 
 #include <gptp_log.hpp>
 
@@ -58,13 +59,89 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #include <stdlib.h>
 #include <unistd.h>
+#include <time.h>
+
+#define MAX_NSEC 1000000000
 
 extern bool waitForInterface();
 extern LinuxSharedMemoryIPC *ipc;
+int port_pipe_fds[2];
 LinkLayerAddress EtherPort::other_multicast(OTHER_MULTICAST);
 LinkLayerAddress EtherPort::pdelay_multicast(PDELAY_MULTICAST);
 LinkLayerAddress EtherPort::test_status_multicast
 ( TEST_STATUS_MULTICAST );
+
+/* Return *a - *b */
+static inline ptp_clock_time pct_diff
+( struct ptp_clock_time *a, struct ptp_clock_time *b )
+{
+    ptp_clock_time result = {0, 0, 0};
+
+    if ( a->nsec >= b->nsec ) {
+        result.nsec = a->nsec - b->nsec;
+    } else {
+        --a->sec;
+        result.nsec = (MAX_NSEC - b->nsec) + a->nsec;
+    }
+
+    result.sec = a->sec - b->sec;
+    return result;
+}
+
+static inline int64_t pctns(struct ptp_clock_time t)
+{
+    return t.sec * 1000000000LL + t.nsec;
+}
+
+#ifdef PTP_SW_QTIMER
+static inline void updateQTimerToMonoOffset(void) {
+    const int sample_count = 20;
+    int64_t total_offset = 0;
+    int64_t min_offset = INT64_MAX;
+    int64_t max_offset = INT64_MIN;
+
+    for (int i = 0; i < sample_count; ++i) {
+        struct timespec mono;
+        struct ptp_clock_time mono_pct, qtimer_pct;
+        uint64_t qTimerCount = 0, qTimerFreq = 0;
+        uint64_t qTimerNanosSec = 0, qTimerNanosNSec = 0;
+        int64_t offset;
+
+        clock_gettime(CLOCK_MONOTONIC, &mono);
+
+#if __aarch64__
+        asm volatile("mrs %0, cntvct_el0" : "=r" (qTimerCount));
+        asm volatile("mrs %0, cntfrq_el0" : "=r"(qTimerFreq));
+#else
+        asm volatile("mrrc p15, 1, %Q0, %R0, c14" : "=r" (qTimerCount));
+        qTimerFreq = 19200000; // 19.2 MHz fallback
+#endif
+
+        qTimerNanosSec = qTimerCount / qTimerFreq;
+        qTimerNanosNSec = (qTimerCount % qTimerFreq) * 1000000000 / qTimerFreq;
+
+        qtimer_pct.sec = qTimerNanosSec;
+        qtimer_pct.nsec = qTimerNanosNSec;
+        mono_pct.sec = mono.tv_sec;
+        mono_pct.nsec = mono.tv_nsec;
+
+        offset = pctns(pct_diff(&qtimer_pct, &mono_pct));
+        total_offset += offset;
+
+        if (offset < min_offset) min_offset = offset;
+        if (offset > max_offset) max_offset = offset;
+    }
+
+    int64_t avg_offset = total_offset / sample_count;
+
+    GPTP_LOG_WARNING("qtimer_to_mono_offset -- min:%ld max:%ld avg:%ld",
+                     min_offset, max_offset, avg_offset);
+
+    if (ipc) {
+        ipc->updateQtimeToMonoOffset(avg_offset);
+    }
+}
+#endif
 
 OSThreadExitCode watchNetLinkWrapper(void *arg)
 {
@@ -112,6 +189,7 @@ EtherPort::EtherPort( PortInit_t *portInit ) :
     initialLogPdelayReqInterval = portInit->initialLogPdelayReqInterval;
     operLogPdelayReqInterval = portInit->operLogPdelayReqInterval;
     operLogSyncInterval = portInit->operLogSyncInterval;
+    syncArrivalTimeDiffTolerance = portInit->syncArrivalTimeDiffTolerance;
     isGM = portInit->isGM;
     disableSigMsg = portInit->disableSigMsg;
     lostResponses = 0;
@@ -126,6 +204,14 @@ EtherPort::EtherPort( PortInit_t *portInit ) :
     // Consider port is up even in bypass_if_wait is set
     setEtherLinkState(ETHER_PORT_STATE_LINK_UP);
     clock->updateEtherLinkState(ETHER_PORT_STATE_LINK_UP);
+
+    if (std::isnan(syncArrivalTimeDiffTolerance)) {
+        GPTP_LOG_INFO("Default syncArrivalTimeDiffTolerance: %lF", DEFAULT_SYNC_ARRIVAL_TIME_DIFF_TOLERANCE);
+        setSyncArrivalTimeDiffTolerance(DEFAULT_SYNC_ARRIVAL_TIME_DIFF_TOLERANCE); // 20% of oper sync interval
+    } else {
+        GPTP_LOG_INFO("Using syncArrivalTimeDiffTolerance: %lF", syncArrivalTimeDiffTolerance);
+        setSyncArrivalTimeDiffTolerance(syncArrivalTimeDiffTolerance);
+    }
 
     if (automotive_profile) {
         setAsCapable( true );
@@ -388,6 +474,7 @@ void EtherPort::sendGeneralPort
 bool EtherPort::_processEvent( Event e )
 {
     bool ret = false;
+    OSThreadExitCode exit_code = osthread_ok;
 
     switch (e) {
         case POWERUP:
@@ -404,7 +491,13 @@ bool EtherPort::_processEvent( Event e )
             } else {
                 startPDelay();
             }
-
+            port_pipe_fds[0] = -1;
+            port_pipe_fds[1] = -1;
+            if (pipe(port_pipe_fds) == -1) {
+                GPTP_LOG_ERROR("pipe create error\n");
+                ret = false;
+                break;
+            }
             port_ready_condition->wait_prelock();
 
             if ( !linkWatch(watchNetLinkWrapper, (void *)this) ) {
@@ -459,13 +552,23 @@ bool EtherPort::_processEvent( Event e )
 
         case LINKUP:
             if (!OSNetworkInterfaceFactory::buildInterface
-                ( &net_iface, factory_name_t("default"), net_label,
-                 _hw_timestamper)) {
+                    ( &net_iface, factory_name_t("default"), net_label,
+                      _hw_timestamper)) {
                 return false;
             }
             timestamper_init();
+#ifdef PTP_SW_QTIMER
+            updateQTimerToMonoOffset();
+#endif
             _init_port();
             linkstatus = true;
+            port_pipe_fds[0] = -1;
+            port_pipe_fds[1] = -1;
+            if (pipe(port_pipe_fds) == -1) {
+                GPTP_LOG_ERROR("pipe create error\n");
+                ret = false;
+                break;
+            }
             port_ready_condition->wait_prelock();
 
             if ( !linkOpen(openPortWrapper, (void *)this) ) {
@@ -545,6 +648,44 @@ bool EtherPort::_processEvent( Event e )
 
         case LINKDOWN:
             linkstatus = false;
+            //delete all timers as in powerdown
+            stopPDelay();
+            clock->deleteEventTimerLocked( this, ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES );
+            clock->deleteEventTimerLocked( this, ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES );
+            clock->deleteEventTimerLocked( this, SYNC_INTERVAL_TIMEOUT_EXPIRES);
+            clock->deleteEventTimerLocked( this, DEFERRED_SYNC_INTERVAL_RATE_CHANGE);
+            clock->deleteEventTimerLocked( this, PDELAY_RESP_RECEIPT_TIMEOUT_EXPIRES);
+            clock->deleteEventTimerLocked( this, SYNC_RATE_INTERVAL_TIMEOUT_EXPIRED);
+            clock->deleteEventTimerLocked( this, RSYNC_INTERVAL_TIMEOUT_EXPIRES );
+            stopSyncReceiptTimer();
+            setEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
+            clock->updateEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
+
+            if (port_pipe_fds[1] != -1) {
+                char data = '1';
+                ssize_t bytes_written = write(port_pipe_fds[1], &data, 1);
+                if (bytes_written != 1) {
+                    GPTP_LOG_ERROR("Failed to write to pipe: %s", strerror(errno));
+                } else {
+                    GPTP_LOG_INFO("Successfully wrote to pipe to interrupt select()");
+                }
+            }
+
+            if (!linkjoin(exit_code)) {
+                GPTP_LOG_ERROR("Failed to openport thread to join %d", exit_code);
+                ret = false;
+                break;
+            }
+            GPTP_LOG_INFO("openport thread to join %d", exit_code);
+            // Release the Pipe
+            if (port_pipe_fds[0] != -1) {
+                close(port_pipe_fds[0]);
+                port_pipe_fds[0] = -1;
+            }
+            if (port_pipe_fds[1] != -1) {
+                close(port_pipe_fds[1]);
+                port_pipe_fds[1] = -1;
+            }
             setStationState(STATION_STATE_RESERVED);
             if ( ipc ) {
                 ipc->ipc_down();
@@ -567,18 +708,7 @@ bool EtherPort::_processEvent( Event e )
                 linkDownCount++;
             }
             increment_LinkdownCount();
-            //delete all timers as in powerdown
-            stopPDelay();
-            clock->deleteEventTimerLocked( this, ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES );
-            clock->deleteEventTimerLocked( this, ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES );
-            clock->deleteEventTimerLocked( this, SYNC_INTERVAL_TIMEOUT_EXPIRES);
-            clock->deleteEventTimerLocked( this, DEFERRED_SYNC_INTERVAL_RATE_CHANGE);
-            clock->deleteEventTimerLocked( this, PDELAY_RESP_RECEIPT_TIMEOUT_EXPIRES);
-            clock->deleteEventTimerLocked( this, SYNC_RATE_INTERVAL_TIMEOUT_EXPIRED);
-            clock->deleteEventTimerLocked( this, RSYNC_INTERVAL_TIMEOUT_EXPIRES );
-            stopSyncReceiptTimer();
-            setEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
-            clock->updateEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
+            timestamper_deinit();
             ret = true;
             break;
 
@@ -629,11 +759,15 @@ bool EtherPort::_processEvent( Event e )
                     pdelay_req->setTimestamp(pending);
                 }
 
+                getPDelayRxLock();
                 if (last_pdelay_req != NULL) {
                     delete last_pdelay_req;
+                    last_pdelay_req = NULL;
                 }
 
                 setLastPDelayReq(pdelay_req);
+                putPDelayRxLock();
+
                 getTxLock();
                 pdelay_req->sendPort(this, NULL);
                 GPTP_LOG_DEBUG("*** Sent PDelay Request message");
