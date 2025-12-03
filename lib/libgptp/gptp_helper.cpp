@@ -1149,8 +1149,8 @@ bool gptpGetPtpTimeFromBootTime_s(uint64_t *gptp_time_bt, uint64_t time_boot_ns,
         return false;
     }
 
-    GPTP_LOG_DEBUG("gptpGetPtpTimeFromBootTime offset %lld freqoffset %Lf qtimeoffset %lld \n",
-                   gPtpTD.lb_phoffset, gPtpTD.lb_freqoffset, gPtpTD.qtime_to_mono_offset);
+    GPTP_LOG_DEBUG("gptpGetPtpTimeFromBootTime offset %" PRId64 " freqoffset %Lf qtimeoffset %" PRId64 "\n",
+                   (int64_t)gPtpTD.lb_phoffset, gPtpTD.lb_freqoffset, (int64_t)gPtpTD.qtime_to_mono_offset);
 
     if (gPtpTD.d_status != DAEMON_STATUS_UP) {
         GPTP_LOG_LIMIT_WARNING(WARNING_LOG, "Daemon not up!!");
@@ -1284,8 +1284,8 @@ bool gptpGetBootTimeFromPtpTime_s(uint64_t *boot_time_ns, uint64_t ptp_time_ns,
         return false;
     }
 
-    GPTP_LOG_DEBUG("gptpGetBootTimeFromPtpTime offset %lld freqoffset %Lf qtimeoffset %lld \n",
-                   gPtpTD.lb_phoffset, gPtpTD.lb_freqoffset, gPtpTD.qtime_to_mono_offset);
+    GPTP_LOG_DEBUG("gptpGetBootTimeFromPtpTime offset %" PRId64 " freqoffset %Lf qtimeoffset %" PRId64 "\n",
+                   (int64_t)gPtpTD.lb_phoffset, gPtpTD.lb_freqoffset, (int64_t)gPtpTD.qtime_to_mono_offset);
     *boot_time_ns = gPtpTD.local_time + gPtpTD.lb_phoffset; //curr boot time
 
     if (gPtpTD.lb_freqoffset) {
