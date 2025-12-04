@@ -1750,7 +1750,7 @@ bool gptpGetStatusAndCurPtpTime(gptpTimeInfo_t *ptp_data)
 #else
     uint64_t gptp_time = 0;
     ptp_data->status = gptpGetSyncStatus();
-    ptp_data->port_status = gptpGetPortState();
+    ptp_data->port_state = gptpGetPortState();
 
     if (gptpGetCurPtpTime(&gptp_time)) {
         ptp_data->tv_sec = gptp_time / 1000000000UL;
