@@ -365,14 +365,17 @@ int ringRawsockSend(void *pvRawsock)
 
 	// Linux does something dumb to wait for frames to be sent.
 	// Without MSG_DONTWAIT, CPU usage is bad.
+	char dummy_buf = 0;
 	int flags = MSG_DONTWAIT;
-	int sent = send(rawsock->sock, NULL, 0, flags);
-	if (errno == EINTR) {
-		// ignore
-	}
-	else if (sent < 0) {
+	int sent = send(rawsock->sock, &dummy_buf, 0, flags);
+	if (send < 0) {
+	    if (errno == EINTR) {
+	        // ignore
+	    }
+	    else {
 		AVB_LOGF_ERROR("Send failed: %s", strerror(errno));
 		assert(0);
+	    }
 	}
 	else {
 		AVB_LOGF_VERBOSE("Sent %d bytes, %d frames", sent, rawsock->buffersReady);
