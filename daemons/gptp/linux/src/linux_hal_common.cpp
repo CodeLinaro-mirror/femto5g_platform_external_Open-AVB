@@ -71,6 +71,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <gptp_cfg.hpp>
 #ifdef GPTP_VFIO
 #include "ptp_vfio.h"
+#include <atomic>
 #endif
 
 #ifndef PTP_SEC_OFFSET
@@ -1337,13 +1338,18 @@ void LinuxSharedMemoryIPC::vfio_ptp(int64_t ml_phoffset,
     int buf_offset = 0;
     pid_t process_id = getpid();
     gPtpTimeData* ptimedata;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
     char* shm_buffer_vfio = master_offset_buffer_vfio;
 
     if (shm_buffer_vfio != NULL) {
         /* lock */
-        pthread_mutex_lock((pthread_mutex_t*)shm_buffer_vfio);
-        buf_offset += sizeof(pthread_mutex_t);
+        seq0 = (std::atomic<uint32_t> *)shm_buffer_vfio;
+        seq1 = (std::atomic<uint32_t> *)(shm_buffer_vfio + sizeof(
+                                         std::atomic<uint32_t>));
+        buf_offset += (2 * sizeof(std::atomic<uint32_t>));
         ptimedata = (gPtpTimeData*)(shm_buffer_vfio + buf_offset);
+        seq0->fetch_add(1);
         ptimedata->ml_phoffset = ml_phoffset;
         ptimedata->ls_phoffset = ls_phoffset;
         ptimedata->lq_phoffset = lq_phoffset;
@@ -1407,8 +1413,7 @@ void LinuxSharedMemoryIPC::vfio_ptp(int64_t ml_phoffset,
         *qtimer_sync_time = prev_qtimer_sync_time = qtimer_ns;
         a_lock2++;
 #endif
-        /* unlock */
-        pthread_mutex_unlock((pthread_mutex_t*)shm_buffer_vfio);
+        seq1->fetch_add(1);
     }
 }
 #endif
@@ -1507,17 +1512,23 @@ bool LinuxSharedMemoryIPC::updateGmId(ClockIdentity& id, uint16_t portNumber)
     }
 
 #ifdef GPTP_VFIO
+    buf_offset = 0;
     shm_buffer = master_offset_buffer_vfio;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
 
     if ( shm_buffer != NULL ) {
         /* lock */
-        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-        buf_offset += sizeof(pthread_mutex_t);
+        seq0 = (std::atomic<uint32_t> *)shm_buffer;
+        seq1 = (std::atomic<uint32_t> *)(shm_buffer + sizeof(
+                                         std::atomic<uint32_t>));
+        buf_offset += (2 * sizeof(std::atomic<uint32_t>));
         ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        seq0->fetch_add(1);
         id.getIdentityString(ptimedata->gmIdentifier);
         ptimedata->portNumber = portNumber;
         /* unlock */
-        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+        seq1->fetch_add(1);
     }
 
 #endif
@@ -1545,18 +1556,24 @@ bool LinuxSharedMemoryIPC::updateSyncStatus(bool is_sync, PortState port_state)
     }
 
 #ifdef GPTP_VFIO
+    buf_offset = 0;
     shm_buffer = master_offset_buffer_vfio;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
 
     if (shm_buffer != NULL) {
         /* lock */
-        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-        buf_offset += sizeof(pthread_mutex_t);
+        seq0 = (std::atomic<uint32_t> *)shm_buffer;
+        seq1 = (std::atomic<uint32_t> *)(shm_buffer + sizeof(
+                                         std::atomic<uint32_t>));
+        buf_offset += (2 * sizeof(std::atomic<uint32_t>));
         ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        seq0->fetch_add(1);
         ptimedata->sync_status = is_sync;
         ptimedata->port_state = port_state;
         memcpy(ptimedata->ptp_dev_index, ptp_dev_index, PTP_CLOCK_DEVICE_LENGTH);
         /* unlock */
-        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+        seq1->fetch_add(1);
     }
 
 #endif
@@ -1605,17 +1622,22 @@ bool LinuxSharedMemoryIPC::setProxyMode(int32_t proxy_value)
     }
 
 #ifdef GPTP_VFIO
+    buf_offset = 0;
     shm_buffer = master_offset_buffer_vfio;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
 
     if (shm_buffer != NULL) {
         /* lock */
-        //pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-        buf_offset += sizeof(pthread_mutex_t);
+        seq0 = (std::atomic<uint32_t> *)shm_buffer;
+        seq1 = (std::atomic<uint32_t> *)(shm_buffer + sizeof(
+                                         std::atomic<uint32_t>));
+        buf_offset += (2 * sizeof(std::atomic<uint32_t>));
         ptimedata = (gPtpTimeData*)(shm_buffer + buf_offset);
+        seq0->fetch_add(1);
         ptimedata->in_proxy_mode = proxy_value;
         /* unlock */
-        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+        seq1->fetch_add(1);
         GPTP_LOG_DEBUG("in_proxy_mode = %" PRIu8 "\n", ptimedata->in_proxy_mode);
     }
 
@@ -1628,7 +1650,6 @@ bool LinuxSharedMemoryIPC::updateEtherLinkState(EtherPortLinkState_t LinkState)
     int buf_offset = 0;
     char *shm_buffer = master_offset_buffer;
     gPtpTimeData *ptimedata;
-
     if (shm_buffer != NULL) {
         /* lock */
         pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
@@ -1640,16 +1661,22 @@ bool LinuxSharedMemoryIPC::updateEtherLinkState(EtherPortLinkState_t LinkState)
     }
 
 #ifdef GPTP_VFIO
+    buf_offset = 0;
     shm_buffer = master_offset_buffer_vfio;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
 
     if (shm_buffer != NULL) {
         /* lock */
-        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-        buf_offset += sizeof(pthread_mutex_t);
+        seq0 = (std::atomic<uint32_t> *)shm_buffer;
+        seq1 = (std::atomic<uint32_t> *)(shm_buffer + sizeof(
+                                         std::atomic<uint32_t>));
+        buf_offset += (2 * sizeof(std::atomic<uint32_t>));
         ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        seq0->fetch_add(1);
         ptimedata->etherPortLinkState = LinkState;
         /* unlock */
-        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+        seq1->fetch_add(1);
     }
 
 #endif
@@ -1672,14 +1699,20 @@ bool LinuxSharedMemoryIPC::getSyncStatus(void)
     }
 
 #ifdef GPTP_VFIO
+    buf_offset = 0;
     shm_buffer = master_offset_buffer_vfio;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
 
     if (shm_buffer != NULL) {
-        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-        buf_offset += sizeof(pthread_mutex_t);
+        seq0 = (std::atomic<uint32_t> *)shm_buffer;
+        seq1 = (std::atomic<uint32_t> *)(shm_buffer + sizeof(
+                                         std::atomic<uint32_t>));
+        buf_offset += (2 * sizeof(std::atomic<uint32_t>));
         ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        seq0->fetch_add(1);
         sync_stat = ptimedata->sync_status;
-        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+        seq1->fetch_add(1);
     }
 
 #endif
@@ -1704,16 +1737,22 @@ bool LinuxSharedMemoryIPC::updateQtimeToMonoOffset(int64_t offset)
     }
 
 #ifdef GPTP_VFIO
+    buf_offset = 0;
     shm_buffer = master_offset_buffer_vfio;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
 
     if (shm_buffer != NULL) {
         /* lock */
-        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-        buf_offset += sizeof(pthread_mutex_t);
+        seq0 = (std::atomic<uint32_t> *)shm_buffer;
+        seq1 = (std::atomic<uint32_t> *)(shm_buffer + sizeof(
+                                         std::atomic<uint32_t>));
+        buf_offset += (2 * sizeof(std::atomic<uint32_t>));
         ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        seq0->fetch_add(1);
         ptimedata->qtime_to_mono_offset = offset;
         /* unlock */
-        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+        seq1->fetch_add(1);
     }
 
 #endif
@@ -1741,18 +1780,24 @@ bool LinuxSharedMemoryIPC::update_grandmaster(
     }
 
 #ifdef GPTP_VFIO
+    buf_offset = 0;
     shm_buffer = master_offset_buffer_vfio;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
 
     if ( shm_buffer != NULL ) {
         /* lock */
-        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-        buf_offset += sizeof(pthread_mutex_t);
+        seq0 = (std::atomic<uint32_t> *)shm_buffer;
+        seq1 = (std::atomic<uint32_t> *)(shm_buffer + sizeof(
+                                         std::atomic<uint32_t>));
+        buf_offset += (2 * sizeof(std::atomic<uint32_t>));
         ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        seq0->fetch_add(1);
         memcpy(ptimedata->gptp_grandmaster_id, gptp_grandmaster_id,
                PTP_CLOCK_IDENTITY_LENGTH);
         ptimedata->gptp_domain_number = gptp_domain_number;
         /* unlock */
-        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+        seq1->fetch_add(1);
     }
 
 #endif
@@ -1797,13 +1842,19 @@ bool LinuxSharedMemoryIPC::update_network_interface(
     }
 
 #ifdef GPTP_VFIO
+    buf_offset = 0;
     shm_buffer = master_offset_buffer_vfio;
+    std::atomic<uint32_t> *seq0;
+    std::atomic<uint32_t> *seq1;
 
     if ( shm_buffer != NULL ) {
         /* lock */
-        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
-        buf_offset += sizeof(pthread_mutex_t);
+        seq0 = (std::atomic<uint32_t> *)shm_buffer;
+        seq1 = (std::atomic<uint32_t> *)(shm_buffer + sizeof(
+                                         std::atomic<uint32_t>));
+        buf_offset += (2 * sizeof(std::atomic<uint32_t>));
         ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        seq0->fetch_add(1);
         memcpy(ptimedata->clock_identity, clock_identity, PTP_CLOCK_IDENTITY_LENGTH);
         ptimedata->priority1 = priority1;
         ptimedata->clock_class = clock_class;
@@ -1816,7 +1867,7 @@ bool LinuxSharedMemoryIPC::update_network_interface(
         ptimedata->log_pdelay_interval = log_pdelay_interval;
         ptimedata->port_number   = port_number;
         /* unlock */
-        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+        seq1->fetch_add(1);
     }
 
 #endif
