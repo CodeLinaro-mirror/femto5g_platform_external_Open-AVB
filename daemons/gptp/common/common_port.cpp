@@ -133,6 +133,13 @@ bool CommonPort::init_port( void )
         return false;
     }
 
+    deferredSyncIntervalTimerLock = lock_factory->createLock(oslock_recursive);
+
+    if (!deferredSyncIntervalTimerLock) {
+        GPTP_LOG_ERROR("create deferredSyncIntervalTimerLock failure");
+        return false;
+    }
+
     announceIntervalTimerLock = lock_factory->createLock(oslock_recursive);
 
     if (!announceIntervalTimerLock) {
@@ -171,7 +178,7 @@ void CommonPort::timestamper_deinit(  )
 {
     if ( _hw_timestamper != NULL ) {
         if ( !_hw_timestamper->HWTimestamper_deinit
-                ( net_label, net_iface )) {
+                ( net_label, &net_iface )) {
             GPTP_LOG_ERROR
             ( "Failed to deinitialize hardware timestamper" );
             return;
@@ -445,6 +452,27 @@ void CommonPort::stopSyncIntervalTimer( Event e )
     clock->putTimerQLock();
 }
 
+void CommonPort::startDeferredSyncIntervalTimer(long long unsigned int waitTime, Event e)
+{
+    if (deferredSyncIntervalTimerLock->trylock() == oslock_fail) {
+        return;
+    }
+    clock->deleteEventTimerLocked(this, e);
+    clock->addEventTimerLocked(this, e, waitTime);
+    deferredSyncIntervalTimerLock->unlock();
+}
+
+void CommonPort::stopDeferredSyncIntervalTimer(Event e)
+{
+    clock->getTimerQLock();
+    if (deferredSyncIntervalTimerLock->trylock() == oslock_fail) {
+        return;
+    }
+    clock->deleteEventTimerLocked(this, e);
+    deferredSyncIntervalTimerLock->unlock();
+    clock->putTimerQLock();
+}
+
 void CommonPort::startAnnounceIntervalTimer
 ( long long unsigned int waitTime )
 {
@@ -706,24 +734,23 @@ bool CommonPort::processEvent( Event e )
             ret = _processEvent( e );
             break;
         case LINKDOWN:
-                    gptpDaemonServDeInit();
-                    timestamper_deinit();
-                    ret = _processEvent( e );
-                    break;
+            gptpDaemonServDeInit();
+            ret = _processEvent( e );
+            break;
         case LINKUP:
-                    GPTP_LOG_DEBUG("Received LINKUP event");
-                    if (!bypass_if_wait) {
-                        while (waitForInterface()) {
+            GPTP_LOG_DEBUG("Received LINKUP event");
+            if (!bypass_if_wait) {
+                while (waitForInterface()) {
 
-                            GPTP_LOG_DEBUG( "waitForInterface \n");
-                       }
-                       GPTP_LOG_INFO( "eth interface is up.. \n");
-                    } else {
-                        GPTP_LOG_INFO( "Bypass Ethernet check.. \n");
-                    }
-                    ret = _processEvent( e );
-                    gptpDaemonServInit();
-                    break;
+                    GPTP_LOG_DEBUG( "waitForInterface \n");
+                }
+                GPTP_LOG_INFO( "eth interface is up.. \n");
+            } else {
+                GPTP_LOG_INFO( "Bypass Ethernet check.. \n");
+            }
+            ret = _processEvent( e );
+            gptpDaemonServInit();
+            break;
 
         case STATE_CHANGE_EVENT:
             ret = _processEvent( e );

@@ -217,7 +217,6 @@ void LinuxNetworkInterface::clear_reenable_rx_queue()
         GPTP_LOG_ERROR
         ( "Unable to add PTP multicast addresses to port id: %u",
           ifindex );
-        return;
     }
 
     if ( !net_lock.unlock() ) {
@@ -396,6 +395,11 @@ void LinuxNetworkInterface::watchNetLink( CommonPort *iPort )
         return;
     }
 
+    int ret = pthread_setname_np(pthread_self(), "watchNetLink");
+    if (ret != 0) {
+        GPTP_LOG_ERROR("pthread_setname_np failed");
+    }
+
     netLinkSocket = socket (AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 
     if (netLinkSocket < 0) {
@@ -511,6 +515,11 @@ void *LinuxTimerQueueHandler( void *arg )
     timeout.tv_sec = 0;
     timeout.tv_nsec = 100000000; /* 100 ms */
     sigemptyset( &waitfor );
+
+    int ret = pthread_setname_np(pthread_self(), "LinuxTimer");
+    if (ret != 0) {
+        GPTP_LOG_ERROR("pthread_setname_np failed");
+    }
 
     while ( !timerq->stop ) {
         siginfo_t info;
@@ -876,6 +885,7 @@ TicketingLock::~TicketingLock()
 {
     if ( _private != NULL ) {
         delete _private;
+        _private = NULL;
     }
 }
 
@@ -1066,8 +1076,15 @@ bool LinuxThread::start(OSThreadFunction function, void *arg)
 
 bool LinuxThread::join(OSThreadExitCode & exit_code)
 {
-    int err;
-    err = pthread_join(_private->thread_id, NULL);
+    int err = 0;
+
+    if (_private && _private->thread_id != 0) {
+        err = pthread_join(_private->thread_id, NULL);
+        if (err != 0) {
+            GPTP_LOG_ERROR("pthread_join failed: %d (%s)", err, strerror(err));
+            return false;
+        }
+    }
 
     if (err != 0) {
         return false;
@@ -1087,6 +1104,7 @@ LinuxThread::~LinuxThread()
 {
     if ( _private != NULL ) {
         delete _private;
+        _private = NULL;
     }
 }
 
@@ -1608,6 +1626,39 @@ bool LinuxSharedMemoryIPC::setProxyMode(int32_t proxy_value)
     return true;
 }
 
+bool LinuxSharedMemoryIPC::updateEtherLinkState(EtherPortLinkState_t LinkState)
+{
+    int buf_offset = 0;
+    char *shm_buffer = master_offset_buffer;
+    gPtpTimeData *ptimedata;
+
+    if (shm_buffer != NULL) {
+        /* lock */
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        ptimedata->etherPortLinkState = LinkState;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+
+#ifdef GPTP_VFIO
+    shm_buffer = master_offset_buffer_vfio;
+
+    if (shm_buffer != NULL) {
+        /* lock */
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        ptimedata->etherPortLinkState = LinkState;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+
+#endif
+    return true;
+}
+
 bool LinuxSharedMemoryIPC::getSyncStatus(void)
 {
     bool sync_stat = 0;
@@ -1773,6 +1824,12 @@ bool LinuxSharedMemoryIPC::update_network_interface(
 
 #endif
     return true;
+}
+
+void LinuxSharedMemoryIPC::ipc_down() {
+    if ( master_offset_buffer != NULL ) {
+        memset(master_offset_buffer, 0x0, SHM_SIZE);
+    }
 }
 
 void LinuxSharedMemoryIPC::stop()
