@@ -133,6 +133,13 @@ bool CommonPort::init_port( void )
         return false;
     }
 
+    deferredSyncIntervalTimerLock = lock_factory->createLock(oslock_recursive);
+
+    if (!deferredSyncIntervalTimerLock) {
+        GPTP_LOG_ERROR("create deferredSyncIntervalTimerLock failure");
+        return false;
+    }
+
     announceIntervalTimerLock = lock_factory->createLock(oslock_recursive);
 
     if (!announceIntervalTimerLock) {
@@ -442,6 +449,27 @@ void CommonPort::stopSyncIntervalTimer( Event e )
 
     clock->deleteEventTimerLocked(this, e);
     syncIntervalTimerLock->unlock();
+    clock->putTimerQLock();
+}
+
+void CommonPort::startDeferredSyncIntervalTimer(long long unsigned int waitTime, Event e)
+{
+    if (deferredSyncIntervalTimerLock->trylock() == oslock_fail) {
+        return;
+    }
+    clock->deleteEventTimerLocked(this, e);
+    clock->addEventTimerLocked(this, e, waitTime);
+    deferredSyncIntervalTimerLock->unlock();
+}
+
+void CommonPort::stopDeferredSyncIntervalTimer(Event e)
+{
+    clock->getTimerQLock();
+    if (deferredSyncIntervalTimerLock->trylock() == oslock_fail) {
+        return;
+    }
+    clock->deleteEventTimerLocked(this, e);
+    deferredSyncIntervalTimerLock->unlock();
     clock->putTimerQLock();
 }
 

@@ -91,6 +91,8 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #define PHY_DELAY_MB_TX_I20 1044//100M delay
 #define PHY_DELAY_MB_RX_I20 2133//100M delay
 
+#define MAX_STR_LEN 2048
+
 #ifdef SYSTEMD
 #ifdef ANDROID
 #define ADDRESS     "/dev/socket/gptp_socket"
@@ -556,7 +558,8 @@ int main(int argc, char **argv)
     char config_file_path[512];
     struct timespec timeout;
     int rc = 0;
-
+    char reply_msg[MAX_STR_LEN];
+    int bytes_written = 0;
 #ifdef RGPTP_ENABLED
     bool rgptp = false;
 #endif
@@ -603,6 +606,8 @@ int main(int argc, char **argv)
     portInit.testMode = false;
     portInit.linkUp = false;
     portInit.isSigNoSend = false;
+    portInit.disableSigMsg = false;
+    portInit.allowedLostResponses = DEFAULT_ALLOWED_LOST_RESPONSES;
     portInit.initialLogSyncInterval = LOG2_INTERVAL_INVALID;
     portInit.initialLogPdelayReqInterval = LOG2_INTERVAL_INVALID;
     portInit.operLogPdelayReqInterval = LOG2_INTERVAL_INVALID;
@@ -742,6 +747,8 @@ int main(int argc, char **argv)
                 portInit.automotive_profile = true;
             } else if (strcmp(argv[i] + 1, "GM") == 0) {
                 portInit.isGM = true;
+            } else if (strcmp(argv[i] + 1, "DISSIGMSG") == 0) {
+                portInit.disableSigMsg = true;
             } else if (strcmp(argv[i] + 1, "E") == 0) {
                 portInit.testMode = true;
             } else if (strcmp(argv[i] + 1, "B") == 0) {
@@ -921,6 +928,7 @@ int main(int argc, char **argv)
             portInit.operLogSyncInterval = iniParser.getOperLogSyncInterval();
             portInit.operLogPdelayReqInterval = iniParser.getOperLogPdelayReqInterval();
             portInit.reverseSyncEnabled = iniParser.getIsRsync();
+            portInit.disableSigMsg = iniParser.getIsSigMsgDisabled();
             portInit.reverseSyncDomain = iniParser.getRSyncDomain();
             portInit.reverseSyncRate = iniParser.getRSyncRate();
             portInit.automotive_profile = iniParser.getAutomotiveProfile();
@@ -1170,6 +1178,14 @@ int main(int argc, char **argv)
 
         if (sig == SIGUSR2) {
             pPort->logIEEEPortCounters();
+            bytes_written = get_gptp_stats(reply_msg, 0);
+            GPTP_LOG_STATUS("bytes_written = %d", bytes_written);
+            char *saveptr;
+            char *line = strtok_r(reply_msg, "\n", &saveptr);
+            while (line != NULL) {
+                GPTP_LOG_STATUS("%s", line);
+                line = strtok_r(NULL, "\n", &saveptr);
+            }
         }
     } while (sig == SIGHUP || sig == SIGUSR2);
 

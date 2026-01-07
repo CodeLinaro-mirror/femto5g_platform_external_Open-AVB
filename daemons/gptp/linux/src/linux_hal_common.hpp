@@ -815,6 +815,13 @@ class LinuxSharedMemoryIPC: public OS_IPC
         virtual bool setProxyMode(int32_t proxy_value);
 
         /**
+         * @brief Updates Ether Port Link State
+         * @param LinkState - Link State
+         * @return Implementation dependent
+         */
+        virtual bool updateEtherLinkState(EtherPortLinkState_t LinkState);
+
+        /**
         * @brief Updates Qtimer to monotonic time offset
         * @return TRUE
         */
