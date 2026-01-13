@@ -288,7 +288,7 @@ void loop_test(int p_loop_cnt)
                           syncData.sync_ingress_timestamp);
             GPTP_LOG_INFO("loop_test: correction_field %" PRIu64 "\n",
                           syncData.correction_field);
-            GPTP_LOG_INFO("loop_test: sequence_id %" PRIu64 "\n", syncData.sequence_id);
+            GPTP_LOG_INFO("loop_test: sequence_id %u\n", syncData.sequence_id);
             GPTP_LOG_INFO("loop_test: pDelay %" PRIu64 "\n", syncData.pDelay);
             GPTP_LOG_INFO("loop_test: portNumber %d\n", syncData.portNumber);
             GPTP_LOG_INFO("loop_test: clockIdentity " CLK_STR "\n",
@@ -301,7 +301,7 @@ void loop_test(int p_loop_cnt)
 
         if (getgPTPStatus(&status)) {
             GPTP_LOG_INFO("loop_test: *********************** Status Data ************************\n");
-            GPTP_LOG_INFO("loop_test: gptp_status %d\n", status.gptp_status);
+            GPTP_LOG_INFO("loop_test: gptp_status %" PRIu64 "\n", status.gptp_status);
             GPTP_LOG_INFO("loop_test: rate_deviation %f\n", status.rate_deviation);
             GPTP_LOG_INFO("loop_test: IsMaster %d\n", status.IsMaster);
             GPTP_LOG_INFO("loop_test: offset %" PRId64 "\n", status.offset);
@@ -326,7 +326,7 @@ void loop_test(int p_loop_cnt)
                           delayData.reference_local_timestamp);
             GPTP_LOG_INFO("loop_test: reference_global_timestamp %" PRIu64 "\n",
                           delayData.reference_global_timestamp);
-            GPTP_LOG_INFO("loop_test: sequence_id %" PRIu64 "\n", delayData.sequence_id);
+            GPTP_LOG_INFO("loop_test: sequence_id %u\n", delayData.sequence_id);
             GPTP_LOG_INFO("loop_test: pDelay %" PRIu64 "\n", delayData.pDelay);
             GPTP_LOG_INFO("loop_test: req_portNumber %d\n", delayData.req_portNumber);
             GPTP_LOG_INFO("loop_test: req_clockIdentity " CLK_STR "\n",
@@ -678,8 +678,7 @@ int main(int argc, char *argv[])
     test_vec_time = systemTime(CLOCK_REALTIME);
 
     if (gptpGetPtpTimefromSystime(&test_gptp_time, test_vec_time)) {
-        GPTP_LOG_INFO("real_time %5" PRIu64 ".%09" PRIu64 "   gptp_time %5" PRIu64
-                      ".%09" PRIu64 "\n",
+         GPTP_LOG_INFO("real_time %5llu.%09llu   gptp_time %5llu.%09llu\n",
                       test_vec_time / 1000000000ULL, test_vec_time % 1000000000ULL,
                       test_gptp_time / 1000000000ULL, test_gptp_time % 1000000000ULL);
     } else {
@@ -689,8 +688,7 @@ int main(int argc, char *argv[])
     test_vec_time = getQtimerTime();
 
     if (gptpGetPtpTimeFromQTimeNs(&test_gptp_time, test_vec_time)) {
-        GPTP_LOG_INFO("qtimer_time    %5" PRIu64 ".%09" PRIu64 "   gptp_time %5" PRIu64
-                      ".%09" PRIu64 "\n",
+         GPTP_LOG_INFO("qtimer_time %5llu.%09llu   gptp_time %5llu.%09llu\n",
                       test_vec_time / 1000000000ULL, test_vec_time % 1000000000ULL,
                       test_gptp_time / 1000000000ULL, test_gptp_time % 1000000000ULL);
     } else {
@@ -700,8 +698,7 @@ int main(int argc, char *argv[])
     test_vec_time = getQtimerTicks();
 
     if (gptpGetPtpTimeFromQTimeTickCount(&test_gptp_time, test_vec_time)) {
-        GPTP_LOG_INFO("qtimer_ticks   %15" PRIu64 "   gptp_time %5" PRIu64 ".%09" PRIu64
-                      "\n",
+        GPTP_LOG_INFO("qtimer_ticks   %15" PRIu64 "   gptp_time %5llu.%09llu\n",
                       test_vec_time,
                       test_gptp_time / 1000000000ULL, test_gptp_time % 1000000000ULL);
     } else {
@@ -711,8 +708,7 @@ int main(int argc, char *argv[])
     test_vec_time = systemTime(CLOCK_MONOTONIC);
 
     if (gptpGetPtpTimeFromMonoTime(&test_gptp_time, test_vec_time)) {
-        GPTP_LOG_INFO("mono_time      %5" PRIu64 ".%09" PRIu64 "   gptp_time %5" PRIu64
-                      ".%09" PRIu64 "\n",
+        GPTP_LOG_INFO("mono_time    %5llu.%09llu   gptp_time %5llu.%09llu\n",
                       test_vec_time / 1000000000ULL, test_vec_time % 1000000000ULL,
                       test_gptp_time / 1000000000ULL, test_gptp_time % 1000000000ULL);
     } else {
