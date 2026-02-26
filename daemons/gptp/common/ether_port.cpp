@@ -387,6 +387,7 @@ void EtherPort::sendGeneralPort
 bool EtherPort::_processEvent( Event e )
 {
     bool ret = false;
+    OSThreadExitCode exit_code = osthread_ok;
 
     switch (e) {
         case POWERUP:
@@ -556,6 +557,45 @@ bool EtherPort::_processEvent( Event e )
             break;
 
         case LINKDOWN:
+            linkstatus = false;
+            //delete all timers as in powerdown
+            stopPDelay();
+            clock->deleteEventTimerLocked( this, ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES );
+            clock->deleteEventTimerLocked( this, ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES );
+            clock->deleteEventTimerLocked( this, SYNC_INTERVAL_TIMEOUT_EXPIRES);
+            clock->deleteEventTimerLocked( this, DEFERRED_SYNC_INTERVAL_RATE_CHANGE);
+            clock->deleteEventTimerLocked( this, PDELAY_RESP_RECEIPT_TIMEOUT_EXPIRES);
+            clock->deleteEventTimerLocked( this, SYNC_RATE_INTERVAL_TIMEOUT_EXPIRED);
+            clock->deleteEventTimerLocked( this, RSYNC_INTERVAL_TIMEOUT_EXPIRES );
+            stopSyncReceiptTimer();
+            setEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
+            clock->updateEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
+
+            if (port_pipe_fds[1] != -1) {
+                char data = '1';
+                ssize_t bytes_written = write(port_pipe_fds[1], &data, 1);
+                if (bytes_written != 1) {
+                    GPTP_LOG_ERROR("Failed to write to pipe: %s", strerror(errno));
+                } else {
+                    GPTP_LOG_INFO("Successfully wrote to pipe to interrupt select()");
+                }
+            }
+
+            if (!linkjoin(exit_code)) {
+                GPTP_LOG_ERROR("Failed to openport thread to join %d", exit_code);
+                ret = false;
+                break;
+            }
+            GPTP_LOG_INFO("openport thread to join %d", exit_code);
+            // Release the Pipe
+            if (port_pipe_fds[0] != -1) {
+                close(port_pipe_fds[0]);
+                port_pipe_fds[0] = -1;
+            }
+            if (port_pipe_fds[1] != -1) {
+                close(port_pipe_fds[1]);
+                port_pipe_fds[1] = -1;
+            }
             setStationState(STATION_STATE_RESERVED);
 #ifdef LE_SHARED_MEM
             if ( ipc ) {
@@ -574,18 +614,7 @@ bool EtherPort::_processEvent( Event e )
                 linkDownCount++;
             }
             increment_LinkdownCount();
-            //delete all timers as in powerdown
-            stopPDelay();
-            clock->deleteEventTimerLocked( this, ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES );
-            clock->deleteEventTimerLocked( this, ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES );
-            clock->deleteEventTimerLocked( this, SYNC_INTERVAL_TIMEOUT_EXPIRES);
-            clock->deleteEventTimerLocked( this, DEFERRED_SYNC_INTERVAL_RATE_CHANGE);
-            clock->deleteEventTimerLocked( this, PDELAY_RESP_RECEIPT_TIMEOUT_EXPIRES);
-            clock->deleteEventTimerLocked( this, SYNC_RATE_INTERVAL_TIMEOUT_EXPIRED);
-            clock->deleteEventTimerLocked( this, RSYNC_INTERVAL_TIMEOUT_EXPIRES );
-            stopSyncReceiptTimer();
-            setEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
-            clock->updateEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
+            timestamper_deinit();
             ret = true;
             break;
 
