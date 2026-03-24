@@ -634,6 +634,7 @@ int main(int argc, char **argv)
     portInit.sct_shm_fd = -1;
     portInit.bypass_if_wait = false;
     portInit.wait_for_sync = false;
+    portInit.tsc_enable = false;
     LinuxNetworkInterfaceFactory *default_factory =
         new LinuxNetworkInterfaceFactory;
     OSNetworkInterfaceFactory::registerFactory
@@ -788,8 +789,14 @@ int main(int argc, char **argv)
                     GPTP_LOG_INFO("neighborPropDelayThreshold value:% " PRId64 " ",
                                   portInit.neighborPropDelayThreshold);
                 }
+            } else if (strcmp(argv[i] + 1, "TSC_EN") == 0) {
+#ifndef ANDROID
+                portInit.tsc_enable = true;
+#else
+                portInit.tsc_enable = false;
+                GPTP_LOG_ERROR("TSC disabled on Android, not supported\n");
+#endif
             }
-
 #ifdef RGPTP_ENABLED
             else if (strcmp(argv[i] + 1, "Y") == 0) {
                 rgptp = true;
@@ -940,6 +947,7 @@ int main(int argc, char **argv)
             portInit.isGM = iniParser.getIsGM();
             portInit.syncClocks = iniParser.getSyncClocks();
             portInit.asCapable = iniParser.getAsCapable();
+            portInit.tsc_enable = iniParser.getTscEnable();
             GPTP_LOG_INFO("syncClocks: %d", portInit.syncClocks);
             GPTP_LOG_INFO("automotive profile %s isGM %s\n",
                           ((portInit.automotive_profile) ? "True" : "False"),
@@ -1084,7 +1092,7 @@ int main(int argc, char **argv)
     }
 #endif
     pPort = new EtherPort(&portInit);
-
+    GPTP_LOG_ERROR("pPort TSC enable flag: %d\n", pPort->getTSC());
     if (!pPort->init_port()) {
         GPTP_LOG_ERROR("failed to initialize port");
         GPTP_LOG_UNREGISTER();

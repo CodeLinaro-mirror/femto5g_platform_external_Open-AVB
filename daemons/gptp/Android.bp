@@ -1,0 +1,86 @@
+// ====================================================================================
+// Android.bp and Prebuilt Configuration for gPTP (Generalized Precision Time Protocol)
+// ------------------------------------------------------------------------------------
+
+soong_config_module_type {
+    name: "gptp_cfg_prebuilt",
+    module_type: "prebuilt_etc",
+    config_namespace: "qtigptp",
+    bool_variables: [
+        "gen5gvm",
+        "gen4gvm",
+        "cdccomm",
+    ],
+    properties: ["src"],
+}
+
+gptp_cfg_prebuilt {
+    name: "gptp_cfg",
+    filename: "gptp_cfg.ini",
+    vendor: true,
+    installable: true,
+
+    src: "etc/gptp_cfg_au.ini",
+
+    soong_config_variables: {
+        gen5gvm: {
+            src: "etc/gptp_cfg_au_nord.ini",
+        },
+        gen4gvm: {
+            src: "etc/gptp_cfg.ini",
+        },
+        cdccomm: {
+            src: "etc/gptp_cfg_au.ini",
+        },
+    },
+}
+
+cc_binary {
+    name: "qgptp",
+
+    cflags: [
+        "-DWITHOUT_IFADDRS",
+        "-Wno-unused-parameter",
+        "-Wno-unused-private-field",
+        "-DPTP_SW_QTIMER=1",
+        "-DSYSTEMD",
+    ],
+
+    local_include_dirs: ["inc"],
+
+    shared_libs: [
+        "liblog",
+        "libutils",
+        "libcutils",
+    ],
+
+    srcs: [
+        "src/daemon_cl.cpp",
+        "src/ptp_message.cpp",
+        "src/avbts_osnet.cpp",
+        "src/ap_message.cpp",
+        "src/common_port.cpp",
+        "src/ether_port.cpp",
+        "src/ieee1588clock.cpp",
+        "src/gptp_cfg.cpp",
+        "src/gptp_log.cpp",
+        "src/ini.c",
+        "src/linux_hal_common.cpp",
+        "src/linux_hal_persist_file.cpp",
+        "src/platform.cpp",
+        "src/linux_hal_generic.cpp",
+        "src/linux_hal_generic_adj.cpp",
+        "src/qgptp_rmgr.cpp",
+    ],
+
+    init_rc: [
+        "etc/gptp_daemon.rc",
+    ],
+
+    rtti: true,
+    vendor: true,
+
+    required: [
+        "gptp_cfg",
+    ],
+}
