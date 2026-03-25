@@ -29,9 +29,8 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ============================================================================ */
 
 /* ============================================================================
-Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-
-Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+Changes from Qualcomm Technologies, Inc. are provided under the following license:
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 SPDX-License-Identifier: BSD-3-Clause-Clear
 ============================================================================ */
 
@@ -39,6 +38,7 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <inttypes.h>
 #include <fcntl.h>
 #include <math.h>
+#include <ctype.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -126,18 +126,26 @@ void system_log(int loglevel, const char *s, ...)
 
 static bool gptp_scaling_available = false;
 
+/**
+ * systemTime: Returns the current time in nanoseconds using the specified clock source.
+ * Supported clock sources: CLOCK_REALTIME, CLOCK_MONOTONIC. Refs: kernel/kernel_platform/kernel/include/uapi/linux/time.h#50
+ * Converts seconds and nanoseconds from clock_gettime() into a single uint64_t value.
+ */
 uint64_t systemTime(int clock)
 {
-    uint64_t ret;
+    uint64_t ret;  // Variable to store the final time in nanoseconds
+    // Array of supported clock sources: real-time, and monotonic
     static const clockid_t clocks[] = {
         CLOCK_REALTIME,
         CLOCK_MONOTONIC,
     };
-    struct timespec t;
-    t.tv_sec = t.tv_nsec = 0;
+    struct timespec t;  // Structure to hold seconds and nanoseconds
+    t.tv_sec = t.tv_nsec = 0;  // Initialize both fields to zero
+    // Get current time from the selected clock source
     clock_gettime(clocks[clock], &t);
-    ret = (t.tv_sec) * 1000000000LL + t.tv_nsec;
-    return ret;
+    // Convert seconds to nanoseconds and add nanoseconds part
+    ret = (uint64_t)t.tv_sec * 1000000000ULL + t.tv_nsec;
+    return ret;  // Return the computed time in nanoseconds
 }
 
 uint64_t getQtimerTime()
@@ -211,7 +219,7 @@ void do_some_tests_sys(int p_loop_cnt)
     int64_t delta_gptp_time;
     bool isSync = false;
     prev_vec_time = test_vec_time = systemTime(CLOCK_REALTIME);
-    gptpGetPtpTimefromSystime(&prev_gptp_time, prev_vec_time);
+    gptpGetPtpTimefromSystime_s(&prev_gptp_time, prev_vec_time, &isSync);
 
     for (i = 0; i < p_loop_cnt; i++) {
         if (gptpGetPtpTimefromSystime_s(&test_gptp_time, test_vec_time, &isSync)) {
@@ -226,12 +234,12 @@ void do_some_tests_sys(int p_loop_cnt)
             nanosleep(&ts, NULL);
             test_vec_time += 1000000UL;
         } else {
-            GPTP_LOG_ERROR("Qtimer time test failed\n");
+            GPTP_LOG_ERROR("Sys time test failed\n");
         }
     }
 }
 
-void loop_test(int time_us)
+void loop_test(int p_loop_cnt)
 {
     uint64_t ptp_time;
     syncMesaurementData_t syncData;
@@ -249,7 +257,7 @@ void loop_test(int time_us)
     prev_qtimer_time = getQtimerTime();
     gptpGetCurPtpTime(&prev_ptp_time);
 
-    for (int i = 0; i < 100000; i++) {
+    for (int i = 0; i < p_loop_cnt; i++) {
         qtimer_time = getQtimerTime();
 
         if (gptpGetCurPtpTime_s(&ptp_time, &isSync)) {
@@ -340,7 +348,9 @@ void loop_test(int time_us)
             GPTP_LOG_ERROR("Failed to get time error\n");
         }
 
-        usleep(time_us);
+        // Suspends the execution of the calling thread for a specified number of microseconds.
+        // 1 second = 1,000,000 microseconds, so usleep(1000000) pauses the program for 1 second.
+        usleep(1000000);
     }
 }
 
@@ -370,11 +380,13 @@ void do_some_tests_gptp_mono(int p_loop_cnt)
     uint64_t ptp_time = 0;
     uint64_t mono_time = 0;
     bool isSync = false;
-    GPTP_LOG_INFO("do_some_tests_gptp_mono:\n");
 
+    // Loop for the specified number of iterations
     for (i = 0; i < p_loop_cnt; i++) {
+        // Retrieve the current gPTP and monotonic time pair along with sync status
         if (gptpGetCurgPtpMonotonicPair_s(&ptp_time, &mono_time, &isSync)) {
-            GPTP_LOG_INFO("ns ptp_time %" PRIu64 "ns mono_time %" PRIu64 " isSync %d\n",
+            // Log the retrieved times and synchronization status
+            GPTP_LOG_INFO("ns ptp_time %" PRIu64 "  ns mono_time %" PRIu64 " isSync %d\n",
                           ptp_time,
                           mono_time, isSync);
         }
@@ -413,13 +425,87 @@ static void getVirtDevice(char* device_path)
     snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s", PTP_DEFAULT_DEVICE);
     closedir(dp);
 }
+
 #endif
 
-void get_gptp_time()
+#define TSC_DEVICE_PATH_LEN 256
+#define TSC_DEFAULT_DEVICE "/dev/ptp0"
+
+/* Trim in-place trailing and leading whitespace/newlines */
+static void trim(char *s) {
+    char *end, *start = s;
+    while (*start && isspace((unsigned char)*start)) start++;
+    if (start != s) memmove(s, start, strlen(start) + 1);
+    end = s + strlen(s);
+    while (end > s && isspace((unsigned char)*(end - 1))) end--;
+    *end = '\0';
+}
+
+/* Safe file read: read first line (or whole small file) into buf */
+static int read_file_line(const char *path, char *buf, size_t buflen) {
+    FILE *f = fopen(path, "r");
+    if (!f) return -1;
+    if (!fgets(buf, (int)buflen, f)) {
+        fclose(f);
+        return -1;
+    }
+    fclose(f);
+    return 0;
+}
+
+static int getTscDevice(char* device_path)
+{
+    const char *path = "/sys/class/ptp/";
+    const char *prefix = "QCOM TSC";
+    int prefix_len = strlen(prefix);
+    struct dirent *entry;
+    char namebuf[128];
+
+    if (device_path == NULL) {
+        GPTP_LOG_ERROR("device path is NULL\n");
+        return -1;
+    }
+    DIR *dp = opendir(path);
+    if (dp == NULL) {
+        GPTP_LOG_ERROR("Failed to open /sys/devices/virtual/ptp/ so use default device\n");
+        snprintf(device_path, TSC_DEVICE_PATH_LEN, "%s", TSC_DEFAULT_DEVICE);
+        return -1;
+    }
+
+    while ((entry = readdir(dp))) {
+        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            if (strncmp(entry->d_name, "ptp", 3) != 0) continue; // if not ptp device, skip it
+            char clk_path[TSC_DEVICE_PATH_LEN]  = {0};
+            int n = snprintf(clk_path, strlen(path)+strlen(entry->d_name)+strlen("///clock_name")+1, "%s%s/clock_name", path, entry->d_name);
+            if (n <= 0 || (size_t)n >= sizeof(clk_path)) {
+                // Path too long or snprintf error; skip safely
+                continue;
+            }
+            if (read_file_line(clk_path, namebuf, sizeof(namebuf)) == 0) {
+                trim(namebuf);
+                GPTP_LOG_INFO("clock name in %s and clk path %s, with prefix %s \n", namebuf, clk_path,prefix);
+                if (strncmp(namebuf, prefix,prefix_len) == 0) {
+                    // If reading clock_name fails, just skip that entry
+                    snprintf(device_path, TSC_DEVICE_PATH_LEN, "%s%s", "/dev/", entry->d_name);
+                    GPTP_LOG_INFO("opening clock device: %s\n", device_path);
+                    closedir(dp);
+                    return 0;
+                }
+            }
+        }
+    }
+
+    GPTP_LOG_ERROR("No device found in %s, using default device\n", path);
+    snprintf(device_path, TSC_DEVICE_PATH_LEN, "%s", TSC_DEFAULT_DEVICE);
+    closedir(dp);
+    return -1;
+}
+
+void get_gptp_time(int p_loop_cnt)
 {
     struct timespec ts;
     static clockid_t gPtpClockid = -1;
-    uint64_t curr_gptp_time;
+    uint64_t curr_gptp_time = 0;
 #ifdef AVB_FEATURE_GVM_MODE
     char ptp_device[PTP_DEVICE_PATH_LEN] = {0};
     getVirtDevice(ptp_device);
@@ -447,9 +533,76 @@ void get_gptp_time()
     curr_gptp_time = (ts.tv_sec) * 1000000000LL + ts.tv_nsec;
     GPTP_LOG_INFO("current gptp time = %" PRIu64 "\n", curr_gptp_time);
     close(gptp_phc_fd);
+#else
+    // Get the GPTP Time in Non-GVM mode
+    for (int i = 0; i < p_loop_cnt; i++) {
+        gptpTimeInfo_t ptp_data;
+
+        // Retrieve GPTP status and current PTP time
+        if (gptpGetStatusAndCurPtpTime(&ptp_data)) {
+            if (ptp_data.status) {
+                // Log GPTP status, port state, and time (seconds.nanoseconds)
+                GPTP_LOG_INFO("gptp status %d port state %d gptp time %u.%u\n",
+                              ptp_data.status,
+                              ptp_data.port_state,
+                              ptp_data.tv_sec,
+                              ptp_data.tv_nsec);
+            } else {
+                // Log GPTP status and port status only
+                GPTP_LOG_INFO("gptp status %d port state %d\n",
+                              ptp_data.status,
+                              ptp_data.port_state);
+            }
+        } else {
+            // Log error if GPTP time retrieval fails
+            GPTP_LOG_ERROR("GPTP time test failed\n");
+        }
+    }
 #endif
     return;
 }
+
+void get_gptp_tsc_time(int p_loop_cnt)
+{
+    struct timespec ts;
+    static clockid_t gTscClockid = -1;
+    uint64_t curr_gptp_time;
+
+    char ptp_device[TSC_DEVICE_PATH_LEN] = {0};
+    int ret = getTscDevice(ptp_device);
+    if (ret == -1) {
+        GPTP_LOG_ERROR("Failed to get TSC device path\n");
+        return;
+    }
+    int gptp_phc_fd = open(ptp_device, O_RDWR );
+
+    if ( gptp_phc_fd == -1 ||
+            (gTscClockid = FD_TO_CLOCKID(gptp_phc_fd)) == -1 ) {
+        GPTP_LOG_ERROR("Failed to open TSC clock device error 0x%x(%s)\n", errno,
+                       strerror(errno));
+        return;
+    }
+    for (int i = 0; i < p_loop_cnt; i++) {
+        if (clock_gettime(gTscClockid, &ts)) {
+            GPTP_LOG_ERROR("clock_gettime failed 0x%x (%s)\n", errno, strerror(errno));
+            close(gptp_phc_fd);
+            return;
+        }
+
+        if (ts.tv_sec == 0 && ts.tv_nsec == 0) {
+            GPTP_LOG_WARNING("TSC time read taking longer time\n");
+            close(gptp_phc_fd);
+            return;
+        }
+
+        curr_gptp_time = (ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+        //GPTP_LOG_INFO("current TSC time = %" PRIu64 "\n", curr_gptp_time);
+        GPTP_LOG_INFO("current TSC time = %ld.%ld\n", ts.tv_sec, ts.tv_nsec);
+    }
+    close(gptp_phc_fd);
+    return;
+}
+
 void do_some_tests_gptp_boot(int p_loop_cnt)
 {
     int i = 0;
@@ -602,8 +755,8 @@ void signal_handler(int signum) {
 
 int main(int argc, char *argv[])
 {
-    uint64_t test_vec_time;
-    uint64_t test_gptp_time;
+    uint64_t test_vec_time = 0;
+    uint64_t test_gptp_time = 0;
     gptpTimeInfo_t ptp_data;
     int retry = 0;
     RsyncStatus_t Rsync;
@@ -616,6 +769,7 @@ int main(int argc, char *argv[])
         if (retry == 0) {
             GPTP_LOG_ERROR("GPTP Init Failed, retrying..\n");
         }
+
         usleep(5000);
         retry++;
     }
@@ -629,25 +783,25 @@ int main(int argc, char *argv[])
 
     if (gptpGetStatusAndCurPtpTime(&ptp_data)) {
         if (ptp_data.status) {
-            GPTP_LOG_INFO("gptp status %d port status %d gptp time %u.%u\n",
-                          ptp_data.status, ptp_data.port_status, ptp_data.tv_sec, ptp_data.tv_nsec);
+            GPTP_LOG_INFO("gptp status %d port state %d gptp time %u.%u\n",
+                          ptp_data.status, ptp_data.port_state, ptp_data.tv_sec, ptp_data.tv_nsec);
         } else {
-            GPTP_LOG_INFO("gptp status %d port status %d\n", ptp_data.status,
-                          ptp_data.port_status);
+            GPTP_LOG_INFO("gptp status %d port state %d\n", ptp_data.status,
+                          ptp_data.port_state);
         }
     } else {
         GPTP_LOG_ERROR("GPTP time test failed\n");
     }
+	GPTP_LOG_INFO("---------------------------------------------------------\n");
 
 #ifndef LE_GVM
 #ifndef AVB_FEATURE_GVM_MODE
     test_vec_time = systemTime(CLOCK_REALTIME);
 
     if (gptpGetPtpTimefromSystime(&test_gptp_time, test_vec_time)) {
-        GPTP_LOG_INFO("real_time %" PRIu64 ".%" PRIu64 "  gptp_time %" PRIu64 ".%"
-                      PRIu64 "\n",
-                      test_vec_time / 1000000000UL, test_vec_time % 1000000000UL,
-                      test_gptp_time / 1000000000UL, test_gptp_time % 1000000000UL);
+         GPTP_LOG_INFO("real_time %5llu.%09llu   gptp_time %5llu.%09llu\n",
+                      test_vec_time / 1000000000ULL, test_vec_time % 1000000000ULL,
+                      test_gptp_time / 1000000000ULL, test_gptp_time % 1000000000ULL);
     } else {
         GPTP_LOG_ERROR("Real time test failed\n");
     }
@@ -655,11 +809,9 @@ int main(int argc, char *argv[])
     test_vec_time = getQtimerTime();
 
     if (gptpGetPtpTimeFromQTimeNs(&test_gptp_time, test_vec_time)) {
-        GPTP_LOG_INFO("qtimer_time %" PRIu64 ".%" PRIu64 "  gptp_time %" PRIu64 ".%"
-                      PRIu64
-                      "\n",
-                      test_vec_time / 1000000000UL, test_vec_time % 1000000000UL,
-                      test_gptp_time / 1000000000UL, test_gptp_time % 1000000000UL);
+         GPTP_LOG_INFO("qtimer_time %5llu.%09llu   gptp_time %5llu.%09llu\n",
+                      test_vec_time / 1000000000ULL, test_vec_time % 1000000000ULL,
+                      test_gptp_time / 1000000000ULL, test_gptp_time % 1000000000ULL);
     } else {
         GPTP_LOG_ERROR("Qtimer time test failed\n");
     }
@@ -667,8 +819,9 @@ int main(int argc, char *argv[])
     test_vec_time = getQtimerTicks();
 
     if (gptpGetPtpTimeFromQTimeTickCount(&test_gptp_time, test_vec_time)) {
-        GPTP_LOG_INFO("qtimer ticks %" PRIu64 "  gptp_time %" PRIu64 ".%" PRIu64"\n",
-                      test_vec_time,  test_gptp_time / 1000000000UL, test_gptp_time % 1000000000UL);
+        GPTP_LOG_INFO("qtimer_ticks   %15" PRIu64 "   gptp_time %5llu.%09llu\n",
+                      test_vec_time,
+                      test_gptp_time / 1000000000ULL, test_gptp_time % 1000000000ULL);
     } else {
         GPTP_LOG_ERROR("Qtimer time tick test failed\n");
     }
@@ -676,48 +829,59 @@ int main(int argc, char *argv[])
     test_vec_time = systemTime(CLOCK_MONOTONIC);
 
     if (gptpGetPtpTimeFromMonoTime(&test_gptp_time, test_vec_time)) {
-        GPTP_LOG_INFO("mono_time %" PRIu64 ".%" PRIu64 "  gptp_time %" PRIu64 ".%"
-                      PRIu64 "\n",
-                      test_vec_time / 1000000000UL, test_vec_time % 1000000000UL,
-                      test_gptp_time / 1000000000UL, test_gptp_time % 1000000000UL);
+        GPTP_LOG_INFO("mono_time    %5llu.%09llu   gptp_time %5llu.%09llu\n",
+                      test_vec_time / 1000000000ULL, test_vec_time % 1000000000ULL,
+                      test_gptp_time / 1000000000ULL, test_gptp_time % 1000000000ULL);
     } else {
         GPTP_LOG_ERROR("Monotonic time test failed\n");
+    }
+
+    if (gptpGetCurPtpTime(&test_gptp_time)) {
+        GPTP_LOG_INFO("current                          gptp_time %5" PRIu64 ".%09"
+                      PRIu64 "\n",
+                      test_gptp_time / 1000000000UL, test_gptp_time % 1000000000UL);
+    } else {
+        GPTP_LOG_ERROR("GPTP time test failed\n");
     }
 
 #endif // END AVB_FEATURE_GVM_MODE
 #endif // END LE_GVM
 #ifndef LE_GVM
     int l_cnt = LOOP_CNT;
-    if (argc == 3)
-    {
+
+    if (argc == 3) {
         l_cnt = atoi(argv[2]);
     }
 
     if (argc == 2 || argc == 3 || argc == 5) {
         if (argv[1][0] == 'q') {
-            GPTP_LOG_INFO("\n\n\n====================QTIMER based test=====================\n\n\n");
+            GPTP_LOG_INFO("====================QTIMER based test====================\n");
             do_some_tests_qtimer(l_cnt);
         } else if (argv[1][0] == 's') {
-            GPTP_LOG_INFO("\n\n\n====================SYSTEM based test=====================\n\n\n");
+            GPTP_LOG_INFO("====================SYSTEM based test====================\n");
             do_some_tests_sys(l_cnt);
         } else if (argv[1][0] == 'p') {
-            GPTP_LOG_INFO("\n\n\n====================PTP based test=====================\n\n\n");
+            GPTP_LOG_INFO("======================PTP based test=====================\n");
             do_some_tests_ptp(l_cnt);
         } else if (argv[1][0] == 'm') {
-            GPTP_LOG_INFO("\n\n\n====================gPTP Monotonic pair based test=====================\n\n\n");
+            GPTP_LOG_INFO("================gPTP Monotonic pair based test================\n");
             do_some_tests_gptp_mono(l_cnt);
         } else if (argv[1][0] == 'l') {
-            GPTP_LOG_INFO("\n\n\n====================gPTP loop test=====================\n\n\n");
-            loop_test(1000000);
+            GPTP_LOG_INFO("======================gPTP loop test=====================\n");
+            loop_test(l_cnt);
         } else if (argv[1][0] == 'g') {
             GPTP_LOG_INFO("\n\n=======================clock_gettime based test=========================\n\n");
-            get_gptp_time();
+            get_gptp_time(l_cnt);
+        } else if (argv[1][0] == 't') {
+            GPTP_LOG_INFO("\n\n=======================clock_gettime TSC based test=========================\n\n");
+            get_gptp_tsc_time(l_cnt);
         } else if (argv[1][0] == 'b') {
             GPTP_LOG_INFO("\n\n\n====================gPTP time boot time test=====================\n\n\n");
             do_some_tests_gptp_boot(l_cnt);
         } else if ((argc >= 3) && (argv[1][0] == 'R')) {
-            GPTP_LOG_INFO("\n\n\n====================gPTP Reverse sync test=====================\n\n\n");
+            GPTP_LOG_INFO("===============gPTP Reverse sync test===============\n");
             Rsync.reverseSyncEnabled = atoi(argv[2]);
+
             if (Rsync.reverseSyncEnabled && argc == 5) {
                 Rsync.reverseSyncDomain = atoi(argv[3]);
                 Rsync.reverseSyncRate = atof(argv[4]);
