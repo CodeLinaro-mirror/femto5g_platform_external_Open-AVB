@@ -225,7 +225,13 @@ int gptp_sys_suspend(void *data, enum PM_MODE mode)
     GPTP_LOG_INFO("Handling LPM(mode: %d) enter notification", mode);
     GPTP_LOG_INFO("stoping gptp daemon....");
     pPort->gPTP_lpm = true;
-    err = pPort->processEvent(LINKDOWN);
+    /** Stop the port and send link down event to gptp state machine in case of Suspend to RAM Only
+     * as it is taken care by thread watchNetLink() function in case of Suspend to Disk/Deep sleep Quick Boot **/
+    if(mode == PM_MODE_S2R) {
+        err = pPort->processEvent(LINKDOWN);
+    } else  {
+        err = true;
+    }
 
     if (err == false) {
         GPTP_LOG_ERROR("failed to ds_suspend, roll back and NACK");
@@ -240,7 +246,11 @@ int gptp_sys_resume(void *data, enum PM_MODE mode)
     GPTP_LOG_INFO("Handling LPM(mode: %d) exit notification", mode);
     GPTP_LOG_INFO("starting gptp daemon....");
     pPort->gPTP_lpm = false;
-    pPort->processEvent(LINKUP);
+    /** process LINKUP event to restart gptp state machine in case of Suspend to RAM Only
+     * as it is taken care by thread watchNetLink() function in case of Suspend to Disk/Deep sleep Quick Boot **/
+    if(mode == PM_MODE_S2R) {
+        pPort->processEvent(LINKUP);
+    }
     return 0;
 }
 
