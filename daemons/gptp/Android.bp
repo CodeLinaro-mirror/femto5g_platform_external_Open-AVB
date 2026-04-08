@@ -24,6 +24,7 @@ qgptp_cc_binary {
         "-Wno-unused-private-field",
         "-DPTP_SW_QTIMER=1",
         "-DSYSTEMD",
+        "-DGPTP_CAR_POWER_POLICY",
     ],
 
     local_include_dirs: ["inc"],
