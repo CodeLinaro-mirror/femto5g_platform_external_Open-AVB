@@ -248,6 +248,7 @@ static clockid_t rgptp_clkid = -1;
 #endif
 
 static pthread_t thread_id;
+static bool thread_running = false;
 static int sock = -1;
 
 #ifdef LE_GVM
@@ -999,6 +1000,9 @@ static int gptpDaemonClientInit(void)
         return false;
     }
 
+    /* Mark the thread as live; gptpDaemonClientDeInit must join it exactly once. */
+    thread_running = true;
+
     ret = pthread_setname_np(thread_id, "gptpDaemonSrv");
 
     if (ret != 0) {
@@ -1014,25 +1018,31 @@ static void gptpDaemonClientDeInit(void)
 #ifndef AVB_FEATURE_GVM_MODE
     char data = '1';
     int ret = 0;
+
+    if (!bServiceConnect) {
+        goto cleanup_pipes;
+    }
+
     bServiceConnect = false;
 
     if (pipefd[1] != -1) {
         write(pipefd[1], &data, 1);
     }
 
-    ret = pthread_join(thread_id, NULL);
-
-    if (ret != 0) {
-        GPTP_LOG_ERROR("gptpDaemonClientDeInit: failed -->%s\n", strerror(errno));
+    if (thread_running) {
+        ret = pthread_join(thread_id, NULL);
+        thread_running = false;
+        if (ret != 0) {
+            GPTP_LOG_ERROR("gptpDaemonClientDeInit: failed -->%s\n", strerror(errno));
+        }
     }
 
     if (sock > 0) {
         close(sock);
         sock = -1;
     }
-
+cleanup_pipes:
 #endif
-
     // Release the Pipe
     if (pipefd[0] != -1) {
         close(pipefd[0]);
@@ -1899,6 +1909,11 @@ bool gptpDeinit(void)
 
 #else
     LOCK();
+    if (!bInitialized && !bServiceConnect) {
+        UNLOCK();
+        GPTP_LOG_WARNING("gptpDeinit: already deinitialized or never initialized, ignoring\n");
+        return false;
+    }
     gptpMemDeinit(gPtpShmFd, &gPtpMmap);
     gptpClkDeInit(gptpPhcFd);
     bInitialized = false;

@@ -384,6 +384,10 @@ bool LinuxTimestamperGeneric::HWTimestamper_init
     struct ptp_clock_caps ptp_capability;
 #endif
     _private = new LinuxTimestamperGenericPrivate;
+    if (_private == NULL) {
+        GPTP_LOG_ERROR("Failed to allocate LinuxTimestamperGenericPrivate");
+        return false;
+    }
     pthread_mutex_init( &_private->cross_stamp_lock, NULL );
     // Determine the correct PTP clock interface
     //phc_index = findPhcIndex( iface_label );
