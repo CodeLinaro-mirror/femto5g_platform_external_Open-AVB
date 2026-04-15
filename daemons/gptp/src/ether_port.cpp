@@ -649,6 +649,12 @@ bool EtherPort::_processEvent( Event e )
             this->timestamper_reset();
             setEtherLinkState(ETHER_PORT_STATE_LINK_UP);
             clock->updateEtherLinkState(ETHER_PORT_STATE_LINK_UP);
+            if (sct_buffer) {
+                pthread_mutex_lock((pthread_mutex_t *) &sct_buffer->lock);
+                sct_buffer->status.d_status = DEAMON_UP;
+                pthread_mutex_unlock((pthread_mutex_t *) &sct_buffer->lock);
+                GPTP_LOG_STATUS("sct_buffer d_status set on LINKUP");
+            }
             ret = true;
             break;
 
@@ -701,6 +707,12 @@ bool EtherPort::_processEvent( Event e )
                 port_pipe_fds[1] = -1;
             }
             setStationState(STATION_STATE_RESERVED);
+            if (sct_buffer) {
+                pthread_mutex_lock((pthread_mutex_t *) &sct_buffer->lock);
+                sct_buffer->status.d_status = 0;
+                pthread_mutex_unlock((pthread_mutex_t *) &sct_buffer->lock);
+                GPTP_LOG_STATUS("sct_buffer d_status cleared on LINKDOWN");
+            }
             if ( ipc ) {
                 ipc->ipc_down();
                 GPTP_LOG_ERROR("ipc DOWN");
@@ -1060,7 +1072,7 @@ void EtherPort::becomeMaster( bool annc )
     if (sct_buffer) {
         pthread_mutex_lock((pthread_mutex_t *) &sct_buffer->lock);
         sct_buffer->status.gptp_status = GPTP_STATUS_TIMEOUT;
-        sct_buffer->status.d_status = 0xabcdef;
+        sct_buffer->status.d_status = DEAMON_UP;
         sct_buffer->status.IsMaster = 1;
         pthread_mutex_unlock((pthread_mutex_t *) &sct_buffer->lock);
     }
@@ -1090,7 +1102,7 @@ void EtherPort::becomeSlave( bool restart_syntonization )
     if (sct_buffer) {
         pthread_mutex_lock((pthread_mutex_t *) &sct_buffer->lock);
         sct_buffer->status.gptp_status = GPTP_STATUS_TIMEOUT;
-        sct_buffer->status.d_status = 0xabcdef;
+        sct_buffer->status.d_status = DEAMON_UP;
         sct_buffer->status.IsMaster = 0;
         pthread_mutex_unlock((pthread_mutex_t *) &sct_buffer->lock);
     }
