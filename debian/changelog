@@ -1,0 +1,5 @@
+gptp (1.0.0) unstable; urgency=medium
+
+  * Converted from RPM spec file.
+
+ -- leiwang <leiwan@qti.qualcomm.com>  Wed, 01 Apr 2026 09:27:23 +0000

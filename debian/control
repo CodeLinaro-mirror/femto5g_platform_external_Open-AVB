@@ -1,0 +1,20 @@
+Source: gptp
+Section: devel
+Priority: optional
+Maintainer: leiwang <leiwan@qti.qualcomm.com>
+Build-Depends: libtool, debhelper-compat (= 13), pkg-config, libglib2.0-dev
+Standards-Version: 4.6.0
+Homepage: https://www.codelinaro.org/
+
+Package: gptp
+Architecture: arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Time Sensitive Networking stack Time Sync.
+ Time Sensitive Networking stack Time Sync.
+
+Package: gptp-dev
+Architecture: arm64
+Section: libdevel
+Depends: ${misc:Depends}, gptp(= ${binary:Version})
+Description: Time Sensitive Networking stack Time Sync.
+

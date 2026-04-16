@@ -1,0 +1,7 @@
+usr/bin/qgptp
+usr/bin/libgptp_test
+etc/gptp_cfg.ini
+usr/lib/systemd/system/gptp.service
+usr/lib/systemd/system/sleep-notify@gptp.service.d/gptp.conf
+usr/lib/systemd/system-preset/98-gptp.preset
+usr/lib/libgptp.so
