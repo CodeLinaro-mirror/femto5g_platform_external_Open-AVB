@@ -1422,7 +1422,15 @@ void LinuxSharedMemoryIPC::vfio_ptp(int64_t ml_phoffset,
         uint64_t gptp_time_s_pre = 0;
         a_lock1++;
 
+#ifdef PTP_SW_QTIMER
+#if __aarch64__
+        asm volatile("mrs %0, cntvct_el0" : "=r" (qtimer_tick));
+#else
+        asm volatile("mrrc p15, 1, %Q0, %R0, c14" : "=r" (qtimer_tick));
+#endif
+#else
         qtimer_tick = in64((uintptr_t)qtimer_base_addr);
+#endif
         ptimedata->local_time = local_time;
         /*Now Qtimer run with 19.2MHz clock*/
         uint64_t qtimer_ns = qtimer_tick * (1000000000.0 / 19200000.0);
