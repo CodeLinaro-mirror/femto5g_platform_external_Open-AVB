@@ -551,9 +551,14 @@ bool EtherPort::_processEvent( Event e )
             break;
 
         case LINKUP:
+            if (linkstatus) {
+                GPTP_LOG_WARNING("Already in LINKUP state, ignoring duplicate event.");
+                ret = true;
+                break;
+            }
             if (!OSNetworkInterfaceFactory::buildInterface
-                    ( &net_iface, factory_name_t("default"), net_label,
-                      _hw_timestamper)) {
+                ( &net_iface, factory_name_t("default"), net_label,
+                 _hw_timestamper, getTSC())) {
                 return false;
             }
             timestamper_init();
@@ -647,6 +652,11 @@ bool EtherPort::_processEvent( Event e )
             break;
 
         case LINKDOWN:
+            if (!linkstatus) {
+                GPTP_LOG_WARNING("Already in LINKDOWN state, ignoring duplicate event.");
+                ret = true;
+                break;
+            }
             linkstatus = false;
             //delete all timers as in powerdown
             stopPDelay();

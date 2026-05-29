@@ -57,9 +57,8 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 ============================================================================ */
 
 /* ============================================================================
-Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-
-Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+Changes from Qualcomm Technologies, Inc. are provided under the following license:
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. 
 SPDX-License-Identifier: BSD-3-Clause-Clear
 ============================================================================ */
 #include <linux/ptp_clock.h>
@@ -355,6 +354,10 @@ static int gptpClkInit(int *gptp_phc_fd)
         return false;
     }
 
+#ifndef AVB_FEATURE_GVM_MODE
+    close(*gptp_phc_fd);
+#endif
+
     return true;
 }
 
@@ -471,7 +474,9 @@ static void gptpMemDeinit(int gptp_shm_fd, char **gptp_mmap)
 /* gptp core function to init gptp scaling */
 static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 {
+    LOCK();
     if (NULL == gptp_shm_fd) {
+        UNLOCK();
         return false;
     }
 
@@ -488,6 +493,7 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 
     if (*gptp_shm_fd == -1) {
         perror("shm_open()");
+        UNLOCK();
         return false;
     }
 
@@ -525,13 +531,17 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 #endif
 #endif
         GPTP_LOG_ERROR("gptpMemInit failed %s\n", SHM_NAME);
+        UNLOCK();
         return false;
     }
+    UNLOCK();
 
 #ifndef AVB_FEATURE_GVM_MODE
 
     if (!gptpSCTMemInit()) {
+        LOCK();
         gptpMemDeinit(*gptp_shm_fd, gptp_mmap);
+        UNLOCK();
         return false;
     }
 
@@ -806,12 +816,16 @@ static bool gptpTimeInit(void)
     }
 
     if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
+        LOCK();
         gptpMemDeinit(gPtpShmFd, &gPtpMmap);
+        UNLOCK();
         return false;
     }
 
     if (!gptpClkInit(&gptpPhcFd)) {
+        LOCK();
         gptpMemDeinit(gPtpShmFd, &gPtpMmap);
+        UNLOCK();
         return false;
     }
 
