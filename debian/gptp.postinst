@@ -1,0 +1,14 @@
+#!/bin/sh
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# # All rights reserved.
+# # Confidential and Proprietary - Qualcomm Technologies, Inc.
+set -e
+
+case "$1" in
+  configure)
+    if command -v systemctl >/dev/null 2>&1; then 
+      systemctl enable gptp.service || true
+      systemctl enable sleep-notify@gptp.service || true
+    fi
+    ;;
+esac
