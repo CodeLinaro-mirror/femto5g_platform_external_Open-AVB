@@ -1895,27 +1895,28 @@ bool gptpGetCurgPtpMonotonicPair_s(uint64_t *gptp_time_cur,
     seq1 = (std::atomic<uint32_t> *)(gPtpMmap + sizeof(std::atomic<uint32_t>));
 
     do {
+        count++;
+
         a = seq0->load();
         b = seq1->load();
 
         if (clock_gettime(gPtpClockid, &ts)) {
             GPTP_LOG_ERROR("clock_gettime failed 0x%x (%s)\n", errno, strerror(errno));
-            return false;
+            continue;
         }
 
         if (ts.tv_sec == 0 && ts.tv_nsec == 0) {
             GPTP_LOG_WARNING("gptp time read taking longer time\n");
-            return false;
+            continue;
         }
 
         gptp_mem = (uint64_t *) (gPtpMmap + 0x1000 - 3 * sizeof(uint64_t));
         mono_mem = (uint64_t *) (gPtpMmap + 0x1000 - 4 * sizeof(uint64_t));
         *gptp_time_cur = *gptp_mem;
         *mono_time_cur = *mono_mem;
-        count++;
     } while ((a != b || a != seq0->load() || b != seq1->load()) && count < 3);
 
-    if (count >= 3) {
+    if ((count >= 3) || (ts.tv_sec == 0 && ts.tv_nsec == 0)) {
         return false;
     }
 
