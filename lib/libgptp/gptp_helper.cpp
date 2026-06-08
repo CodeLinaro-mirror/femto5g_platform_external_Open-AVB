@@ -357,11 +357,6 @@ static int gptpClkInit(int *gptp_phc_fd)
         GPTP_LOG_LIMIT_ERROR(ERROR_LOG, "Failed to open PTP clock device\n");
         return false;
     }
-
-#ifndef AVB_FEATURE_GVM_MODE
-    close(*gptp_phc_fd);
-#endif
-
     return true;
 }
 
