@@ -9,14 +9,14 @@ override_dh_auto_build:
 override_dh_auto_install:
 	dh_auto_install --destdir=$(CURDIR)/debian/tmp
 	install -d $(CURDIR)/debian/tmp/usr/bin
-	install -m 0755 daemons/gptp/linux/build/obj/qgptp $(CURDIR)/debian/tmp/usr/bin/qgptp
+	install -m 0755 daemons/gptp/obj/qgptp $(CURDIR)/debian/tmp/usr/bin/qgptp
 	install -m 0755 examples/libgptp_test/libgptp_test $(CURDIR)/debian/tmp/usr/bin/libgptp_test
 	install -d $(CURDIR)/debian/tmp/usr/lib
 	install -m 0755 lib/libgptp/libgptp.so $(CURDIR)/debian/tmp/usr/lib/libgptp.so
 	install -d $(CURDIR)/debian/tmp/usr/include
 	install -m 0644 lib/libgptp/gptp_helper.h $(CURDIR)/debian/tmp/usr/include/gptp_helper.h
 	install -d $(CURDIR)/debian/tmp/etc
-	install -m 0644 daemons/gptp/gptp_cfg.ini $(CURDIR)/debian/tmp/etc/gptp_cfg.ini
+	install -m 0644 daemons/gptp/etc/gptp_cfg.ini $(CURDIR)/debian/tmp/etc/gptp_cfg.ini
 	install -d $(CURDIR)/debian/tmp/usr/lib/systemd/system
 	install -m 0644 gptp.service $(CURDIR)/debian/tmp/usr/lib/systemd/system/gptp.service
 	install -d $(CURDIR)/debian/tmp/usr/lib/systemd/system/sleep-notify@gptp.service.d
