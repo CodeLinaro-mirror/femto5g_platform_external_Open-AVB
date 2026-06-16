@@ -57,6 +57,13 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #define FIVE_MSEC_IN_NSEC           (5000000)
 #define FIFTY_MSEC_IN_NSEC          (50000000)
 
+extern ValueAverage_int64 local_system_offset_avg;
+extern ValueAverage_FR local_system_freq_offset_avg;
+extern ValueAverage_int64 local_q_offset_avg;
+extern ValueAverage_FR local_q_freq_offset_avg;
+extern ValueAverage_int64 local_boot_offset_avg;
+extern ValueAverage_FR local_boot_freq_offset_avg;
+
 extern char ifname_eth[IFNAME_SIZE];
 int32_t g_proxy_mode = 0;
 int32_t gm_sync_count = 0;
@@ -89,6 +96,10 @@ PTPMessageCommon *buildPTPMessage
   EtherPort *port )
 {
     OSTimer *timer = port->getTimerFactory()->createTimer();
+    if (timer == NULL) {
+        GPTP_LOG_ERROR("Failed to create timer in buildPTPMessage");
+        return NULL;
+    }
     PTPMessageCommon *msg = NULL;
     PTPMessageId messageId;
     MessageType messageType;
@@ -596,6 +607,14 @@ PTPMessageCommon *buildPTPMessage
     delete timer;
     return msg;
 abort:
+    /* If msg was allocated but sourcePortIdentity was not yet transferred to it,
+     * set it to NULL to prevent the destructor from deleting an uninitialized pointer.
+     * Then delete msg and sourcePortIdentity separately. */
+    if (msg != NULL) {
+        msg->sourcePortIdentity = NULL;
+        delete msg;
+        msg = NULL;
+    }
     delete sourcePortIdentity;
     delete timer;
     return NULL;
@@ -604,6 +623,10 @@ abort:
 bool PTPMessageCommon::getTxTimestamp( EtherPort *port, uint32_t link_speed )
 {
     OSTimer *timer = port->getTimerFactory()->createTimer();
+    if (timer == NULL) {
+        GPTP_LOG_ERROR("Failed to create timer in getTxTimestamp");
+        return false;
+    }
     int ts_good;
     Timestamp tx_timestamp;
     uint32_t unused;
@@ -1030,10 +1053,13 @@ void PTPMessageSync::processMessage( EtherPort *port )
                     GPTP_LOG_INFO("currentTimeStamp: %" PRIu64 " previousTimeStamp: %" PRIu64 " Difference: %" PRId64 " operSyncIntervalNS: %" PRIu64 " min_threshold %" PRIu64 " max_threshold %" PRIu64 " ", TIMESTAMP_TO_NS(currentTimeStamp), TIMESTAMP_TO_NS(previousTimeStamp), successiveSyncArrivalDifference, operSyncIntervalNS, min_threshold, max_threshold);
 
                     PTPMessageSignalling *sigMsg = new PTPMessageSignalling(port);
-                    sigMsg->setMessageType(SIGNALLING_MESSAGE);
                     if (sigMsg) {
+                        sigMsg->setMessageType(SIGNALLING_MESSAGE);
                         sigMsg->setintervals(PTPMessageSignalling::sigMsgInterval_NoChange, port->getSyncInterval(), PTPMessageSignalling::sigMsgInterval_NoChange);
                         sigMsg->sendPort(port, NULL);
+                        delete sigMsg;
+                    } else {
+                        GPTP_LOG_ERROR("Failed to allocate PTPMessageSignalling in processMessage");
                     }
                     sendSigMsgCounter = 1;
                 }
@@ -1161,6 +1187,7 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
     int64_t correction;
     int32_t scaledLastGmFreqChange = 0;
     scaledNs scaledLastGmPhaseChange;
+    ptp_ratios_t local_ptpRatios;
     GPTP_LOG_DEBUG("Processing a follow-up message");
     // Expire any SYNC_RECEIPT timers that exist
     port->stopSyncReceiptTimer();
@@ -1362,11 +1389,26 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
           local_boot_offset, boot_time,
           local_boot_freq_offset, port->getSyncCount(),
           port->getPdelayCount(), port->getPortState(), port->getAsCapable(),
-          PROCESS_MESSAGE_PATH );
+          PROCESS_MESSAGE_PATH);
     }
 
     uint16_t lastGmTimeBaseIndicator;
     lastGmTimeBaseIndicator = port->getLastGmTimeBaseIndicator();
+
+    local_ptpRatios.captured_ptp_time    = TIMESTAMP_TO_NS(device_time);
+    local_ptpRatios.system_offset       = local_system_offset_avg.get();
+    local_ptpRatios.q_offset            = local_q_offset_avg.get();
+    local_ptpRatios.boot_offset         = local_boot_offset_avg.get();
+    local_ptpRatios.system_freq_offset  = local_system_freq_offset_avg.get();
+    local_ptpRatios.q_freq_offset       = local_q_freq_offset_avg.get();
+    local_ptpRatios.boot_freq_offset    = local_boot_freq_offset_avg.get();
+
+    if (port->getTestMode()) {
+        GPTP_LOG_INFO("capture ptp time: %" PRIu64 " ns", local_ptpRatios.captured_ptp_time);
+        GPTP_LOG_INFO("capture qtime time: %" PRIu64 " ns",  TIMESTAMP_TO_NS(q_time));
+        GPTP_LOG_INFO("q offset: %" PRId64 " ns", local_ptpRatios.q_offset);
+        GPTP_LOG_INFO("q freq offset: %Lf", local_ptpRatios.q_freq_offset);
+    }
 
     if ((lastGmTimeBaseIndicator > 0)
             && (tlv.getGmTimeBaseIndicator() != lastGmTimeBaseIndicator)) {
@@ -1388,6 +1430,8 @@ void PTPMessageFollowUp::processMessage( EtherPort *port )
         pthread_mutex_lock((pthread_mutex_t *) &port->sct_buffer->lock);
         memcpy(&port->sct_buffer->syncData, &port->syncInfo,
                sizeof(syncMesaurementData_t));
+        memcpy(&port->sct_buffer->ptpRatios, &local_ptpRatios,
+               sizeof(ptp_ratios_t));
         pthread_mutex_unlock((pthread_mutex_t *) &port->sct_buffer->lock);
     }
 
@@ -1425,6 +1469,11 @@ PTPMessagePathDelayReq::PTPMessagePathDelayReq
 void PTPMessagePathDelayReq::processMessage( EtherPort *port )
 {
     OSTimer *timer = port->getTimerFactory()->createTimer();
+    if (timer == NULL) {
+        GPTP_LOG_ERROR("Failed to create timer in PTPMessagePathDelayReq::processMessage");
+        _gc = true;
+        return;
+    }
     PortIdentity resp_fwup_id;
     PortIdentity requestingPortIdentity_p;
     PTPMessagePathDelayResp *resp;
@@ -1475,6 +1524,11 @@ void PTPMessagePathDelayReq::processMessage( EtherPort *port )
     }
 
     resp_fwup = new PTPMessagePathDelayRespFollowUp(port);
+    if (resp_fwup == NULL) {
+        GPTP_LOG_ERROR("Failed to allocate PTPMessagePathDelayRespFollowUp");
+        delete resp;
+        goto done;
+    }
     port->getPortIdentity(resp_fwup_id);
     port->setLastvalidSeqID(sequenceId);
     resp_fwup->setPortIdentity(&resp_fwup_id);

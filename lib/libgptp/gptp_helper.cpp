@@ -57,9 +57,8 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 ============================================================================ */
 
 /* ============================================================================
-Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-
-Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+Changes from Qualcomm Technologies, Inc. are provided under the following license:
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. 
 SPDX-License-Identifier: BSD-3-Clause-Clear
 ============================================================================ */
 #include <linux/ptp_clock.h>
@@ -249,6 +248,7 @@ static clockid_t rgptp_clkid = -1;
 #endif
 
 static pthread_t thread_id;
+static bool thread_running = false;
 static int sock = -1;
 
 #ifdef LE_GVM
@@ -354,6 +354,10 @@ static int gptpClkInit(int *gptp_phc_fd)
         GPTP_LOG_LIMIT_ERROR(ERROR_LOG, "Failed to open PTP clock device\n");
         return false;
     }
+
+#ifndef AVB_FEATURE_GVM_MODE
+    close(*gptp_phc_fd);
+#endif
 
     return true;
 }
@@ -471,7 +475,9 @@ static void gptpMemDeinit(int gptp_shm_fd, char **gptp_mmap)
 /* gptp core function to init gptp scaling */
 static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 {
+    LOCK();
     if (NULL == gptp_shm_fd) {
+        UNLOCK();
         return false;
     }
 
@@ -488,6 +494,7 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 
     if (*gptp_shm_fd == -1) {
         perror("shm_open()");
+        UNLOCK();
         return false;
     }
 
@@ -525,13 +532,17 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 #endif
 #endif
         GPTP_LOG_ERROR("gptpMemInit failed %s\n", SHM_NAME);
+        UNLOCK();
         return false;
     }
+    UNLOCK();
 
 #ifndef AVB_FEATURE_GVM_MODE
 
     if (!gptpSCTMemInit()) {
+        LOCK();
         gptpMemDeinit(*gptp_shm_fd, gptp_mmap);
+        UNLOCK();
         return false;
     }
 
@@ -806,12 +817,16 @@ static bool gptpTimeInit(void)
     }
 
     if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
+        LOCK();
         gptpMemDeinit(gPtpShmFd, &gPtpMmap);
+        UNLOCK();
         return false;
     }
 
     if (!gptpClkInit(&gptpPhcFd)) {
+        LOCK();
         gptpMemDeinit(gPtpShmFd, &gPtpMmap);
+        UNLOCK();
         return false;
     }
 
@@ -985,6 +1000,9 @@ static int gptpDaemonClientInit(void)
         return false;
     }
 
+    /* Mark the thread as live; gptpDaemonClientDeInit must join it exactly once. */
+    thread_running = true;
+
     ret = pthread_setname_np(thread_id, "gptpDaemonSrv");
 
     if (ret != 0) {
@@ -1000,25 +1018,31 @@ static void gptpDaemonClientDeInit(void)
 #ifndef AVB_FEATURE_GVM_MODE
     char data = '1';
     int ret = 0;
+
+    if (!bServiceConnect) {
+        goto cleanup_pipes;
+    }
+
     bServiceConnect = false;
 
     if (pipefd[1] != -1) {
         write(pipefd[1], &data, 1);
     }
 
-    ret = pthread_join(thread_id, NULL);
-
-    if (ret != 0) {
-        GPTP_LOG_ERROR("gptpDaemonClientDeInit: failed -->%s\n", strerror(errno));
+    if (thread_running) {
+        ret = pthread_join(thread_id, NULL);
+        thread_running = false;
+        if (ret != 0) {
+            GPTP_LOG_ERROR("gptpDaemonClientDeInit: failed -->%s\n", strerror(errno));
+        }
     }
 
     if (sock > 0) {
         close(sock);
         sock = -1;
     }
-
+cleanup_pipes:
 #endif
-
     // Release the Pipe
     if (pipefd[0] != -1) {
         close(pipefd[0]);
@@ -1885,6 +1909,11 @@ bool gptpDeinit(void)
 
 #else
     LOCK();
+    if (!bInitialized && !bServiceConnect) {
+        UNLOCK();
+        GPTP_LOG_WARNING("gptpDeinit: already deinitialized or never initialized, ignoring\n");
+        return false;
+    }
     gptpMemDeinit(gPtpShmFd, &gPtpMmap);
     gptpClkDeInit(gptpPhcFd);
     bInitialized = false;

@@ -116,6 +116,7 @@ static EtherPort *pPort = NULL;
 void gPTPPersistWriteCB(char *bufPtr, uint32_t bufSize);
 
 static int sock = 0;
+static bool using_android_socket = false;
 static pthread_t thread_id = 0;
 static int keep_running = 0;
 struct sockaddr_un sock_addr_un;
@@ -129,11 +130,107 @@ extern gptplogcat_t gptplogcat;
 extern gptplogcat_t systemlogcat;
 LinuxSharedMemoryIPC *ipc;
 
+#define MAX_NSEC 1000000000
+
 #ifdef GPTP_DSQB_ENABLED
 lpm_t lpm_handle;
 #endif
 
-#define MAX_NSEC 1000000000
+#ifdef ANDROID
+#ifdef GPTP_CAR_POWER_POLICY
+static constexpr const char* GPTP_SOCKET_PATH = "/dev/socket/gptp_power_socket";
+
+enum PowerEvent {
+    POWER_SUSPEND = 0,
+    POWER_RESUME  = 1,
+};
+
+static void* powerListenerThread(void* arg) {
+    int fd = (int)(intptr_t)arg;
+
+    PowerEvent ev;
+
+    while (true) {
+        ssize_t n = read(fd, &ev, sizeof(ev));
+        if (n < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            GPTP_LOG_ERROR("Power socket read failed: %s", strerror(errno));
+            break;
+        }
+
+        if (n != sizeof(ev)) {
+            continue;
+        }
+
+        if (!pPort) {
+            continue;
+        }
+
+        if (ev == POWER_SUSPEND) {
+            GPTP_LOG_INFO("Power: SUSPEND");
+            if (pPort->gPTP_lpm == false) {
+                pPort->gPTP_lpm = true;
+                pPort->processEvent(LINKDOWN);
+            }
+        } else if (ev == POWER_RESUME) {
+            if (pPort->gPTP_lpm == true) {
+                GPTP_LOG_INFO("Power: RESUME");
+                pPort->gPTP_lpm = false;
+                pPort->processEvent(LINKUP);
+            }
+        }
+    }
+
+    close(fd);
+    return nullptr;
+}
+
+static void startPowerListener() {
+    int fd = -1;
+
+    // First try to get the socket fd from Android init (via init.rc socket declaration)
+    fd = android_get_control_socket("gptp_power_socket");
+    if (fd > 0) {
+        GPTP_LOG_INFO("Got gptp_power_socket fd from init: %d", fd);
+    } else {
+        // Fallback: create and bind manually
+        GPTP_LOG_WARNING("android_get_control_socket(gptp_power_socket) failed, falling back to manual bind");
+        fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+        if (fd < 0) {
+            GPTP_LOG_ERROR("socket() failed: %s", strerror(errno));
+            return;
+        }
+
+        sockaddr_un addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sun_family = AF_UNIX;
+        strlcpy(addr.sun_path, GPTP_SOCKET_PATH, sizeof(addr.sun_path));
+
+        if (bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+            GPTP_LOG_ERROR("bind() failed: %s", strerror(errno));
+            close(fd);
+            return;
+        }
+    }
+
+    pthread_t tid;
+    int ret = pthread_create(&tid, nullptr, powerListenerThread,
+                             (void*)(intptr_t)fd);
+
+    if (ret != 0) {
+        GPTP_LOG_ERROR("pthread_create failed: %s", strerror(ret));
+        close(fd);
+        return;
+    }
+
+    pthread_detach(tid);
+}
+
+#endif
+#endif
+
 /* Return *a - *b */
 static inline ptp_clock_time pct_diff
 ( struct ptp_clock_time *a, struct ptp_clock_time *b )
@@ -225,7 +322,13 @@ int gptp_sys_suspend(void *data, enum PM_MODE mode)
     GPTP_LOG_INFO("Handling LPM(mode: %d) enter notification", mode);
     GPTP_LOG_INFO("stoping gptp daemon....");
     pPort->gPTP_lpm = true;
-    err = pPort->processEvent(LINKDOWN);
+    /** Stop the port and send link down event to gptp state machine in case of Suspend to RAM Only
+     * as it is taken care by thread watchNetLink() function in case of Suspend to Disk/Deep sleep Quick Boot **/
+    if(mode == PM_MODE_S2R) {
+        err = pPort->processEvent(LINKDOWN);
+    } else  {
+        err = true;
+    }
 
     if (err == false) {
         GPTP_LOG_ERROR("failed to ds_suspend, roll back and NACK");
@@ -240,7 +343,11 @@ int gptp_sys_resume(void *data, enum PM_MODE mode)
     GPTP_LOG_INFO("Handling LPM(mode: %d) exit notification", mode);
     GPTP_LOG_INFO("starting gptp daemon....");
     pPort->gPTP_lpm = false;
-    pPort->processEvent(LINKUP);
+    /** process LINKUP event to restart gptp state machine in case of Suspend to RAM Only
+     * as it is taken care by thread watchNetLink() function in case of Suspend to Disk/Deep sleep Quick Boot **/
+    if(mode == PM_MODE_S2R) {
+        pPort->processEvent(LINKUP);
+    }
     return 0;
 }
 
@@ -414,14 +521,19 @@ static void *wait_for_epoll_event(void *arg)
 void gptpDaemonServDeInit(void)
 {
     int ret = 0;
-    unlink(ADDRESS);
-    close(sock);
-    sock = 0;
+    if (!using_android_socket) {
+        unlink(ADDRESS);
+        close(sock);
+        sock = 0;
+    }
     // Signal the thread to exit
     keep_running = 0;
 
-    // Wait for the thread to exit
-    pthread_join(thread_id, NULL);
+    // Wait for the epoll thread to exit only if it was started.
+    if (thread_id != 0) {
+        pthread_join(thread_id, NULL);
+        thread_id = 0;
+    }
 
     for (int i = 0 ; i < MAX_CLIENTS_COUNT; i++) {
         if(gptp_client[i] != -1) {
@@ -439,10 +551,14 @@ void gptpDaemonServInit(void)
     int ret = 0;
     umask(S_IRGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
 #ifdef ANDROID
-    sock = android_get_control_socket("gptp_socket");
+    if (sock <= 0) {
+        sock = android_get_control_socket("gptp_socket");
 
-    if (sock < 0) {
-        GPTP_LOG_ERROR("Socket creation failed : %s\n", strerror(errno));
+        if (sock > 0) {
+            using_android_socket = true;
+        } else {
+            GPTP_LOG_ERROR("android_get_control_socket(gptp_socket) failed: %s\n", strerror(errno));
+        }
     }
 
 #endif
@@ -565,7 +681,16 @@ int main(int argc, char **argv)
 #endif
     memset(config_file_path, 0, 512);
     GPTPPersist *pGPTPPersist = NULL;
+    LinuxNetworkInterfaceFactory *default_factory = NULL;
+    LinuxTimerQueueFactory *timerq_factory = NULL;
+    LinuxLockFactory *lock_factory = NULL;
+    LinuxTimerFactory *timer_factory = NULL;
+    LinuxConditionFactory *condition_factory = NULL;
     LinuxThreadFactory *thread_factory = new LinuxThreadFactory();
+    if (thread_factory == NULL) {
+        GPTP_LOG_ERROR("Failed to allocate thread_factory");
+        return -1;
+    }
     // Block SIGUSR1
     {
         sigset_t block;
@@ -634,15 +759,45 @@ int main(int argc, char **argv)
     portInit.sct_shm_fd = -1;
     portInit.bypass_if_wait = false;
     portInit.wait_for_sync = false;
-    LinuxNetworkInterfaceFactory *default_factory =
-        new LinuxNetworkInterfaceFactory;
+    portInit.tsc_enable = false;
+    default_factory = new LinuxNetworkInterfaceFactory;
+    if (default_factory == NULL) {
+        GPTP_LOG_ERROR("Failed to allocate default_factory");
+        CLEANUP_RESOURCES();
+        return -1;
+    }
     OSNetworkInterfaceFactory::registerFactory
     (factory_name_t("default"), default_factory);
-    LinuxTimerQueueFactory *timerq_factory = new LinuxTimerQueueFactory();
-    LinuxLockFactory *lock_factory = new LinuxLockFactory();
-    LinuxTimerFactory *timer_factory = new LinuxTimerFactory();
-    LinuxConditionFactory *condition_factory = new LinuxConditionFactory();
+    timerq_factory = new LinuxTimerQueueFactory();
+    if (timerq_factory == NULL) {
+        GPTP_LOG_ERROR("Failed to allocate timerq_factory");
+        CLEANUP_RESOURCES();
+        return -1;
+    }
+    lock_factory = new LinuxLockFactory();
+    if (lock_factory == NULL) {
+        GPTP_LOG_ERROR("Failed to allocate lock_factory");
+        CLEANUP_RESOURCES();
+        return -1;
+    }
+    timer_factory = new LinuxTimerFactory();
+    if (timer_factory == NULL) {
+        GPTP_LOG_ERROR("Failed to allocate timer_factory");
+        CLEANUP_RESOURCES();
+        return -1;
+    }
+    condition_factory = new LinuxConditionFactory();
+    if (condition_factory == NULL) {
+        GPTP_LOG_ERROR("Failed to allocate condition_factory");
+        CLEANUP_RESOURCES();
+        return -1;
+    }
     ipc = new LinuxSharedMemoryIPC();
+    if (ipc == NULL) {
+        GPTP_LOG_ERROR("Failed to allocate LinuxSharedMemoryIPC");
+        CLEANUP_RESOURCES();
+        return -1;
+    }
 
     /* Create Low level network interface object */
     if ( argc < 2 ) {
@@ -788,8 +943,14 @@ int main(int argc, char **argv)
                     GPTP_LOG_INFO("neighborPropDelayThreshold value:% " PRId64 " ",
                                   portInit.neighborPropDelayThreshold);
                 }
+            } else if (strcmp(argv[i] + 1, "TSC_EN") == 0) {
+#ifndef ANDROID
+                portInit.tsc_enable = true;
+#else
+                portInit.tsc_enable = false;
+                GPTP_LOG_ERROR("TSC disabled on Android, not supported\n");
+#endif
             }
-
 #ifdef RGPTP_ENABLED
             else if (strcmp(argv[i] + 1, "Y") == 0) {
                 rgptp = true;
@@ -823,6 +984,11 @@ int main(int argc, char **argv)
     if (strcmp(argv[1], "ini") != 0) {
         PLAT_strlcpy(ifname_eth, argv[1], IFNAME_SIZE);
         ifname = new InterfaceName( argv[1], strlen(argv[1]) );
+        if (ifname == NULL) {
+            GPTP_LOG_ERROR("Failed to allocate InterfaceName for argv[1]");
+            CLEANUP_RESOURCES();
+            return -1;
+        }
     } else if (!use_config_file) {
         GPTP_LOG_ERROR( "Interface name required/ ini file is required\n" );
         print_usage( argv[0] );
@@ -861,6 +1027,12 @@ int main(int argc, char **argv)
 #else
     timestamper = new LinuxTimestamperGeneric();
 #endif
+    if (timestamper == NULL) {
+        GPTP_LOG_ERROR("Failed to allocate EtherTimestamper");
+        GPTP_LOG_UNREGISTER();
+        CLEANUP_RESOURCES();
+        return -1;
+    }
 
     if (pthread_sigmask(SIG_BLOCK, &set, NULL) != 0) {
         perror("pthread_sigmask()");
@@ -913,6 +1085,12 @@ int main(int argc, char **argv)
                 std::string if_name = iniParser.getIfaceName();
                 PLAT_strlcpy(ifname_eth, if_name.c_str(), IFNAME_SIZE);
                 ifname = new InterfaceName( ifname_eth, strlen(ifname_eth) );
+                if (ifname == NULL) {
+                    GPTP_LOG_ERROR("Failed to allocate InterfaceName from ini config");
+                    GPTP_LOG_UNREGISTER();
+                    CLEANUP_RESOURCES();
+                    return -1;
+                }
             }
 
             if (!portInit.testMode && iniParser.getDebugLog() != 0) {
@@ -940,6 +1118,7 @@ int main(int argc, char **argv)
             portInit.isGM = iniParser.getIsGM();
             portInit.syncClocks = iniParser.getSyncClocks();
             portInit.asCapable = iniParser.getAsCapable();
+            portInit.tsc_enable = iniParser.getTscEnable();
             GPTP_LOG_INFO("syncClocks: %d", portInit.syncClocks);
             GPTP_LOG_INFO("automotive profile %s isGM %s\n",
                           ((portInit.automotive_profile) ? "True" : "False"),
@@ -1024,6 +1203,12 @@ int main(int argc, char **argv)
     pClock = new IEEE1588Clock
     ( false, syntonize, priority1, priority2, clockClass, timerq_factory, ipc,
       lock_factory );
+    if (pClock == NULL) {
+        GPTP_LOG_ERROR("Failed to allocate IEEE1588Clock");
+        GPTP_LOG_UNREGISTER();
+        CLEANUP_RESOURCES();
+        return -1;
+    }
 
     if ( restoredataptr != NULL ) {
         restorefailed =
@@ -1084,7 +1269,13 @@ int main(int argc, char **argv)
     }
 #endif
     pPort = new EtherPort(&portInit);
-
+    if (pPort == NULL) {
+        GPTP_LOG_ERROR("Failed to allocate EtherPort");
+        GPTP_LOG_UNREGISTER();
+        CLEANUP_RESOURCES();
+        return -1;
+    }
+    GPTP_LOG_ERROR("pPort TSC enable flag: %d\n", pPort->getTSC());
     if (!pPort->init_port()) {
         GPTP_LOG_ERROR("failed to initialize port");
         GPTP_LOG_UNREGISTER();
@@ -1140,6 +1331,11 @@ int main(int argc, char **argv)
 
     gptpDaemonServInit();
 
+#ifdef GPTP_CAR_POWER_POLICY
+    // Start listening for power events
+    startPowerListener();
+#endif
+
 #ifdef GPTP_DSQB_ENABLED
     /*Register gptp System for lpm*/
     rc = gptp_sys_register_lpm();
@@ -1154,6 +1350,7 @@ int main(int argc, char **argv)
 
     GPTP_LOG_INFO("gPTP starting...");
     pPort->processEvent(POWERUP);
+    pPort->gPTP_lpm = false;
 #ifdef RGPTP_ENABLED
 
     if ( rgptp ) {
@@ -1241,6 +1438,14 @@ int main(int argc, char **argv)
 
 void gPTPPersistWriteCB(char *bufPtr, uint32_t bufSize)
 {
+    if (pClock == NULL || pPort == NULL) {
+        GPTP_LOG_ERROR("pClock or pPort is NULL in gPTPPersistWriteCB");
+        return;
+    }
+    if (bufPtr == NULL) {
+        GPTP_LOG_ERROR("bufPtr is NULL in gPTPPersistWriteCB");
+        return;
+    }
     off_t restoredatalength = bufSize;
     off_t restoredatacount = restoredatalength;
     char *restoredataptr = NULL;

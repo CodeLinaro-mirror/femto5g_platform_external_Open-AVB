@@ -66,7 +66,13 @@ CommonPort::CommonPort( PortInit_t *portInit ) :
     syncClocks = portInit->syncClocks;
     net_label = portInit->net_label;
     link_thread = thread_factory->createThread();
+    if (link_thread == NULL) {
+        GPTP_LOG_ERROR("Failed to create link_thread");
+    }
     listening_thread = thread_factory->createThread();
+    if (listening_thread == NULL) {
+        GPTP_LOG_ERROR("Failed to create listening_thread");
+    }
     sync_receipt_thresh = portInit->syncReceiptThreshold;
     wrongSeqIDCounter = 0;
     _peer_rate_offset = portInit->_peer_rate_offset;
@@ -89,6 +95,7 @@ CommonPort::CommonPort( PortInit_t *portInit ) :
     bypass_if_wait = portInit->bypass_if_wait;
     net_iface = NULL;
     asCapable = false;
+    tsc_enable = portInit->tsc_enable;
     link_speed = INVALID_LINKSPEED;
     qgptp_rmgr_setport(this);
     memset(&counters, 0x0, sizeof(counters));
@@ -150,7 +157,7 @@ bool CommonPort::init_port( void )
 
     if (!OSNetworkInterfaceFactory::buildInterface
             ( &net_iface, factory_name_t("default"), net_label,
-              _hw_timestamper)) {
+              _hw_timestamper, tsc_enable)) {
         return false;
     }
 
@@ -166,7 +173,7 @@ void CommonPort::timestamper_init( void )
 {
     if ( _hw_timestamper != NULL ) {
         if ( !_hw_timestamper->HWTimestamper_init
-                ( net_label, net_iface )) {
+                ( net_label, net_iface, tsc_enable)) {
             GPTP_LOG_ERROR
             ( "Failed to initialize hardware timestamper, "
               "falling back to software timestamping" );
@@ -802,14 +809,18 @@ bool CommonPort::processEvent( Event e )
             if ( asCapable) {
                 PTPMessageAnnounce *annc =
                     new PTPMessageAnnounce(this);
-                PortIdentity dest_id;
-                PortIdentity gmId;
-                ClockIdentity clock_id = clock->getClockIdentity();
-                gmId.setClockIdentity(clock_id);
-                getPortIdentity( dest_id );
-                annc->setPortIdentity( &dest_id );
-                annc->sendPort( this, NULL );
-                delete annc;
+                if (annc == NULL) {
+                    GPTP_LOG_ERROR("Failed to allocate PTPMessageAnnounce");
+                } else {
+                    PortIdentity dest_id;
+                    PortIdentity gmId;
+                    ClockIdentity clock_id = clock->getClockIdentity();
+                    gmId.setClockIdentity(clock_id);
+                    getPortIdentity( dest_id );
+                    annc->setPortIdentity( &dest_id );
+                    annc->sendPort( this, NULL );
+                    delete annc;
+                }
             }
 
             startAnnounceIntervalTimer
@@ -872,7 +883,7 @@ bool CommonPort::processEvent( Event e )
                   local_q_freq_offset,
                   local_boot_offset, boot_time,
                   local_boot_freq_offset, getSyncCount(),
-                  pdelay_count, port_state, asCapable, SYNC_INTERVAL_TIMEOUT_PATH );
+                  pdelay_count, port_state, asCapable, SYNC_INTERVAL_TIMEOUT_PATH);
             }
             // Call media specific action for completed sync
             syncDone();
@@ -929,6 +940,10 @@ void CommonPort::startAnnounce()
 
 int CommonPort::getTimestampVersion()
 {
+    if (_hw_timestamper == NULL) {
+        GPTP_LOG_ERROR("_hw_timestamper is NULL in getTimestampVersion");
+        return -1;
+    }
     return _hw_timestamper->getVersion();
 }
 
