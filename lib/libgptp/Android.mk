@@ -9,8 +9,7 @@ LOCAL_SHARED_LIBRARIES := libcutils liblog
 
 LOCAL_C_INCLUDES += \
         $(LOCAL_PATH) \
-		external/open-avb/daemons/gptp/linux/src/ \
-		external/open-avb/daemons/gptp/common
+		external/open-avb/daemons/gptp/inc
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_C_INCLUDES)
 
@@ -32,8 +31,12 @@ endif
 
 ifeq ($(TARGET_BOARD_SUFFIX),_gvm)
 ifneq ($(TARGET_BOARD_DERIVATIVE_SUFFIX),_cdccomm)
+ifneq (gen5_gvm_gy, $(TARGET_BOARD_PLATFORM)$(TARGET_BOARD_SUFFIX))
+ifneq (gen5_gvm, $(TARGET_BOARD_PLATFORM)$(TARGET_BOARD_SUFFIX))
 LOCAL_CFLAGS += -DAVB_FEATURE_GVM_MODE=1
 LOCAL_SHARED_LIBRARIES += libuhab libion
+endif
+endif
 endif
 endif
 
