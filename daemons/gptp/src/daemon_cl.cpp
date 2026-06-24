@@ -1108,7 +1108,11 @@ int main(int argc, char **argv)
             portInit.isGM = iniParser.getIsGM();
             portInit.syncClocks = iniParser.getSyncClocks();
             portInit.asCapable = iniParser.getAsCapable();
+#ifndef ANDROID
             portInit.tsc_enable = iniParser.getTscEnable();
+#else
+            portInit.tsc_enable = false;
+#endif
             GPTP_LOG_INFO("syncClocks: %d", portInit.syncClocks);
             GPTP_LOG_INFO("automotive profile %s isGM %s\n",
                           ((portInit.automotive_profile) ? "True" : "False"),
