@@ -478,14 +478,15 @@ bool EtherPort::_processEvent( Event e )
                 ret = true;
                 break;
             }
+            linkstatus = true;
             if (!OSNetworkInterfaceFactory::buildInterface
                 ( &net_iface, factory_name_t("default"), net_label,
                  _hw_timestamper)) {
+                linkstatus = false;
                 return false;
             }
             timestamper_init();
             _init_port();
-            linkstatus = true;
             port_pipe_fds[0] = -1;
             port_pipe_fds[1] = -1;
             if (pipe(port_pipe_fds) == -1) {
