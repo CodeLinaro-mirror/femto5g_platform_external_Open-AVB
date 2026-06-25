@@ -417,6 +417,7 @@ void *EtherPort::openPort( EtherPort *port )
         }
     }
 
+    GPTP_LOG_INFO("Exiting openPort loop, linkstatus=%d", linkstatus);
     return NULL;
 }
 
@@ -657,8 +658,21 @@ bool EtherPort::_processEvent( Event e )
                 ret = true;
                 break;
             }
+            GPTP_LOG_INFO("[LINKDOWN] Entering LINKDOWN handler, linkstatus=%d gPTP_lpm=%d", linkstatus, gPTP_lpm);
             linkstatus = false;
-            //delete all timers as in powerdown
+
+            if (port_pipe_fds[1] != -1) {
+                char data = '1';
+                ssize_t bytes_written = write(port_pipe_fds[1], &data, 1);
+                if (bytes_written != 1) {
+                    GPTP_LOG_ERROR("Failed to write to pipe: %s", strerror(errno));
+                } else {
+                    GPTP_LOG_INFO("ipe write succeeded, openPort will release net_lock");
+                }
+            } else {
+                GPTP_LOG_ERROR("pipe fd[1]=%d is invalid, cannot interrupt openPort", port_pipe_fds[1]);
+            }
+
             stopPDelay();
             clock->deleteEventTimerLocked( this, ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES );
             clock->deleteEventTimerLocked( this, ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES );
@@ -671,22 +685,12 @@ bool EtherPort::_processEvent( Event e )
             setEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
             clock->updateEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
 
-            if (port_pipe_fds[1] != -1) {
-                char data = '1';
-                ssize_t bytes_written = write(port_pipe_fds[1], &data, 1);
-                if (bytes_written != 1) {
-                    GPTP_LOG_ERROR("Failed to write to pipe: %s", strerror(errno));
-                } else {
-                    GPTP_LOG_INFO("Successfully wrote to pipe to interrupt select()");
-                }
-            }
-
             if (!linkjoin(exit_code)) {
-                GPTP_LOG_ERROR("Failed to openport thread to join %d", exit_code);
+                GPTP_LOG_ERROR("Failed to join openPort thread, exit_code=%d", exit_code);
                 ret = false;
                 break;
             }
-            GPTP_LOG_INFO("openport thread to join %d", exit_code);
+            GPTP_LOG_INFO("openPort thread joined successfully, exit_code=%d", exit_code);
             // Release the Pipe
             if (port_pipe_fds[0] != -1) {
                 close(port_pipe_fds[0]);
