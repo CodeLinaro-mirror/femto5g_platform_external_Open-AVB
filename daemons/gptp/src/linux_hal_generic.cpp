@@ -66,15 +66,9 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #define QTIMER_RESAMPLING 5
 
-// if emac driver does not support the HWTSTAMP_TX_EXTERNAL_TIME_SRC we revert to old one HWTSTAMP_TX_ON 
-#ifndef HWTSTAMP_TX_EXTERNAL_TIME_SRC
-#define HWTSTAMP_TX_EXTERNAL_TIME_SRC HWTSTAMP_TX_ON
-#endif
-
 char ptp_dev_index[PTP_CLOCK_DEVICE_LENGTH] = {0};
 char ptp_device[] = PTP_DEVICE;
 extern int port_pipe_fds[2];
-
 
 net_result LinuxNetworkInterface::nrecv
 ( LinkLayerAddress *addr, uint8_t *payload, size_t &length )
@@ -596,8 +590,13 @@ bool LinuxTimestamperGeneric::post_init( int ifindex, int sd,
 
     hwconfig.rx_filter = HWTSTAMP_FILTER_PTP_V2_EVENT;
     if(tsc_enable){
+#ifdef TSC_FEATURE
     GPTP_LOG_INFO("TSC used:: HWTSTAMP_TX_EXTERNAL_TIME_SRC hw type set");
     hwconfig.tx_type = HWTSTAMP_TX_EXTERNAL_TIME_SRC;
+#else
+    GPTP_LOG_INFO("HWTSTAMP_TX_ON hw type set (non-GEN5 target)");
+    hwconfig.tx_type = HWTSTAMP_TX_ON;
+#endif
    } else {
     hwconfig.tx_type = HWTSTAMP_TX_ON;
     GPTP_LOG_INFO("HWTSTAMP_TX_ON hw type set");
