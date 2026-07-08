@@ -57,9 +57,8 @@ https://github.com/benhoyt/inih/commit/74d2ca064fb293bc60a77b0bd068075b293cf175.
 ============================================================================ */
 
 /* ============================================================================
-Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-
-Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+Changes from Qualcomm Technologies, Inc. are provided under the following license:
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. 
 SPDX-License-Identifier: BSD-3-Clause-Clear
 ============================================================================ */
 #include <linux/ptp_clock.h>
@@ -86,9 +85,13 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 #include <syslog.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <dirent.h>
 
 #ifdef ANDROID
 #include <log/log.h>
+#ifndef pthread_mutex_consistent
+#define pthread_mutex_consistent(mutex) (0)
+#endif
 #else
 #include <syslog.h>
 #endif
@@ -248,6 +251,7 @@ static clockid_t rgptp_clkid = -1;
 #endif
 
 static pthread_t thread_id;
+static bool thread_running = false;
 static int sock = -1;
 
 #ifdef LE_GVM
@@ -274,7 +278,7 @@ extern "C" int32_t habmm_socket_close(int32_t handle);
 
 #endif
 
-static uint64_t log_time = 0;
+static uint64_t helper_log_time = 0;
 
 static void libgptp_reset_log_limit(libgptp_log_type_t type);
 static bool libgptp_is_in_log_limit(libgptp_log_type_t type);
@@ -300,10 +304,46 @@ void system_log(int loglevel, const char *s, ...)
     }
 }
 
+#ifdef AVB_FEATURE_GVM_MODE
+#define PTP_DEVICE_PATH_LEN 256
+#define PTP_DEFAULT_DEVICE "/dev/ptp0"
+static void getVirtDevice(char* device_path)
+{
+    const char *path = "/sys/devices/virtual/ptp/";
+    struct dirent *entry;
+
+    if (device_path == NULL) {
+        GPTP_LOG_ERROR("device path is NULL\n");
+        return;
+    }
+    DIR *dp = opendir(path);
+    if (dp == NULL) {
+        GPTP_LOG_ERROR("Failed to open /sys/devices/virtual/ptp/ so use default device\n");
+        snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s", PTP_DEFAULT_DEVICE);
+        return;
+    }
+
+    while ((entry = readdir(dp))) {
+        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s%s", "/dev/", entry->d_name);
+            GPTP_LOG_LIMIT_INFO(INFO_LOG, "opening clock device: %s", device_path);
+            closedir(dp);
+            return;
+        }
+    }
+
+    GPTP_LOG_ERROR("No device found in %s, using default device\n", path);
+    snprintf(device_path, PTP_DEVICE_PATH_LEN, "%s", PTP_DEFAULT_DEVICE);
+    closedir(dp);
+}
+#endif
+
 static int gptpClkInit(int *gptp_phc_fd)
 {
 #ifdef AVB_FEATURE_GVM_MODE
-    *gptp_phc_fd = open("/dev/ptp0", O_RDWR );
+    char ptp_device[PTP_DEVICE_PATH_LEN] = {0};
+    getVirtDevice(ptp_device);
+    *gptp_phc_fd = open(ptp_device, O_RDWR );
 #else
     char ptp_device[] = PTP_DEVICE;
     memcpy( ptp_device + PTP_DEVICE_IDX_OFFS,
@@ -314,10 +354,9 @@ static int gptpClkInit(int *gptp_phc_fd)
 
     if ( *gptp_phc_fd == -1 ||
             (gPtpClockid = FD_TO_CLOCKID(*gptp_phc_fd)) == -1 ) {
-        GPTP_LOG_ERROR("Failed to open PTP clock device\n");
+        GPTP_LOG_LIMIT_ERROR(ERROR_LOG, "Failed to open PTP clock device\n");
         return false;
     }
-
     return true;
 }
 
@@ -434,7 +473,9 @@ static void gptpMemDeinit(int gptp_shm_fd, char **gptp_mmap)
 /* gptp core function to init gptp scaling */
 static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 {
+    LOCK();
     if (NULL == gptp_shm_fd) {
+        UNLOCK();
         return false;
     }
 
@@ -451,6 +492,7 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 
     if (*gptp_shm_fd == -1) {
         perror("shm_open()");
+        UNLOCK();
         return false;
     }
 
@@ -488,13 +530,17 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
 #endif
 #endif
         GPTP_LOG_ERROR("gptpMemInit failed %s\n", SHM_NAME);
+        UNLOCK();
         return false;
     }
+    UNLOCK();
 
 #ifndef AVB_FEATURE_GVM_MODE
 
     if (!gptpSCTMemInit()) {
+        LOCK();
         gptpMemDeinit(*gptp_shm_fd, gptp_mmap);
+        UNLOCK();
         return false;
     }
 
@@ -502,9 +548,31 @@ static int gptpMemInit(int *gptp_shm_fd, char **gptp_mmap)
     return true;
 }
 
+static int mutex_timedlock_ms(pthread_mutex_t *m, int timeout_ms)
+{
+    if (pthread_mutex_trylock(m) == 0)
+        return 0;
+
+    const int sleep_us = 1000;
+    long waited_us = 0;
+    long max_wait_us = (long)timeout_ms * 1000;
+
+    while (waited_us < max_wait_us) {
+        if (usleep(sleep_us) != 0 && errno != EINTR)
+            return -1;
+        waited_us += sleep_us;
+        if (pthread_mutex_trylock(m) == 0)
+            return 0;
+    }
+
+    return ETIMEDOUT;
+}
+
 /* gptp core function to copy gptp offset data from shared memory */
 static int gptpScaling(gPtpTimeData * td, char **memory_offset_buffer)
 {
+    int rc;
+
     LOCK();
 
     if ((td == NULL) || (*memory_offset_buffer == NULL)) {
@@ -522,7 +590,19 @@ static int gptpScaling(gPtpTimeData * td, char **memory_offset_buffer)
         UNLOCK();
         return false;
     }
-    pthread_mutex_lock((pthread_mutex_t *) *memory_offset_buffer);
+
+    rc = mutex_timedlock_ms((pthread_mutex_t *) *memory_offset_buffer, 50);
+    if (rc == EOWNERDEAD) {
+        GPTP_LOG_ERROR("gptpScaling: SHM mutex owner died (EOWNERDEAD), recovering\n");
+        pthread_mutex_consistent((pthread_mutex_t *) *memory_offset_buffer);
+        pthread_mutex_unlock((pthread_mutex_t *) *memory_offset_buffer);
+        UNLOCK();
+        return false;
+    } else if (rc != 0) {
+        GPTP_LOG_ERROR("gptpScaling: SHM mutex timedlock failed rc=%d, daemon may be dead\n", rc);
+        UNLOCK();
+        return false;
+    }
     memcpy(td, *memory_offset_buffer + sizeof(pthread_mutex_t), sizeof(*td));
     pthread_mutex_unlock((pthread_mutex_t *) *memory_offset_buffer);
 #else
@@ -566,6 +646,8 @@ static int gptpScaling(gPtpTimeData * td, char **memory_offset_buffer)
 /* gptp core function to copy gptp offset data from shared memory */
 static int updateGptpRsync(RsyncStatus_t *rSync, char **memory_offset_buffer)
 {
+    int rc;
+
     if ((rSync == NULL) || (*memory_offset_buffer == NULL)) {
         GPTP_LOG_ERROR("updateGptpRsync failure %p %p\n", rSync, *memory_offset_buffer);
         return false;
@@ -578,7 +660,17 @@ static int updateGptpRsync(RsyncStatus_t *rSync, char **memory_offset_buffer)
         GPTP_LOG_ERROR("updateGptpRsync: null ptimedata pointer\n");
         return false;
     }
-    pthread_mutex_lock((pthread_mutex_t *) *memory_offset_buffer);
+
+    rc = mutex_timedlock_ms((pthread_mutex_t *) *memory_offset_buffer, 50);
+    if (rc == EOWNERDEAD) {
+        GPTP_LOG_ERROR("updateGptpRsync: SHM mutex owner died (EOWNERDEAD), recovering\n");
+        pthread_mutex_consistent((pthread_mutex_t *) *memory_offset_buffer);
+        pthread_mutex_unlock((pthread_mutex_t *) *memory_offset_buffer);
+        return false;
+    } else if (rc != 0) {
+        GPTP_LOG_ERROR("updateGptpRsync: SHM mutex timedlock failed rc=%d\n", rc);
+        return false;
+    }
     ptimedata->reverseSyncEnabled = rSync->reverseSyncEnabled;
     ptimedata->reverseSyncDomain = rSync->reverseSyncDomain;
     ptimedata->reverseSyncRate = rSync->reverseSyncRate;
@@ -769,12 +861,16 @@ static bool gptpTimeInit(void)
     }
 
     if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
+        LOCK();
         gptpMemDeinit(gPtpShmFd, &gPtpMmap);
+        UNLOCK();
         return false;
     }
 
     if (!gptpClkInit(&gptpPhcFd)) {
+        LOCK();
         gptpMemDeinit(gPtpShmFd, &gPtpMmap);
+        UNLOCK();
         return false;
     }
 
@@ -913,6 +1009,25 @@ static int gptpDaemonClientInit(void)
     }
 
 #ifndef AVB_FEATURE_GVM_MODE
+
+    /*pthread_attr_t attr;
+    struct sched_param param;
+
+    // Initialize thread attributes
+    pthread_attr_init(&attr);
+
+    // Set scheduling policy to SCHED_OTHER
+    pthread_attr_setschedpolicy(&attr, SCHED_OTHER);
+
+    // Set scheduling parameters (priority is ignored for SCHED_OTHER)
+    param.sched_priority = 0;
+    pthread_attr_setschedparam(&attr, &param);
+
+    // Explicitly specify that the thread should use the attributes
+    pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
+
+    ret = pthread_create(&thread_id, &attr, gptpDaemonSrvConnect, NULL);*/
+
     ret = pthread_create(&thread_id, NULL, gptpDaemonSrvConnect, NULL);
 
     if (ret != 0) {
@@ -929,7 +1044,10 @@ static int gptpDaemonClientInit(void)
         return false;
     }
 
-    ret = pthread_setname_np(thread_id, "GPTP-HELPER");
+    /* Mark the thread as live; gptpDaemonClientDeInit must join it exactly once. */
+    thread_running = true;
+
+    ret = pthread_setname_np(thread_id, "gptpDaemonSrv");
 
     if (ret != 0) {
         GPTP_LOG_ERROR("Failed to set thread name \n");
@@ -944,25 +1062,31 @@ static void gptpDaemonClientDeInit(void)
 #ifndef AVB_FEATURE_GVM_MODE
     char data = '1';
     int ret = 0;
+
+    if (!bServiceConnect) {
+        goto cleanup_pipes;
+    }
+
     bServiceConnect = false;
 
     if (pipefd[1] != -1) {
         write(pipefd[1], &data, 1);
     }
 
-    ret = pthread_join(thread_id, NULL);
-
-    if (ret != 0) {
-        GPTP_LOG_ERROR("gptpDaemonClientDeInit: failed -->%s\n", strerror(errno));
+    if (thread_running) {
+        ret = pthread_join(thread_id, NULL);
+        thread_running = false;
+        if (ret != 0) {
+            GPTP_LOG_ERROR("gptpDaemonClientDeInit: failed -->%s\n", strerror(errno));
+        }
     }
 
     if (sock > 0) {
         close(sock);
         sock = -1;
     }
-
+cleanup_pipes:
 #endif
-
     // Release the Pipe
     if (pipefd[0] != -1) {
         close(pipefd[0]);
@@ -1093,8 +1217,8 @@ bool gptpGetPtpTimeFromBootTime_s(uint64_t *gptp_time_bt, uint64_t time_boot_ns,
         return false;
     }
 
-    GPTP_LOG_DEBUG("gptpGetPtpTimeFromBootTime offset %lld freqoffset %Lf qtimeoffset %lld \n",
-                   gPtpTD.lb_phoffset, gPtpTD.lb_freqoffset, gPtpTD.qtime_to_mono_offset);
+    GPTP_LOG_DEBUG("gptpGetPtpTimeFromBootTime offset %" PRId64 " freqoffset %Lf qtimeoffset %" PRId64 "\n",
+                   (int64_t)gPtpTD.lb_phoffset, gPtpTD.lb_freqoffset, (int64_t)gPtpTD.qtime_to_mono_offset);
 
     if (gPtpTD.d_status != DAEMON_STATUS_UP) {
         GPTP_LOG_LIMIT_WARNING(WARNING_LOG, "Daemon not up!!");
@@ -1228,8 +1352,8 @@ bool gptpGetBootTimeFromPtpTime_s(uint64_t *boot_time_ns, uint64_t ptp_time_ns,
         return false;
     }
 
-    GPTP_LOG_DEBUG("gptpGetBootTimeFromPtpTime offset %lld freqoffset %Lf qtimeoffset %lld \n",
-                   gPtpTD.lb_phoffset, gPtpTD.lb_freqoffset, gPtpTD.qtime_to_mono_offset);
+    GPTP_LOG_DEBUG("gptpGetBootTimeFromPtpTime offset %" PRId64 " freqoffset %Lf qtimeoffset %" PRId64 "\n",
+                   (int64_t)gPtpTD.lb_phoffset, gPtpTD.lb_freqoffset, (int64_t)gPtpTD.qtime_to_mono_offset);
     *boot_time_ns = gPtpTD.local_time + gPtpTD.lb_phoffset; //curr boot time
 
     if (gPtpTD.lb_freqoffset) {
@@ -1567,7 +1691,17 @@ bool gptpGetSyncMeasurementData(syncMesaurementData_t *syncData)
     }
 
     sct_gptp_data* data = (sct_gptp_data*)gPtpSCTMmap;
-    pthread_mutex_lock((pthread_mutex_t *) &data->lock);
+    int sct_rc;
+    sct_rc = mutex_timedlock_ms((pthread_mutex_t *) &data->lock, 50);
+    if (sct_rc == EOWNERDEAD) {
+        GPTP_LOG_ERROR("gptpGetSyncMeasurementData: SCT mutex owner died, recovering\n");
+        pthread_mutex_consistent((pthread_mutex_t *) &data->lock);
+        pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
+        return false;
+    } else if (sct_rc != 0) {
+        GPTP_LOG_ERROR("gptpGetSyncMeasurementData: SCT mutex timedlock failed rc=%d\n", sct_rc);
+        return false;
+    }
     memcpy(syncData, &data->syncData,
            sizeof(syncMesaurementData_t));
     pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
@@ -1606,7 +1740,17 @@ bool gptpGetPDelayMeasurementData(pDelayMeasurementData_t *delayData)
     }
 
     sct_gptp_data* data = (sct_gptp_data*)gPtpSCTMmap;
-    pthread_mutex_lock((pthread_mutex_t *) &data->lock);
+    int sct_rc;
+    sct_rc = mutex_timedlock_ms((pthread_mutex_t *) &data->lock, 50);
+    if (sct_rc == EOWNERDEAD) {
+        GPTP_LOG_ERROR("gptpGetPDelayMeasurementData: SCT mutex owner died, recovering\n");
+        pthread_mutex_consistent((pthread_mutex_t *) &data->lock);
+        pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
+        return false;
+    } else if (sct_rc != 0) {
+        GPTP_LOG_ERROR("gptpGetPDelayMeasurementData: SCT mutex timedlock failed rc=%d\n", sct_rc);
+        return false;
+    }
     memcpy(delayData, &data->delayData,
            sizeof(pDelayMeasurementData_t));
     pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
@@ -1650,7 +1794,17 @@ bool getgPTPStatus(gptpStatsType_t *status)
     }
 
     sct_gptp_data* data = (sct_gptp_data*)gPtpSCTMmap;
-    pthread_mutex_lock((pthread_mutex_t *) &data->lock);
+    int sct_rc;
+    sct_rc = mutex_timedlock_ms((pthread_mutex_t *) &data->lock, 50);
+    if (sct_rc == EOWNERDEAD) {
+        GPTP_LOG_ERROR("getgPTPStatus: SCT mutex owner died, recovering\n");
+        pthread_mutex_consistent((pthread_mutex_t *) &data->lock);
+        pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
+        return false;
+    } else if (sct_rc != 0) {
+        GPTP_LOG_ERROR("getgPTPStatus: SCT mutex timedlock failed rc=%d\n", sct_rc);
+        return false;
+    }
     memcpy(status, &data->status,
            sizeof(gptpStatsType_t));
     pthread_mutex_unlock((pthread_mutex_t *) &data->lock);
@@ -1694,7 +1848,7 @@ bool gptpGetStatusAndCurPtpTime(gptpTimeInfo_t *ptp_data)
 #else
     uint64_t gptp_time = 0;
     ptp_data->status = gptpGetSyncStatus();
-    ptp_data->port_status = gptpGetPortState();
+    ptp_data->port_state = gptpGetPortState();
 
     if (gptpGetCurPtpTime(&gptp_time)) {
         ptp_data->tv_sec = gptp_time / 1000000000UL;
@@ -1741,27 +1895,28 @@ bool gptpGetCurgPtpMonotonicPair_s(uint64_t *gptp_time_cur,
     seq1 = (std::atomic<uint32_t> *)(gPtpMmap + sizeof(std::atomic<uint32_t>));
 
     do {
+        count++;
+
         a = seq0->load();
         b = seq1->load();
 
         if (clock_gettime(gPtpClockid, &ts)) {
             GPTP_LOG_ERROR("clock_gettime failed 0x%x (%s)\n", errno, strerror(errno));
-            return false;
+            continue;
         }
 
         if (ts.tv_sec == 0 && ts.tv_nsec == 0) {
             GPTP_LOG_WARNING("gptp time read taking longer time\n");
-            return false;
+            continue;
         }
 
         gptp_mem = (uint64_t *) (gPtpMmap + 0x1000 - 3 * sizeof(uint64_t));
         mono_mem = (uint64_t *) (gPtpMmap + 0x1000 - 4 * sizeof(uint64_t));
         *gptp_time_cur = *gptp_mem;
         *mono_time_cur = *mono_mem;
-        count++;
     } while ((a != b || a != seq0->load() || b != seq1->load()) && count < 3);
 
-    if (count >= 3) {
+    if ((count >= 3) || (ts.tv_sec == 0 && ts.tv_nsec == 0)) {
         return false;
     }
 
@@ -1785,6 +1940,19 @@ bool gptpGetCurgPtpMonotonicPair(uint64_t *gptp_time_cur,
     return gptpGetCurgPtpMonotonicPair_s(gptp_time_cur, mono_time_cur, NULL);
 }
 
+/* Get proxy mode */
+bool isGptpInProxyMode(void)
+{
+    if (!bInitialized) {
+        return false;
+    }
+
+    if (!gptpScaling(&gPtpTD, &gPtpMmap)) {
+        return false;
+    }
+
+    return gPtpTD.in_proxy_mode;
+}
 
 /* public API to init gptp time scaling */
 bool gptpInit(void)
@@ -1816,6 +1984,11 @@ bool gptpDeinit(void)
 
 #else
     LOCK();
+    if (!bInitialized && !bServiceConnect) {
+        UNLOCK();
+        GPTP_LOG_WARNING("gptpDeinit: already deinitialized or never initialized, ignoring\n");
+        return false;
+    }
     gptpMemDeinit(gPtpShmFd, &gPtpMmap);
     gptpClkDeInit(gptpPhcFd);
     bInitialized = false;
@@ -2020,8 +2193,8 @@ static bool libgptp_is_in_log_limit(libgptp_log_type_t type)
     curr_time = (t.tv_sec) * 1000000000LL + t.tv_nsec;
 
     /* Reset log limit for every 5 seconds */
-    if(curr_time >= log_time + 5000000000LL) {
-        log_time = curr_time;
+    if(curr_time >= helper_log_time + 5000000000LL) {
+        helper_log_time = curr_time;
         libgptp_reset_log_limit(RESET_ALL_LOG);
     }
 
