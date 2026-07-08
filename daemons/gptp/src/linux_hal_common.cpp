@@ -1081,7 +1081,7 @@ bool LinuxThread::start(OSThreadFunction function, void *arg)
 
 bool LinuxThread::join(OSThreadExitCode & exit_code)
 {
-    int err;
+    int err = 0;
 
     if (_private && _private->thread_id != 0) {
         err = pthread_join(_private->thread_id, NULL);
