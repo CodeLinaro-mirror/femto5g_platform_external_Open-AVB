@@ -713,7 +713,7 @@ bool EtherPort::_processEvent( Event e )
 				}
 			}
 		}
-
+		break;
 	case POWERDOWN:
 		//to ensure no processing happens for already expired events
 		OSThreadExitCode exit_code;
