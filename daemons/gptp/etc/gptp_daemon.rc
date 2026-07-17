@@ -1,0 +1,18 @@
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+#
+
+# qgptp daemon will be started on boot.
+service gptp_daemon /vendor/bin/qgptp ini -F /vendor/etc/gptp_cfg.ini
+    class main
+    user root
+    group root inet log vendor_ptp
+    socket gptp_socket stream 0666 root vendor_ptp
+    socket gptp_power_socket stream 0666 root vendor_ptp
+
+
+service qgptp_powerservice /vendor/bin/qgptp_powerservice
+    class main
+    user system
+    group system
+
