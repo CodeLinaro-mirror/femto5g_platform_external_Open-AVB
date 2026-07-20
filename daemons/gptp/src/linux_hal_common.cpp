@@ -1145,6 +1145,9 @@ LinuxSharedMemoryIPC::~LinuxSharedMemoryIPC()
     }
 
 #endif
+#ifdef GPTP_VFIO
+    vfio_ptp_device_deinit();
+#endif
 }
 
 
