@@ -154,7 +154,14 @@ net_result LinuxNetworkInterface::nrecv
     msg.msg_namelen = sizeof( remote );
     msg.msg_control = &control;
     msg.msg_controllen = sizeof(control);
-    err = recvmsg( sd_event, &msg, 0 );
+
+    err = recvmsg( sd_event, &msg, MSG_DONTWAIT );
+
+    if ( err == -1 && (errno == EAGAIN || errno == EWOULDBLOCK) ) {
+        GPTP_LOG_DEBUG("recvmsg() EAGAIN/EWOULDBLOCK after select(), returning net_trfail");
+        ret = net_trfail;
+        goto done;
+    }
 
     if ( err < 0 ) {
         if ( errno == ENOMSG ) {
@@ -163,7 +170,7 @@ net_result LinuxNetworkInterface::nrecv
             goto done;
         }
 
-        GPTP_LOG_ERROR("recvmsg() failed: %s", strerror(errno));
+        GPTP_LOG_ERROR("recvmsg failed: %s (errno=%d)", strerror(errno), errno);
         ret = net_fatal;
         goto done;
     }
