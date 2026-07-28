@@ -2,7 +2,7 @@ Source: gptp
 Section: devel
 Priority: optional
 Maintainer: leiwang <leiwan@qti.qualcomm.com>
-Build-Depends: libtool, debhelper-compat (= 13), pkg-config, libglib2.0-dev
+Build-Depends: libtool, debhelper-compat (= 13), pkg-config, libglib2.0-dev, power-utils-dev
 Standards-Version: 4.6.0
 Homepage: https://www.codelinaro.org/
 

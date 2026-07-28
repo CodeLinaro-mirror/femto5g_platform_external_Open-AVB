@@ -1,10 +1,17 @@
 #!/usr/bin/make -f
 
+MAKE_FLAGS := \
+    ENABLE_GPTP=1 \
+    ENABLE_LIBGPTP=1 \
+    ENABLE_LIBGPTP_TEST=1 \
+    ENABLE_GPTP_SERVICE=1 \
+    GPTP_DSQB_ENABLED=1
+
 %:
 	dh $@
 
 override_dh_auto_build:
-	$(MAKE) gptp libgptp libgptp_test
+	$(MAKE) $(MAKE_FLAGS) gptp libgptp libgptp_test
 
 override_dh_auto_install:
 	dh_auto_install --destdir=$(CURDIR)/debian/tmp
