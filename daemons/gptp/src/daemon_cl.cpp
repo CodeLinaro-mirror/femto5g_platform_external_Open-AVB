@@ -172,13 +172,23 @@ static void* powerListenerThread(void* arg) {
             GPTP_LOG_INFO("Power: SUSPEND");
             if (pPort->gPTP_lpm == false) {
                 pPort->gPTP_lpm = true;
-                pPort->processEvent(LINKDOWN);
+                if (pPort->getLinkUpState()) {
+                    pPort->processEvent(LINKDOWN);
+                } else {
+                    GPTP_LOG_INFO("Power: SUSPEND - link is already down, skipping processEvent; "
+                                  "gPTP_lpm set for proper resume handling");
+                }
             }
         } else if (ev == POWER_RESUME) {
             if (pPort->gPTP_lpm == true) {
                 GPTP_LOG_INFO("Power: RESUME");
+                if (pPort->getLinkUpState()) {
+                    pPort->processEvent(LINKUP);
+                } else {
+                    GPTP_LOG_INFO("Power: RESUME - link is down, skipping processEvent; "
+                                  "will resume automatically when link comes up");
+                }
                 pPort->gPTP_lpm = false;
-                pPort->processEvent(LINKUP);
             }
         }
     }
@@ -324,7 +334,13 @@ int gptp_sys_suspend(void *data, enum PM_MODE mode)
 
     if (pPort->gPTP_lpm == false) {
         pPort->gPTP_lpm = true;
-        err = pPort->processEvent(LINKDOWN);
+        if (pPort->getLinkUpState()) {
+            err = pPort->processEvent(LINKDOWN);
+        } else {
+            GPTP_LOG_INFO("gptp_sys_suspend: link is already down, skipping processEvent; "
+                          "gPTP_lpm set for proper resume handling");
+            err = true;
+        }
 
         if (err == false) {
             GPTP_LOG_ERROR("failed to ds_suspend, roll back and NACK");
@@ -344,7 +360,12 @@ int gptp_sys_resume(void *data, enum PM_MODE mode)
     GPTP_LOG_INFO("starting gptp daemon....");
 
     if (pPort->gPTP_lpm == true) {
-        pPort->processEvent(LINKUP);
+        if (pPort->getLinkUpState()) {
+            pPort->processEvent(LINKUP);
+        } else {
+            GPTP_LOG_INFO("gptp_sys_resume: link is down, skipping processEvent; "
+                          "will resume automatically when link comes up");
+        }
         pPort->gPTP_lpm = false;
     } else {
         GPTP_LOG_WARNING("Not in LPM state, ignoring duplicate resume");
