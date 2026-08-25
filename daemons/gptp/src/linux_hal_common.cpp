@@ -165,6 +165,11 @@ net_result LinuxNetworkInterface::send
 
     if ( err == -1 ) {
         GPTP_LOG_ERROR( "Failed to send: %s(%d)", strerror(errno), errno );
+#ifndef ARCH_INTELCE
+        if ( timestamp ) {
+            net_lock.unlock();
+        }
+#endif
         return net_fatal;
     }
 
