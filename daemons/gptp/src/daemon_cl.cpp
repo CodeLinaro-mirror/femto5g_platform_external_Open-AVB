@@ -644,6 +644,34 @@ void gptpDaemonServInit(void)
 }
 
 
+bool isInterfaceValid(const char *ifname)
+{
+    struct ifreq ifr;
+    int inetSock;
+    bool valid = false;
+
+    if (ifname == NULL || ifname[0] == '\0') {
+        return false;
+    }
+
+    inetSock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (inetSock < 0) {
+        GPTP_LOG_ERROR("socket() failed: %s", strerror(errno));
+        return false;
+    }
+
+    memset(&ifr, 0, sizeof(ifr));
+    strlcpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+    ifr.ifr_name[IFNAMSIZ - 1] = '\0';
+
+    if (ioctl(inetSock, SIOCGIFFLAGS, &ifr) == 0) {
+        valid = true;
+    }
+
+    close(inetSock);
+    return valid;
+}
+
 bool waitForInterface()
 {
 #if 0
@@ -1208,8 +1236,8 @@ int main(int argc, char **argv)
 
     qgptp_rmgr_init(&portInit.sct_shm_fd, &portInit.sct_buffer);
 
-    if ((strcmp(ifname_eth, "eth0") != 0) && (strcmp(ifname_eth, "eth1") != 0) && (strcmp(ifname_eth, "eth2") != 0)) {
-        GPTP_LOG_INFO( "Valid Interface name required\n" );
+    if (!isInterfaceValid(ifname_eth)) {
+        GPTP_LOG_ERROR("Interface '%s' does not exist or is not accessible\n", ifname_eth);
         GPTP_LOG_UNREGISTER();
         CLEANUP_RESOURCES();
         return -1;
