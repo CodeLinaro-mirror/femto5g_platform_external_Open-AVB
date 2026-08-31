@@ -321,6 +321,7 @@ void *EtherPort::openPort( EtherPort *port )
         }
     }
 
+    GPTP_LOG_INFO("Exiting openPort loop, linkstatus=%d", linkstatus);
     return NULL;
 }
 
@@ -378,6 +379,7 @@ void EtherPort::sendGeneralPort
 bool EtherPort::_processEvent( Event e )
 {
     bool ret = false;
+    OSThreadExitCode exit_code = osthread_ok;
 
     switch (e) {
         case POWERUP:
@@ -463,6 +465,37 @@ bool EtherPort::_processEvent( Event e )
             break;
 
         case LINKUP:
+            if (linkstatus) {
+                GPTP_LOG_WARNING("Already in LINKUP state, ignoring duplicate event.");
+                ret = true;
+                break;
+            }
+            linkstatus = true;
+            if (!OSNetworkInterfaceFactory::buildInterface
+                ( &net_iface, factory_name_t("default"), net_label,
+                 _hw_timestamper)) {
+                linkstatus = false;
+                return false;
+            }
+            timestamper_init();
+            _init_port();
+            port_pipe_fds[0] = -1;
+            port_pipe_fds[1] = -1;
+            if (pipe(port_pipe_fds) == -1) {
+                GPTP_LOG_ERROR("pipe create error\n");
+                ret = false;
+                break;
+            }
+            port_ready_condition->wait_prelock();
+
+            if ( !linkOpen(openPortWrapper, (void *)this) ) {
+                GPTP_LOG_ERROR("Error creating port thread");
+                ret = false;
+                break;
+            }
+
+            port_ready_condition->wait();
+
             haltPdelay(false);
             startPDelay();
 
@@ -500,16 +533,6 @@ bool EtherPort::_processEvent( Event e )
                 log_min_mean_pdelay_req_interval = initialLogPdelayReqInterval;
 
                 if (!isGM) {
-                    // Send an initial signaling message
-                    PTPMessageSignalling *sigMsg = new PTPMessageSignalling(this);
-
-                    if (sigMsg) {
-                        sigMsg->setintervals(PTPMessageSignalling::sigMsgInterval_NoSend,
-                                             getSyncInterval(), PTPMessageSignalling::sigMsgInterval_NoSend);
-                        sigMsg->sendPort(this, NULL);
-                        delete sigMsg;
-                    }
-
                     startSyncReceiptTimer((unsigned long long)
                                           (getsyncReceiptTimeoutMultiplier()*
                                            ((double) pow((double)2, getSyncInterval()) *
@@ -531,21 +554,85 @@ bool EtherPort::_processEvent( Event e )
                 if (getTestMode()) {
                     linkUpCount++;
                 }
+                increment_LinkupCount();
             }
 
             this->timestamper_reset();
+            setEtherLinkState(ETHER_PORT_STATE_LINK_UP);
+            clock->updateEtherLinkState(ETHER_PORT_STATE_LINK_UP);
+            if (sct_buffer) {
+                pthread_mutex_lock((pthread_mutex_t *) &sct_buffer->lock);
+                sct_buffer->status.d_status = DEAMON_UP;
+                pthread_mutex_unlock((pthread_mutex_t *) &sct_buffer->lock);
+                GPTP_LOG_STATUS("sct_buffer d_status set on LINKUP");
+            }
             ret = true;
             break;
 
         case LINKDOWN:
+            if (!linkstatus) {
+                GPTP_LOG_WARNING("Already in LINKDOWN state, ignoring duplicate event.");
+                ret = true;
+                break;
+            }
+            GPTP_LOG_INFO("[LINKDOWN] Entering LINKDOWN handler, linkstatus=%d gPTP_lpm=%d", linkstatus, gPTP_lpm);
+            linkstatus = false;
+
+            if (port_pipe_fds[1] != -1) {
+                char data = '1';
+                ssize_t bytes_written = write(port_pipe_fds[1], &data, 1);
+                if (bytes_written != 1) {
+                    GPTP_LOG_ERROR("Failed to write to pipe: %s", strerror(errno));
+                } else {
+                    GPTP_LOG_INFO("pipe write succeeded, openPort will release net_lock");
+                }
+            } else {
+                GPTP_LOG_ERROR("pipe fd[1]=%d is invalid, cannot interrupt openPort", port_pipe_fds[1]);
+            }
+
+            stopPDelay();
+            clock->deleteEventTimerLocked( this, ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES );
+            clock->deleteEventTimerLocked( this, ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES );
+            clock->deleteEventTimerLocked( this, SYNC_INTERVAL_TIMEOUT_EXPIRES);
+            clock->deleteEventTimerLocked( this, PDELAY_RESP_RECEIPT_TIMEOUT_EXPIRES);
+            clock->deleteEventTimerLocked( this, SYNC_RATE_INTERVAL_TIMEOUT_EXPIRED);
+            clock->deleteEventTimerLocked( this, RSYNC_INTERVAL_TIMEOUT_EXPIRES );
+            stopSyncReceiptTimer();
+            setEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
+            clock->updateEtherLinkState(ETHER_PORT_STATE_LINK_DOWN);
+
+            if (!linkjoin(exit_code)) {
+                GPTP_LOG_ERROR("Failed to join openPort thread, exit_code=%d", exit_code);
+                ret = false;
+                break;
+            }
+            GPTP_LOG_INFO("openPort thread joined successfully, exit_code=%d", exit_code);
+            // Release the Pipe
+            if (port_pipe_fds[0] != -1) {
+                close(port_pipe_fds[0]);
+                port_pipe_fds[0] = -1;
+            }
+            if (port_pipe_fds[1] != -1) {
+                close(port_pipe_fds[1]);
+                port_pipe_fds[1] = -1;
+            }
+            setStationState(STATION_STATE_RESERVED);
+            if (sct_buffer) {
+                pthread_mutex_lock((pthread_mutex_t *) &sct_buffer->lock);
+                sct_buffer->status.d_status = 0;
+                pthread_mutex_unlock((pthread_mutex_t *) &sct_buffer->lock);
+                GPTP_LOG_STATUS("sct_buffer d_status cleared on LINKDOWN");
+            }
+            if ( ipc ) {
+                ipc->ipc_down();
+                GPTP_LOG_ERROR("ipc DOWN");
+            }
 #ifdef LE_SHARED_MEM
             if ( ipc ) {
                 ipc->updateSyncStatus(false, PTP_DISABLED);
             }
 
 #endif
-            stopPDelay();
-
             if (automotive_profile) {
                 GPTP_LOG_EXCEPTION("LINK DOWN");
             } else {
@@ -556,7 +643,8 @@ bool EtherPort::_processEvent( Event e )
             if (getTestMode()) {
                 linkDownCount++;
             }
-
+            increment_LinkdownCount();
+            timestamper_deinit();
             ret = true;
             break;
 
@@ -826,7 +914,6 @@ bool EtherPort::_processEvent( Event e )
 
         case POWERDOWN:
             //to ensure no processing happens for already expired events
-            OSThreadExitCode exit_code;
             linkstatus = false;
             if (port_pipe_fds[1] != -1) {
                 char data = '1';
@@ -894,7 +981,7 @@ void EtherPort::becomeMaster( bool annc )
     if (sct_buffer) {
         pthread_mutex_lock((pthread_mutex_t *) &sct_buffer->lock);
         sct_buffer->status.gptp_status = GPTP_STATUS_TIMEOUT;
-        sct_buffer->status.d_status = 0xabcdef;
+        sct_buffer->status.d_status = DEAMON_UP;
         sct_buffer->status.IsMaster = 1;
         pthread_mutex_unlock((pthread_mutex_t *) &sct_buffer->lock);
     }
@@ -923,7 +1010,7 @@ void EtherPort::becomeSlave( bool restart_syntonization )
     if (sct_buffer) {
         pthread_mutex_lock((pthread_mutex_t *) &sct_buffer->lock);
         sct_buffer->status.gptp_status = GPTP_STATUS_TIMEOUT;
-        sct_buffer->status.d_status = 0xabcdef;
+        sct_buffer->status.d_status = DEAMON_UP;
         sct_buffer->status.IsMaster = 0;
         pthread_mutex_unlock((pthread_mutex_t *) &sct_buffer->lock);
     }

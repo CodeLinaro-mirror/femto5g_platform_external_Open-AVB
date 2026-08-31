@@ -1668,6 +1668,43 @@ bool LinuxSharedMemoryIPC::updateQtimeToMonoOffset(int64_t offset)
     return true;
 }
 
+bool LinuxSharedMemoryIPC::updateEtherLinkState(EtherPortLinkState_t LinkState)
+{
+    int buf_offset = 0;
+    char *shm_buffer = master_offset_buffer;
+    gPtpTimeData *ptimedata;
+
+    if (shm_buffer != NULL) {
+        /* lock */
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        ptimedata->etherPortLinkState = LinkState;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+
+    return true;
+}
+
+void LinuxSharedMemoryIPC::ipc_down(void)
+{
+    int buf_offset = 0;
+    char *shm_buffer = master_offset_buffer;
+    gPtpTimeData *ptimedata;
+
+    if (shm_buffer != NULL) {
+        /* lock */
+        pthread_mutex_lock((pthread_mutex_t *) shm_buffer);
+        buf_offset += sizeof(pthread_mutex_t);
+        ptimedata   = (gPtpTimeData *) (shm_buffer + buf_offset);
+        ptimedata->d_status = 0;
+        ptimedata->sync_status = false;
+        /* unlock */
+        pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
+    }
+}
+
 bool LinuxSharedMemoryIPC::update_grandmaster(
     uint8_t gptp_grandmaster_id[],
     uint8_t gptp_domain_number )

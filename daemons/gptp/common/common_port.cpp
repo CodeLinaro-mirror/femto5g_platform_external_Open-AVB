@@ -161,6 +161,15 @@ void CommonPort::timestamper_init( void )
     }
 }
 
+void CommonPort::timestamper_deinit( void )
+{
+    if ( _hw_timestamper != NULL ) {
+        if ( !_hw_timestamper->HWTimestamper_deinit( net_label, &net_iface )) {
+            GPTP_LOG_ERROR("Failed to deinitialize hardware timestamper");
+        }
+    }
+}
+
 void CommonPort::timestamper_reset( void )
 {
     if ( _hw_timestamper != NULL ) {

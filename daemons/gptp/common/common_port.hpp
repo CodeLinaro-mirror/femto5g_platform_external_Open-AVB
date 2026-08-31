@@ -294,7 +294,7 @@ typedef struct {
     char ifname[IFNAME_SIZE] = {0};
     int16_t offsetScaledLogVariance = 0;
     FrequencyRatio clockRatio = 0;
-
+    EtherPortLinkState_t ethPortLinkState = (EtherPortLinkState_t) 0;
 } PortCounters_t;
 
 
@@ -488,9 +488,6 @@ class CommonPort
         int64_t one_way_delay;
         int64_t neighbor_prop_delay_thresh;
         int64_t stbMSyncLossThreshold;
-        InterfaceLabel *net_label;
-
-        OSNetworkInterface *net_iface;
 
         PortState port_state;
         bool testMode;
@@ -536,6 +533,7 @@ class CommonPort
         OSLock *syncIntervalTimerLock;
         OSLock *announceIntervalTimerLock;
 
+        bool bypass_if_wait;
 
     protected:
         static const int64_t INVALID_LINKDELAY = 3600000000000;
@@ -550,6 +548,8 @@ class CommonPort
         const bool isGM;
 
         phy_delay_map_t const * const phy_delay;
+        OSNetworkInterface *net_iface;
+        InterfaceLabel *net_label;
 
     public:
 
@@ -587,6 +587,7 @@ class CommonPort
          * @brief Initializes the hwtimestamper
          */
         void timestamper_init( void );
+        void timestamper_deinit( void );
 
         /**
          * @brief Resets the hwtimestamper
@@ -881,6 +882,16 @@ class CommonPort
         void setPortStationState(uint32_t state)
         {
             counters.avb_sync_test_station_state = state;
+        }
+
+        /**
+         * @brief Sets the Ether Port Link State
+         * @param [in] state - Port state to set
+         * @return void
+         */
+        void setEtherPortLinkState(EtherPortLinkState_t state)
+        {
+            counters.ethPortLinkState = state;
         }
 
         /**
@@ -1537,8 +1548,8 @@ class CommonPort
         virtual void disableRsync() = 0;
 
         /**
-         * @brief  set reverse sync parameter.
-         * @param  RsyncStatus_t reverse sync structure
+         * @brief Â set reverse sync parameter.
+         * @param Â RsyncStatus_t reverse sync structure
          * @return TRUE if success. FALSE otherwise
          */
         bool setRsync(RsyncStatus_t *Rsync);

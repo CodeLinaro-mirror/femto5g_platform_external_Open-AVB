@@ -110,6 +110,15 @@ class LinuxTimestamperGeneric : public LinuxTimestamper
         ( InterfaceLabel *iface_label, OSNetworkInterface *iface );
 
         /**
+         * @brief  Deinitializes the Hardware timestamp interface, closes PTP device
+         * @param  iface_label [in] Network interface label
+         * @param  iface [in/out] Network interface pointer (set to NULL on success)
+         * @return FALSE in case of error, TRUE if success.
+         */
+        virtual bool HWTimestamper_deinit
+        ( InterfaceLabel *iface_label, OSNetworkInterface **iface );
+
+        /**
          * @brief  Reset the Hardware timestamp interface
          * @return void
          */

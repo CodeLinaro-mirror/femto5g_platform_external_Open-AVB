@@ -71,6 +71,9 @@ SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #include <ptptypes.hpp>
 
+/*gptp sync parameter on shared memory */
+#define DEAMON_UP 0xabcdef
+
 /**
  * @brief Provides a data structure for gPTP time
  */
@@ -126,6 +129,7 @@ typedef struct {
 
     //daemon status
     int64_t d_status = {0};
+    EtherPortLinkState_t etherPortLinkState;    //!< EtherPort Link state. It can assume values defined at ::EtherPortLinkState_t
 } gPtpTimeData;
 
 /*
@@ -146,4 +150,3 @@ typedef struct {
 */
 
 #endif/*IPCDEF_HPP*/
-

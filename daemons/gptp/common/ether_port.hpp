@@ -31,9 +31,9 @@
 
 ******************************************************************************/
 /* ============================================================================
-Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+Changes from Qualcomm Technologies, Inc. are provided under the following license:
 
-Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 SPDX-License-Identifier: BSD-3-Clause-Clear
 ============================================================================ */
 
@@ -126,6 +126,7 @@ class EtherPort : public CommonPort
 	uint32_t linkUpCount;
 	uint32_t linkDownCount;
 	StationState_t stationState;
+	EtherPortLinkState_t etherPortLinkState;
 
 
 	/* Automotive Profile : Persistant variables */
@@ -655,6 +656,26 @@ protected:
 	}
 	double getRSyncRate(void){
 		return reverseSyncRate;
+	}
+
+	/**
+	 * @brief  Gets the EtherPort LinkState information
+	 * @return EtherPortLinkState_t
+	 */
+	EtherPortLinkState_t getEtherPortLinkState(void)
+	{
+		return etherPortLinkState;
+	}
+
+	/**
+	 * @brief Sets the EtherPort LinkState
+	 * @param state value to be set
+	 * @return void
+	 */
+	void setEtherLinkState(EtherPortLinkState_t state)
+	{
+		etherPortLinkState = state;
+		setEtherPortLinkState(state);
 	}
 };
 

@@ -338,6 +338,38 @@ bool LinuxTimestamperGeneric::HWTimestamper_init
     return true;
 }
 
+bool LinuxTimestamperGeneric::HWTimestamper_deinit
+( InterfaceLabel *iface_label, OSNetworkInterface **iface )
+{
+    if (phc_fd != -1) {
+        if (close(phc_fd) == -1) {
+            GPTP_LOG_DEBUG("%s:%d Error closing phc_fd errno=%d(%s)",
+                           __func__, __LINE__, errno, strerror(errno));
+        } else {
+            GPTP_LOG_DEBUG("%s:%d close phc_fd successful", __func__, __LINE__);
+        }
+        phc_fd = -1;
+    }
+
+    if (iface && *iface) {
+        auto it = std::find(iface_list.begin(), iface_list.end(), *iface);
+        if (it != iface_list.end()) {
+            delete *it;
+            *it = nullptr;
+            iface_list.erase(it);
+        }
+        *iface = nullptr;
+    }
+
+    if (_private != NULL) {
+        pthread_mutex_destroy(&_private->cross_stamp_lock);
+        delete _private;
+        _private = nullptr;
+    }
+
+    return true;
+}
+
 void LinuxTimestamperGeneric::HWTimestamper_reset()
 {
     if ( !resetFrequencyAdjustment() ) {

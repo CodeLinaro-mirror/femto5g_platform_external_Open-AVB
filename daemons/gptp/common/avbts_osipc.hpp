@@ -176,6 +176,14 @@ class OS_IPC
          * @return Implementation dependent
          */
         virtual bool setProxyMode(int32_t proxy_value) = 0;
+
+        /**
+         * @brief Updates Ether Port Link State
+         * @param LinkState - Link State to be set
+         * @return Implementation dependent
+         */
+        virtual bool updateEtherLinkState(EtherPortLinkState_t LinkState) = 0;
+
         /*
          * Destroys IPC
          */
@@ -185,4 +193,3 @@ class OS_IPC
 inline OS_IPC::~OS_IPC() {}
 
 #endif
-

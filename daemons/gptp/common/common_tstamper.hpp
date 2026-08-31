@@ -87,6 +87,18 @@ class CommonTimestamper
         }
 
         /**
+         * @brief  Deinitializes the hardware timestamp unit, closes PTP device
+         * @param  iface_label [in] Interface label
+         * @param  iface [in/out] Network interface pointer (set to NULL on success)
+         * @return true on success
+         */
+        virtual bool HWTimestamper_deinit
+        ( InterfaceLabel *iface_label, OSNetworkInterface **iface )
+        {
+            return true;
+        }
+
+        /**
          * @brief  Adjusts the hardware clock frequency
          * @param  frequency_offset Frequency offset
          * @return false
