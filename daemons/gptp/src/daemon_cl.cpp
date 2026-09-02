@@ -151,16 +151,28 @@ static void* powerListenerThread(void* arg) {
     PowerEvent ev;
 
     while (true) {
-        ssize_t n = read(fd, &ev, sizeof(ev));
+        sockaddr_un sender;
+        socklen_t sender_len = sizeof(sender);
+        ssize_t n = recvfrom(fd, &ev, sizeof(ev), 0,
+                             reinterpret_cast<sockaddr*>(&sender), &sender_len);
         if (n < 0) {
             if (errno == EINTR) {
+                GPTP_LOG_WARNING("powerListenerThread: recvfrom EINTR, retrying");
                 continue;
             }
-            GPTP_LOG_ERROR("Power socket read failed: %s", strerror(errno));
+            GPTP_LOG_ERROR("powerListenerThread: recvfrom failed fd=%d: %s",
+                           fd, strerror(errno));
             break;
         }
 
-        if (n != sizeof(ev)) {
+        if (n == 0) {
+            GPTP_LOG_ERROR("powerListenerThread: recvfrom returned 0 fd=%d", fd);
+            break;
+        }
+
+        if (n != (ssize_t)sizeof(ev)) {
+            GPTP_LOG_WARNING("powerListenerThread: short recv %zd of %zu bytes, discarding",
+                             n, sizeof(ev));
             continue;
         }
 
@@ -172,13 +184,23 @@ static void* powerListenerThread(void* arg) {
             GPTP_LOG_INFO("Power: SUSPEND");
             if (pPort->gPTP_lpm == false) {
                 pPort->gPTP_lpm = true;
-                pPort->processEvent(LINKDOWN);
+                if (pPort->getLinkUpState()) {
+                    pPort->processEvent(LINKDOWN);
+                } else {
+                    GPTP_LOG_INFO("Power: SUSPEND - link is already down, skipping processEvent; "
+                                  "gPTP_lpm set for proper resume handling");
+                }
             }
         } else if (ev == POWER_RESUME) {
             if (pPort->gPTP_lpm == true) {
                 GPTP_LOG_INFO("Power: RESUME");
+                if (pPort->getLinkUpState()) {
+                    pPort->processEvent(LINKUP);
+                } else {
+                    GPTP_LOG_INFO("Power: RESUME - link is down, skipping processEvent; "
+                                  "will resume automatically when link comes up");
+                }
                 pPort->gPTP_lpm = false;
-                pPort->processEvent(LINKUP);
             }
         }
     }
@@ -324,7 +346,13 @@ int gptp_sys_suspend(void *data, enum PM_MODE mode)
 
     if (pPort->gPTP_lpm == false) {
         pPort->gPTP_lpm = true;
-        err = pPort->processEvent(LINKDOWN);
+        if (pPort->getLinkUpState()) {
+            err = pPort->processEvent(LINKDOWN);
+        } else {
+            GPTP_LOG_INFO("gptp_sys_suspend: link is already down, skipping processEvent; "
+                          "gPTP_lpm set for proper resume handling");
+            err = true;
+        }
 
         if (err == false) {
             GPTP_LOG_ERROR("failed to ds_suspend, roll back and NACK");
@@ -344,7 +372,12 @@ int gptp_sys_resume(void *data, enum PM_MODE mode)
     GPTP_LOG_INFO("starting gptp daemon....");
 
     if (pPort->gPTP_lpm == true) {
-        pPort->processEvent(LINKUP);
+        if (pPort->getLinkUpState()) {
+            pPort->processEvent(LINKUP);
+        } else {
+            GPTP_LOG_INFO("gptp_sys_resume: link is down, skipping processEvent; "
+                          "will resume automatically when link comes up");
+        }
         pPort->gPTP_lpm = false;
     } else {
         GPTP_LOG_WARNING("gptp_sys_resume: not in LPM state, ignoring duplicate resume");
@@ -610,6 +643,34 @@ void gptpDaemonServInit(void)
     return;
 }
 
+
+bool isInterfaceValid(const char *ifname)
+{
+    struct ifreq ifr;
+    int inetSock;
+    bool valid = false;
+
+    if (ifname == NULL || ifname[0] == '\0') {
+        return false;
+    }
+
+    inetSock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (inetSock < 0) {
+        GPTP_LOG_ERROR("socket() failed: %s", strerror(errno));
+        return false;
+    }
+
+    memset(&ifr, 0, sizeof(ifr));
+    strlcpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+    ifr.ifr_name[IFNAMSIZ - 1] = '\0';
+
+    if (ioctl(inetSock, SIOCGIFFLAGS, &ifr) == 0) {
+        valid = true;
+    }
+
+    close(inetSock);
+    return valid;
+}
 
 bool waitForInterface()
 {
@@ -1175,8 +1236,8 @@ int main(int argc, char **argv)
 
     qgptp_rmgr_init(&portInit.sct_shm_fd, &portInit.sct_buffer);
 
-    if ((strcmp(ifname_eth, "eth0") != 0) && (strcmp(ifname_eth, "eth1") != 0) && (strcmp(ifname_eth, "eth2") != 0)) {
-        GPTP_LOG_INFO( "Valid Interface name required\n" );
+    if (!isInterfaceValid(ifname_eth)) {
+        GPTP_LOG_ERROR("Interface '%s' does not exist or is not accessible\n", ifname_eth);
         GPTP_LOG_UNREGISTER();
         CLEANUP_RESOURCES();
         return -1;
