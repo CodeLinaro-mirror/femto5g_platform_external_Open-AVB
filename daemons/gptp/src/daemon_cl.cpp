@@ -1225,7 +1225,8 @@ int main(int argc, char **argv)
     portInit.net_label = ifname;
 
     if ( !ipc->init( ipc_arg, portInit.reverseSyncEnabled,
-                     portInit.reverseSyncDomain, portInit.reverseSyncRate, portInit.wait_for_sync) ) {
+                     portInit.reverseSyncDomain, portInit.reverseSyncRate,
+                     portInit.wait_for_sync, portInit.tsc_enable) ) {
         delete ipc;
         ipc = NULL;
         GPTP_LOG_ERROR( "ipc init failed\n" );
