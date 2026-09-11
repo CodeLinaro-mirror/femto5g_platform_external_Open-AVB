@@ -165,6 +165,11 @@ net_result LinuxNetworkInterface::send
 
     if ( err == -1 ) {
         GPTP_LOG_ERROR( "Failed to send: %s(%d)", strerror(errno), errno );
+#ifndef ARCH_INTELCE
+        if ( timestamp ) {
+            net_lock.unlock();
+        }
+#endif
         return net_fatal;
     }
 
@@ -379,6 +384,10 @@ bool LinuxNetworkInterface::getLinkSpeed( int sd, uint32_t *speed )
 
         case SPEED_2500:
             *speed = LINKSPEED_2_5G;
+            break;
+
+        case SPEED_5000:
+            *speed = LINKSPEED_5G;
             break;
 
         case SPEED_10000:
