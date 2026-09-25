@@ -330,7 +330,7 @@ DLT_DECLARE_CONTEXT(dlt_con_helpergptp);
 /**
 * Get current running process path.
 */
-std::string getCurrentProcessPath()
+static std::string getCurrentProcessPath()
 {
     char path[PATH_MAX];
     ssize_t count        = readlink("/proc/self/exe", path, PATH_MAX);
@@ -341,14 +341,14 @@ std::string getCurrentProcessPath()
 /**
 * Get current running application name.
 */
-std::string getCurrentAppName()
+static std::string getCurrentAppName()
 {
     std::string path = getCurrentProcessPath();
     auto const pos   = path.find_last_of('/');
     return path.substr(pos + 1);
 }
 
-std::string getAppId(std::string appIdDesc)
+static std::string getAppId(std::string appIdDesc)
 {
     std::string appId = "";
     int size = appIdDesc.length();
