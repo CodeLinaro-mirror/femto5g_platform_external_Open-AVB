@@ -431,7 +431,7 @@ void helpergptplogRegister(void)
         std::string appIdStr = getAppId(appIdDesc);
         DLT_REGISTER_APP(appIdStr.c_str(), "OpenAVB HelpergPTP");
     } else {
-        syslog(LOG_ERR, "%s Dlt app ID already registered as %s", __FUNCTION__, appId);
+        syslog(LOG_DEBUG, "%s Dlt app ID already registered as %s", __FUNCTION__, appId);
     }
 
     // Register contexts
