@@ -431,7 +431,7 @@ void helpergptplogRegister(void)
         std::string appIdStr = getAppId(appIdDesc);
         DLT_REGISTER_APP(appIdStr.c_str(), "OpenAVB HelpergPTP");
     } else {
-        syslog(LOG_ERR, "%s Dlt app ID already registered as %s", __FUNCTION__, appId);
+        syslog(LOG_DEBUG, "%s Dlt app ID already registered as %s", __FUNCTION__, appId);
     }
 
     // Register contexts
@@ -1508,7 +1508,7 @@ bool gptpGetPtpTimeFromBootTime_s(uint64_t *gptp_time_bt, uint64_t time_boot_ns,
     } while ((a != b || a != seq0->load() || b != seq1->load()) && count < 3);
 
     if (count < 3) {
-        int gptpdiff = *gptp_mem - time_boot_ns;
+        int64_t gptpdiff = *gptp_mem - time_boot_ns;
 
         if (gptpdiff > GPTP_BOOTTIME_VALIDTY_RANGE
                 || gptpdiff < -GPTP_BOOTTIME_VALIDTY_RANGE) {
@@ -1574,7 +1574,7 @@ bool gptpGetBootTimeFromPtpTime_s(uint64_t *boot_time_ns, uint64_t ptp_time_ns,
         *inSync = gPtpTD.sync_status;
     }
 
-    int gptpdiff = 0;
+    int64_t gptpdiff = 0;
     gptpdiff =  ptp_time_ns - gPtpTD.local_time;
 
     if (gptpdiff > GPTP_BOOTTIME_VALIDTY_RANGE
@@ -1632,7 +1632,7 @@ bool gptpGetBootTimeFromPtpTime_s(uint64_t *boot_time_ns, uint64_t ptp_time_ns,
     } while ((a != b || a != seq0->load() || b != seq1->load()) && count < 3);
 
     if (count < 3) {
-        int gptpdiff = *gptp_mem - ptp_time_ns;
+        int64_t gptpdiff = *gptp_mem - ptp_time_ns;
 
         if (gptpdiff > GPTP_BOOTTIME_VALIDTY_RANGE
                 || gptpdiff < -GPTP_BOOTTIME_VALIDTY_RANGE) {
