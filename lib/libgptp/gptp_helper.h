@@ -140,6 +140,17 @@ typedef struct {
     int8_t pdelay_interval;
 } syncInterval_t;
 
+/* Note: below structure has to match ptp_ratios_t in gptp daemon (common_port.hpp) */
+typedef struct {
+    uint64_t captured_ptp_time;
+    int64_t system_offset;
+    int64_t q_offset;
+    int64_t boot_offset;
+    double system_freq_offset;
+    double q_freq_offset;
+    double boot_freq_offset;
+} ptp_ratios_t;
+
 typedef struct {
     int8_t reverseSyncEnabled;
     int8_t reverseSyncDomain;

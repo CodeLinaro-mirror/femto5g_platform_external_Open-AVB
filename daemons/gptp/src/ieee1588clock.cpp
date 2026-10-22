@@ -661,6 +661,13 @@ void IEEE1588Clock::setMasterOffset
         port->sct_buffer->syncInterval.sync_interval = port->getSyncInterval();
         port->sct_buffer->syncInterval.pdelay_interval =
             port->getoperLogPdelayReqInterval();
+        port->sct_buffer->ptpRatios.captured_ptp_time  = TIMESTAMP_TO_NS(local_time);
+        port->sct_buffer->ptpRatios.system_offset      = local_system_offset;
+        port->sct_buffer->ptpRatios.q_offset           = local_q_offset;
+        port->sct_buffer->ptpRatios.boot_offset        = local_boot_offset;
+        port->sct_buffer->ptpRatios.system_freq_offset = local_system_freq_offset;
+        port->sct_buffer->ptpRatios.q_freq_offset      = local_q_freq_offset;
+        port->sct_buffer->ptpRatios.boot_freq_offset   = local_boot_freq_offset;
         pthread_mutex_unlock((pthread_mutex_t *) &port->sct_buffer->lock);
     }
 

@@ -338,6 +338,7 @@ typedef struct {
     pDelayMeasurementData_t delayData;
     gptpStatsType_t status;
     syncInterval_t syncInterval;
+    ptp_ratios_t ptpRatios;
 } sct_gptp_data;
 
 #ifdef USE_DLT
