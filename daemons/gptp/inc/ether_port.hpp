@@ -671,11 +671,11 @@ class EtherPort : public CommonPort
             stationState = _stationState;
 
             if (stationState == STATION_STATE_ETHERNET_READY) {
-                GPTP_LOG_STATUS("AVnu AP Status : STATION_STATE_ETHERNET_READY");
+                GPTP_LOG_WARNING("AVnu AP Status : STATION_STATE_ETHERNET_READY");
             } else if (stationState == STATION_STATE_AVB_SYNC) {
-                GPTP_LOG_STATUS("AVnu AP Status : STATION_STATE_AVB_SYNC");
+                GPTP_LOG_WARNING("AVnu AP Status : STATION_STATE_AVB_SYNC");
             } else if (stationState == STATION_STATE_AVB_MEDIA_READY) {
-                GPTP_LOG_STATUS("AVnu AP Status : STATION_STATE_AVB_MEDIA_READY");
+                GPTP_LOG_WARNING("AVnu AP Status : STATION_STATE_AVB_MEDIA_READY");
             }
         }
 
