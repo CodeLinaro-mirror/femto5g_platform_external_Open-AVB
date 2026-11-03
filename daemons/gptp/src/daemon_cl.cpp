@@ -663,7 +663,7 @@ bool isInterfaceValid(const char *ifname)
     }
 
     memset(&ifr, 0, sizeof(ifr));
-    strlcpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+    (void)PLAT_strlcpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
     ifr.ifr_name[IFNAMSIZ - 1] = '\0';
 
     if (ioctl(inetSock, SIOCGIFFLAGS, &ifr) == 0) {
